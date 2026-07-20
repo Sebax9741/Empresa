@@ -1,0 +1,74 @@
+name: Compilar APK de Android
+
+on:
+  push:
+    branches: [ main, master, 'claude/**' ]
+    paths-ignore: [ '**.md' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Preparar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Copiar archivos web
+        run: |
+          mkdir -p www
+          cp -r index.html css js icons manifest.webmanifest sw.js www/
+
+      - name: Instalar Capacitor
+        run: npm install
+
+      - name: Crear proyecto Android
+        run: npx cap add android
+
+      - name: Generar íconos de la app
+        run: |
+          mkdir -p assets
+          cp icons/icon-1024.png assets/icon-only.png
+          cp icons/icon-1024.png assets/icon-foreground.png
+          cp icons/icon-fondo-1024.png assets/icon-background.png
+          cp icons/icon-1024.png assets/splash.png
+          cp icons/icon-1024.png assets/splash-dark.png
+          npx capacitor-assets generate --android || echo "Se usará el ícono por defecto"
+
+      - name: Compilar APK
+        run: cd android && ./gradlew assembleRelease
+
+      - name: Firmar APK
+        run: |
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$BT/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk apk-alineada.apk
+          "$BT/apksigner" sign --ks android-keys/release.keystore \
+            --ks-pass pass:creditos2026 --ks-key-alias creditos --key-pass pass:creditos2026 \
+            --out control-creditos.apk apk-alineada.apk
+
+      - name: Publicar APK en Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk
+          name: "📱 Control de Créditos — APK para Android"
+          body: |
+            **Cómo instalar en tu celular o tablet:**
+            1. Desde el dispositivo, descarga `control-creditos.apk` (aquí abajo, en *Assets*).
+            2. Ábrelo. Si Android pregunta, permite "instalar apps de origen desconocido".
+            3. ¡Listo! La app aparece como "Control de Créditos".
+
+            Este archivo se actualiza automáticamente con cada cambio en el código.
+          files: control-creditos.apk

@@ -1,0 +1,8 @@
+{
+  "appId": "com.sebax.creditos",
+  "appName": "Control de Créditos",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}

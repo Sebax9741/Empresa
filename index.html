@@ -15,6 +15,29 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+  <!-- Pantalla de inicio de sesión (solo en modo nube) -->
+  <div id="auth-screen" class="auth-screen" hidden>
+    <div class="auth-box">
+      <h1>💳 Control de Créditos</h1>
+      <p class="auth-subtitle" id="auth-subtitle">Inicia sesión para ver tus créditos en todos tus dispositivos</p>
+      <form id="auth-form">
+        <label class="field">
+          <span>Correo electrónico</span>
+          <input type="email" id="a-email" class="input" required autocomplete="email" placeholder="tu@correo.com">
+        </label>
+        <label class="field">
+          <span>Contraseña</span>
+          <input type="password" id="a-pass" class="input" required minlength="6" autocomplete="current-password" placeholder="Mínimo 6 caracteres">
+        </label>
+        <p id="auth-error" class="auth-error" hidden></p>
+        <button type="submit" class="btn btn-primary btn-block" id="btn-auth-principal">Iniciar sesión</button>
+      </form>
+      <button type="button" id="btn-auth-alternar" class="btn-link">¿No tienes cuenta? Crear cuenta nueva</button>
+      <button type="button" id="btn-auth-olvide" class="btn-link">Olvidé mi contraseña</button>
+      <p class="auth-nota">💡 Usa el mismo correo y contraseña en tu celular, tablet y computadora: todos verán los mismos datos, actualizados al instante.</p>
+    </div>
+  </div>
+
   <header class="app-header">
     <div class="header-inner">
       <h1>💳 Control de Créditos</h1>
@@ -24,6 +47,8 @@
       </div>
     </div>
   </header>
+
+  <div id="banner" class="banner" hidden></div>
 
   <main class="container">
     <!-- Resumen -->
@@ -182,6 +207,11 @@
   <dialog id="modal-settings" class="modal">
     <form id="settings-form" method="dialog">
       <h2>⚙️ Configuración</h2>
+      <div class="settings-cuenta" id="settings-cuenta" hidden>
+        <span class="field-label">Cuenta</span>
+        <p class="cuenta-email" id="cuenta-email"></p>
+        <button type="button" id="btn-logout" class="btn btn-secondary btn-small">🚪 Cerrar sesión</button>
+      </div>
       <label class="field">
         <span>Días de crédito por defecto</span>
         <input type="number" id="s-dias" class="input" min="1" max="365" required>
@@ -212,6 +242,7 @@
   <div id="toast" class="toast" hidden></div>
 
   <script src="js/db.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

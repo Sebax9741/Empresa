@@ -310,6 +310,81 @@ body {
 .settings-backup { margin-bottom: 0.85rem; }
 .settings-backup small { color: var(--gray); }
 
+/* ====== Pantalla de inicio de sesión ====== */
+.auth-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: linear-gradient(160deg, var(--primary) 0%, var(--primary-dark) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow-y: auto;
+}
+.auth-screen[hidden] { display: none; }
+
+.auth-box {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  padding: 1.6rem 1.4rem;
+  width: min(400px, 100%);
+  text-align: center;
+}
+.auth-box h1 { margin: 0 0 0.3rem; font-size: 1.4rem; color: var(--primary); }
+.auth-subtitle { margin: 0 0 1.2rem; color: var(--gray); font-size: 0.92rem; }
+.auth-box .field { text-align: left; }
+
+.btn-block { width: 100%; margin-top: 0.3rem; }
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5rem 0.3rem 0;
+  display: block;
+  margin: 0.4rem auto 0;
+}
+.btn-link:hover { text-decoration: underline; }
+
+.auth-error {
+  background: var(--danger-light);
+  color: var(--danger);
+  border-radius: 8px;
+  padding: 0.6rem;
+  font-size: 0.88rem;
+  margin: 0 0 0.8rem;
+}
+
+.auth-nota {
+  margin: 1.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--gray);
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}
+
+/* ====== Banner de estado ====== */
+.banner {
+  background: var(--warning-light);
+  color: #92400e;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+/* ====== Cuenta en configuración ====== */
+.settings-cuenta {
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+.cuenta-email { margin: 0.2rem 0 0.5rem; font-weight: 600; }
+
 /* ====== Toast ====== */
 .toast {
   position: fixed;

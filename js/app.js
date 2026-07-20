@@ -6,6 +6,14 @@ let settings = {
 };
 let vencimientoEditadoManual = false;
 
+/* Modo nube (Firebase) */
+let modoNube = false;
+let fb = null;            // SDK y referencias de Firebase
+let unsubSnapshot = null; // cancela la suscripción en tiempo real
+let migracionRevisada = false;
+
+const EMULADOR = new URLSearchParams(location.search).has('emulador');
+
 /* ====== Utilidades ====== */
 const $ = sel => document.querySelector(sel);
 
@@ -77,6 +85,12 @@ function toast(msg) {
   toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
 }
 
+function banner(msg) {
+  const el = $('#banner');
+  if (msg) { el.textContent = msg; el.hidden = false; }
+  else { el.hidden = true; }
+}
+
 /* ====== Configuración ====== */
 function cargarSettings() {
   try {
@@ -87,6 +101,187 @@ function cargarSettings() {
 
 function guardarSettings() {
   localStorage.setItem('creditos-settings', JSON.stringify(settings));
+}
+
+/* ====== Almacenamiento: nube o local ====== */
+function configNubeValida() {
+  const cfg = window.FIREBASE_CONFIG;
+  return EMULADOR || (cfg && cfg.apiKey && !String(cfg.apiKey).startsWith('PEGA'));
+}
+
+async function guardarEnStore(credito) {
+  if (modoNube) {
+    const uid = fb.auth.currentUser.uid;
+    await fb.setDoc(fb.doc(fb.db, 'usuarios', uid, 'creditos', credito.id), credito);
+  } else {
+    await DB.put(credito);
+  }
+}
+
+async function eliminarDeStore(id) {
+  if (modoNube) {
+    const uid = fb.auth.currentUser.uid;
+    await fb.deleteDoc(fb.doc(fb.db, 'usuarios', uid, 'creditos', id));
+  } else {
+    await DB.delete(id);
+  }
+}
+
+/* ====== Firebase (modo nube) ====== */
+async function iniciarNube() {
+  /* SDK empaquetado dentro de la app: funciona sin CDN y sin internet al arrancar */
+  const sdk = await import('./vendor/firebase.js');
+  const appMod = sdk, authMod = sdk, fsMod = sdk;
+
+  const cfg = EMULADOR
+    ? { apiKey: 'demo-key', authDomain: 'localhost', projectId: 'demo-creditos' }
+    : window.FIREBASE_CONFIG;
+
+  const app = appMod.initializeApp(cfg);
+  const auth = authMod.getAuth(app);
+  /* Caché local persistente: la app funciona sin internet y sincroniza al volver la conexión */
+  const db = fsMod.initializeFirestore(app, {
+    localCache: fsMod.persistentLocalCache({ tabManager: fsMod.persistentMultipleTabManager() }),
+  });
+
+  if (EMULADOR) {
+    authMod.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    fsMod.connectFirestoreEmulator(db, '127.0.0.1', 8081);
+  }
+
+  fb = {
+    auth, db,
+    collection: fsMod.collection,
+    doc: fsMod.doc,
+    setDoc: fsMod.setDoc,
+    deleteDoc: fsMod.deleteDoc,
+    onSnapshot: fsMod.onSnapshot,
+    signIn: authMod.signInWithEmailAndPassword,
+    registrar: authMod.createUserWithEmailAndPassword,
+    recuperar: authMod.sendPasswordResetEmail,
+    salir: authMod.signOut,
+  };
+  modoNube = true;
+
+  authMod.onAuthStateChanged(auth, usuario => {
+    if (usuario) {
+      $('#auth-screen').hidden = true;
+      $('#settings-cuenta').hidden = false;
+      $('#cuenta-email').textContent = usuario.email;
+      banner(null);
+      suscribirNube(usuario.uid);
+    } else {
+      if (unsubSnapshot) { unsubSnapshot(); unsubSnapshot = null; }
+      creditos = [];
+      migracionRevisada = false;
+      render();
+      $('#settings-cuenta').hidden = true;
+      setModoAuth(false); // vuelve a la pantalla de "Iniciar sesión"
+      $('#auth-screen').hidden = false;
+    }
+  });
+}
+
+function suscribirNube(uid) {
+  if (unsubSnapshot) unsubSnapshot();
+  const coleccion = fb.collection(fb.db, 'usuarios', uid, 'creditos');
+  unsubSnapshot = fb.onSnapshot(coleccion, snap => {
+    creditos = snap.docs.map(d => d.data());
+    render();
+    ofrecerMigracionLocal(uid);
+  }, err => {
+    console.error('Error de sincronización:', err);
+    banner('⚠️ Error de sincronización con la nube. Revisa tu conexión o las reglas de Firestore.');
+  });
+}
+
+/* Si el dispositivo tenía créditos guardados en modo local, ofrece subirlos a la cuenta */
+async function ofrecerMigracionLocal(uid) {
+  if (migracionRevisada) return;
+  migracionRevisada = true;
+  const marca = `creditos-migrado-${uid}`;
+  if (localStorage.getItem(marca)) return;
+  try {
+    const locales = await DB.getAll();
+    if (locales.length && creditos.length === 0) {
+      if (confirm(`Este dispositivo tiene ${locales.length} crédito(s) guardados en modo local.\n¿Subirlos a tu cuenta en la nube para verlos en todos tus dispositivos?`)) {
+        for (const c of locales) {
+          await fb.setDoc(fb.doc(fb.db, 'usuarios', uid, 'creditos', c.id), c);
+        }
+        toast(`☁️ ${locales.length} crédito(s) subidos a la nube`);
+      }
+    }
+    localStorage.setItem(marca, '1');
+  } catch (e) { /* sin datos locales */ }
+}
+
+/* ====== Autenticación ====== */
+let modoRegistro = false;
+
+const ERRORES_AUTH = {
+  'auth/invalid-email': 'El correo no es válido.',
+  'auth/user-not-found': 'No existe una cuenta con ese correo.',
+  'auth/wrong-password': 'Contraseña incorrecta.',
+  'auth/invalid-credential': 'Correo o contraseña incorrectos.',
+  'auth/email-already-in-use': 'Ya existe una cuenta con ese correo. Usa "Iniciar sesión".',
+  'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
+  'auth/network-request-failed': 'Sin conexión a internet. Inténtalo de nuevo.',
+  'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos.',
+  'auth/missing-password': 'Escribe tu contraseña.',
+};
+
+function errorAuth(e) {
+  const el = $('#auth-error');
+  el.textContent = ERRORES_AUTH[e.code] || `Error: ${e.message}`;
+  el.hidden = false;
+}
+
+function setModoAuth(registro) {
+  modoRegistro = registro;
+  $('#auth-error').hidden = true;
+  $('#btn-auth-principal').textContent = modoRegistro ? 'Crear cuenta' : 'Iniciar sesión';
+  $('#auth-subtitle').textContent = modoRegistro
+    ? 'Crea tu cuenta (solo necesitas hacerlo una vez)'
+    : 'Inicia sesión para ver tus créditos en todos tus dispositivos';
+  $('#btn-auth-alternar').textContent = modoRegistro
+    ? '¿Ya tienes cuenta? Iniciar sesión'
+    : '¿No tienes cuenta? Crear cuenta nueva';
+}
+
+async function enviarAuth(ev) {
+  ev.preventDefault();
+  $('#auth-error').hidden = true;
+  const email = $('#a-email').value.trim();
+  const pass = $('#a-pass').value;
+  const boton = $('#btn-auth-principal');
+  boton.disabled = true;
+  try {
+    if (modoRegistro) {
+      await fb.registrar(fb.auth, email, pass);
+      toast('✅ Cuenta creada. ¡Bienvenido!');
+    } else {
+      await fb.signIn(fb.auth, email, pass);
+    }
+    $('#a-pass').value = '';
+  } catch (e) {
+    errorAuth(e);
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+async function recuperarContrasena() {
+  const email = $('#a-email').value.trim();
+  if (!email) {
+    errorAuth({ code: 'auth/invalid-email' });
+    return;
+  }
+  try {
+    await fb.recuperar(fb.auth, email);
+    toast(`📧 Te enviamos un correo a ${email} para restablecer tu contraseña`);
+  } catch (e) {
+    errorAuth(e);
+  }
 }
 
 /* ====== Filtrado y orden ====== */
@@ -260,25 +455,35 @@ function mostrarPreview(dataURL) {
   $('#foto-preview-wrap').hidden = false;
 }
 
-/* Comprime la imagen para que no ocupe demasiado espacio */
+function comprimirImagen(img, maxLado, calidad) {
+  let { width, height } = img;
+  if (width > maxLado || height > maxLado) {
+    const escala = Math.min(maxLado / width, maxLado / height);
+    width = Math.round(width * escala);
+    height = Math.round(height * escala);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+  return canvas.toDataURL('image/jpeg', calidad);
+}
+
+/* Comprime la imagen. Reduce el tamaño hasta caber en un documento
+   de Firestore (límite 1 MB), probando calidades cada vez menores. */
 function procesarImagen(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const MAX = 1280;
-      let { width, height } = img;
-      if (width > MAX || height > MAX) {
-        const escala = Math.min(MAX / width, MAX / height);
-        width = Math.round(width * escala);
-        height = Math.round(height * escala);
+      const intentos = [[1280, 0.8], [1024, 0.7], [800, 0.55], [640, 0.4], [480, 0.3]];
+      let resultado = null;
+      for (const [maxLado, calidad] of intentos) {
+        resultado = comprimirImagen(img, maxLado, calidad);
+        if (resultado.length < 700000) break;
       }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
+      resolve(resultado);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')); };
     img.src = url;
@@ -325,9 +530,10 @@ async function guardarCredito(ev) {
   };
 
   try {
-    await DB.put(credito);
+    await guardarEnStore(credito);
   } catch (e) {
-    toast('❌ Error al guardar. Revisa el espacio disponible.');
+    console.error(e);
+    toast('❌ Error al guardar. Revisa tu conexión o el espacio disponible.');
     return;
   }
 
@@ -343,7 +549,12 @@ async function borrarCredito(id) {
   const c = creditos.find(x => x.id === id);
   if (!c) return;
   if (!confirm(`¿Borrar el crédito de la boleta Nº ${c.boleta} (${c.cliente})?\nEsta acción no se puede deshacer.`)) return;
-  await DB.delete(id);
+  try {
+    await eliminarDeStore(id);
+  } catch (e) {
+    toast('❌ No se pudo borrar. Revisa tu conexión.');
+    return;
+  }
   creditos = creditos.filter(x => x.id !== id);
   render();
   toast('🗑️ Crédito borrado');
@@ -366,14 +577,21 @@ async function importarRespaldo(file) {
     const texto = await file.text();
     const datos = JSON.parse(texto);
     if (!Array.isArray(datos.creditos)) throw new Error('Formato inválido');
-    if (!confirm(`El respaldo contiene ${datos.creditos.length} créditos.\n¿Reemplazar TODOS los datos actuales con el respaldo?`)) return;
-    await DB.clear();
-    for (const c of datos.creditos) await DB.put(c);
-    creditos = datos.creditos;
+    const destino = modoNube ? 'tu cuenta en la nube' : 'este dispositivo';
+    if (!confirm(`El respaldo contiene ${datos.creditos.length} créditos.\n¿Agregarlos a ${destino}? (Los créditos con el mismo ID se sobrescriben)`)) return;
+    for (const c of datos.creditos) await guardarEnStore(c);
+    if (!modoNube) {
+      const ids = new Set(creditos.map(c => c.id));
+      for (const c of datos.creditos) {
+        if (ids.has(c.id)) creditos[creditos.findIndex(x => x.id === c.id)] = c;
+        else creditos.push(c);
+      }
+    }
     if (datos.settings) { settings = { ...settings, ...datos.settings }; guardarSettings(); }
     render();
     toast('⬆️ Respaldo importado correctamente');
   } catch (e) {
+    console.error(e);
     toast('❌ El archivo no es un respaldo válido');
   }
 }
@@ -461,12 +679,21 @@ function inicializarEventos() {
     if (file) importarRespaldo(file);
     ev.target.value = '';
   });
+
+  // Autenticación (modo nube)
+  $('#auth-form').addEventListener('submit', enviarAuth);
+  $('#btn-auth-alternar').addEventListener('click', () => setModoAuth(!modoRegistro));
+  $('#btn-auth-olvide').addEventListener('click', recuperarContrasena);
+  $('#btn-logout').addEventListener('click', async () => {
+    if (confirm('¿Cerrar sesión? Tus datos siguen guardados en la nube.')) {
+      $('#modal-settings').close();
+      await fb.salir(fb.auth);
+    }
+  });
 }
 
 /* ====== Inicio ====== */
-async function iniciar() {
-  cargarSettings();
-  inicializarEventos();
+async function iniciarLocal() {
   try {
     creditos = await DB.getAll();
   } catch (e) {
@@ -474,6 +701,25 @@ async function iniciar() {
     creditos = [];
   }
   render();
+}
+
+async function iniciar() {
+  cargarSettings();
+  inicializarEventos();
+  render();
+
+  if (configNubeValida()) {
+    try {
+      await iniciarNube();
+    } catch (e) {
+      console.error('No se pudo iniciar Firebase:', e);
+      banner('⚠️ Sin conexión con la nube por ahora. Trabajando en modo local en este dispositivo.');
+      await iniciarLocal();
+    }
+  } else {
+    banner('📱 Modo local: los datos solo se guardan en este dispositivo. Configura Firebase (ver README) para sincronizar con la nube.');
+    await iniciarLocal();
+  }
 
   // Pide almacenamiento persistente para que el navegador no borre los datos
   if (navigator.storage && navigator.storage.persist) {
