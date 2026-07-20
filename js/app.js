@@ -293,7 +293,15 @@ function sesionCerrada() {
   migracionRevisada = false;
   render();
   $('#settings-cuenta').hidden = true;
+  $('#btn-logout-header').hidden = true;
   $('#auth-screen').hidden = false;
+}
+
+async function cerrarSesion() {
+  if (confirm('¿Cerrar sesión?')) {
+    $('#modal-settings').close();
+    await fb.salir(fb.auth);
+  }
 }
 
 function suscribirNube() {
@@ -315,6 +323,7 @@ function aplicarPermisos() {
   $('#btn-new').hidden = !puede('crear');
   $('#btn-cobranza').hidden = !puede('cobranza');
   $('#btn-usuarios').hidden = !esAdmin();
+  $('#btn-logout-header').hidden = false;
   render(); // redibuja la tabla para aplicar permisos de editar/borrar
 }
 
@@ -1190,12 +1199,8 @@ function inicializarEventos() {
 
   // Autenticación (modo nube)
   $('#auth-form').addEventListener('submit', enviarAuth);
-  $('#btn-logout').addEventListener('click', async () => {
-    if (confirm('¿Cerrar sesión?')) {
-      $('#modal-settings').close();
-      await fb.salir(fb.auth);
-    }
-  });
+  $('#btn-logout').addEventListener('click', cerrarSesion);
+  $('#btn-logout-header').addEventListener('click', cerrarSesion);
   $('#btn-cambiar-pass').addEventListener('click', cambiarMiContrasena);
 
   // Panel de administración de usuarios (solo admin)
