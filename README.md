@@ -4,11 +4,14 @@ Aplicación para controlar los créditos que le das a tus clientes de distribuci
 
 ## ¿Qué hace?
 
-- 📋 Lista de créditos con: **Nro de boleta, cliente, monto total, fecha de vencimiento y estado**
+- 📋 Lista de créditos con: **Nro de boleta, cliente, zona, monto total, saldo, vencimiento y estado**
+- 📍 **Zona** al crear (MODELO, 3 DE MAYO, CIUDAD, MILAGROS, CARRETERA, PADRE ALDAMIZ, ALAMEDA)
+- 💵 **Pago inicial** al crear y **"Agregar a cuenta"** al editar: registra los adelantos (hasta 8), cada uno con su **fecha**; el **saldo** y el estado (pendiente/parcial/pagado) se calculan solos
 - 📅 **Vencimiento automático** (emisión + días configurables en ⚙️), pero **editable**
-- 🔀 **Ordena** por vencimiento, boleta, cliente, monto o fecha; busca y filtra por estado
+- 🧮 **Panel "Filtrar"** con casillas combinables: por **estado**, por **zona**, por **mes** (Ene–Dic) y por **rango de fechas**, todo junto
+- 🔀 **Ordena** por vencimiento, boleta, cliente, zona, total, saldo o fecha
 - 🏷️ Estados: Pendiente, Pago parcial, Pagado — y marca **Vencido automáticamente** al pasar la fecha
-- 📷 **Foto de la boleta física** (cámara o galería), visible en la lista y ampliable
+- 📷 **Foto de la boleta física** (cámara o galería) en alta calidad; se ve **a pantalla completa** y se puede **descargar**
 - ☁️ **Nube en tiempo real**: entra con tu correo y contraseña en todos tus dispositivos a la vez (varias sesiones activas) y todos ven los mismos datos
 - 📶 Funciona **sin internet**: los cambios se guardan y se sincronizan solos al volver la conexión
 - 🔔 **Avisos de vencimiento**: en Android te llega una notificación el día que vence un crédito, aunque la app esté cerrada. En iPhone/PC, al abrir la app te avisa cuántos vencen hoy o están vencidos. Se puede activar/desactivar en ⚙️.

@@ -74,13 +74,40 @@
     <!-- Barra de filtros -->
     <section class="toolbar">
       <input type="search" id="search" class="input search-input" placeholder="🔍 Buscar por cliente o Nro de boleta…">
-      <select id="filter-estado" class="input">
-        <option value="">Todos los estados</option>
-        <option value="pendiente">Pendientes</option>
-        <option value="vencido">Vencidos</option>
-        <option value="parcial">Pago parcial</option>
-        <option value="pagado">Pagados</option>
-      </select>
+
+      <div class="filtro-wrap">
+        <button type="button" id="btn-filtrar" class="input filtro-toggle">
+          <span>🔽 Filtrar</span>
+          <span class="filtro-contador" id="filtro-contador" hidden>0</span>
+        </button>
+        <div class="filtro-panel" id="filtro-panel" hidden>
+          <div class="filtro-grupo">
+            <h4>Estado</h4>
+            <label><input type="checkbox" class="fil-estado" value="pendiente"> 🕐 Pendientes</label>
+            <label><input type="checkbox" class="fil-estado" value="vencido"> ⚠️ Vencidos</label>
+            <label><input type="checkbox" class="fil-estado" value="parcial"> 🪙 Pago parcial</label>
+            <label><input type="checkbox" class="fil-estado" value="pagado"> ✅ Pagados</label>
+          </div>
+          <div class="filtro-grupo">
+            <h4>Zona</h4>
+            <div id="filtro-zonas"></div>
+          </div>
+          <div class="filtro-grupo">
+            <h4>Mes (de emisión)</h4>
+            <div id="filtro-meses" class="filtro-meses"></div>
+          </div>
+          <div class="filtro-grupo">
+            <h4>Rango de fechas (emisión)</h4>
+            <label class="filtro-fecha">Desde <input type="date" id="fil-desde" class="input"></label>
+            <label class="filtro-fecha">Hasta <input type="date" id="fil-hasta" class="input"></label>
+          </div>
+          <div class="filtro-acciones">
+            <button type="button" id="btn-filtro-limpiar" class="btn btn-secondary btn-small">Limpiar todo</button>
+            <button type="button" id="btn-filtro-cerrar" class="btn btn-primary btn-small">Listo</button>
+          </div>
+        </div>
+      </div>
+
       <select id="sort-by" class="input">
         <option value="vencimiento-asc">Vencimiento ↑ (más próximo)</option>
         <option value="vencimiento-desc">Vencimiento ↓</option>
@@ -88,8 +115,12 @@
         <option value="boleta-desc">Nro boleta ↓</option>
         <option value="cliente-asc">Cliente A–Z</option>
         <option value="cliente-desc">Cliente Z–A</option>
-        <option value="monto-desc">Monto mayor</option>
-        <option value="monto-asc">Monto menor</option>
+        <option value="zona-asc">Zona A–Z</option>
+        <option value="zona-desc">Zona Z–A</option>
+        <option value="monto-desc">Total mayor</option>
+        <option value="monto-asc">Total menor</option>
+        <option value="saldo-desc">Saldo mayor</option>
+        <option value="saldo-asc">Saldo menor</option>
         <option value="fecha-desc">Más recientes</option>
         <option value="fecha-asc">Más antiguos</option>
       </select>
@@ -102,8 +133,9 @@
           <tr>
             <th data-sort="boleta">Nro Boleta <span class="sort-arrow"></span></th>
             <th data-sort="cliente">Cliente <span class="sort-arrow"></span></th>
-            <th data-sort="monto" class="col-num">Monto <span class="sort-arrow"></span></th>
-            <th data-sort="fecha">Emisión <span class="sort-arrow"></span></th>
+            <th data-sort="zona">Zona <span class="sort-arrow"></span></th>
+            <th data-sort="monto" class="col-num">Total <span class="sort-arrow"></span></th>
+            <th data-sort="saldo" class="col-num">Saldo <span class="sort-arrow"></span></th>
             <th data-sort="vencimiento">Vencimiento <span class="sort-arrow"></span></th>
             <th>Estado</th>
             <th>Boleta</th>
@@ -141,8 +173,19 @@
       </label>
 
       <label class="field">
+        <span>Zona</span>
+        <select id="f-zona" class="input"></select>
+      </label>
+
+      <label class="field">
         <span>Monto total *</span>
         <input type="number" id="f-monto" class="input" required min="0" step="any" inputmode="decimal" placeholder="0">
+      </label>
+
+      <!-- Solo al crear un crédito nuevo -->
+      <label class="field" id="field-pago-inicial">
+        <span>Pago inicial (a cuenta) <small>opcional</small></span>
+        <input type="number" id="f-pago-inicial" class="input" min="0" step="any" inputmode="decimal" placeholder="0">
       </label>
 
       <div class="field-row">
@@ -156,18 +199,35 @@
         </label>
       </div>
 
-      <label class="field">
-        <span>Estado</span>
-        <select id="f-estado" class="input">
-          <option value="pendiente">🕐 Pendiente</option>
-          <option value="parcial">🪙 Pago parcial</option>
-          <option value="pagado">✅ Pagado</option>
-        </select>
-      </label>
+      <!-- Solo al editar: abonos "a cuenta" y saldo -->
+      <div class="field abonos-box" id="abonos-box" hidden>
+        <div class="saldo-linea">
+          <span class="field-label">Saldo pendiente</span>
+          <span class="saldo-valor" id="saldo-valor">—</span>
+        </div>
+        <div id="abonos-list" class="abonos-list"></div>
+        <div class="abono-nuevo" id="abono-nuevo" hidden>
+          <div class="field-row">
+            <label class="field">
+              <span>Monto a cuenta</span>
+              <input type="number" id="abono-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0">
+            </label>
+            <label class="field">
+              <span>Fecha del pago</span>
+              <input type="date" id="abono-fecha" class="input">
+            </label>
+          </div>
+          <div class="abono-nuevo-btns">
+            <button type="button" id="btn-abono-cancelar" class="btn btn-secondary btn-small">Cancelar</button>
+            <button type="button" id="btn-abono-confirmar" class="btn btn-primary btn-small">Agregar pago</button>
+          </div>
+        </div>
+        <button type="button" id="btn-agregar-abono" class="btn btn-secondary btn-block">➕ Agregar a cuenta</button>
+      </div>
 
       <label class="field">
         <span>Notas</span>
-        <textarea id="f-notas" class="input" rows="2" placeholder="Opcional: abonos, acuerdos, etc."></textarea>
+        <textarea id="f-notas" class="input" rows="2" placeholder="Opcional: acuerdos, devoluciones, etc."></textarea>
       </label>
 
       <div class="field">
@@ -195,11 +255,16 @@
     </form>
   </dialog>
 
-  <!-- Modal: ver imagen de boleta -->
-  <dialog id="modal-imagen" class="modal modal-imagen">
+  <!-- Visor de imagen a pantalla completa -->
+  <dialog id="modal-imagen" class="modal-imagen">
     <div class="imagen-view">
-      <img id="imagen-grande" alt="Boleta">
-      <button id="btn-cerrar-imagen" class="btn btn-secondary">Cerrar</button>
+      <div class="imagen-scroll">
+        <img id="imagen-grande" alt="Boleta">
+      </div>
+      <div class="imagen-barra">
+        <a id="btn-descargar-imagen" class="btn btn-primary" download>⬇️ Descargar</a>
+        <button id="btn-cerrar-imagen" class="btn btn-secondary">✕ Cerrar</button>
+      </div>
     </div>
   </dialog>
 

@@ -20,6 +20,9 @@
 
 * { box-sizing: border-box; }
 
+/* El atributo hidden siempre oculta, aunque el elemento tenga display propio */
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -130,6 +133,68 @@ body {
 .search-input { flex: 2 1 220px; }
 .toolbar select { flex: 1 1 150px; }
 
+/* Panel de filtros */
+.filtro-wrap { position: relative; flex: 1 1 150px; }
+.filtro-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  cursor: pointer;
+  width: 100%;
+  font-weight: 600;
+}
+.filtro-contador {
+  background: var(--primary);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  min-width: 20px;
+  text-align: center;
+  padding: 0.05rem 0.35rem;
+}
+.filtro-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  width: min(320px, 88vw);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+  padding: 0.9rem;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.filtro-grupo { margin-bottom: 0.9rem; }
+.filtro-grupo h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gray);
+}
+.filtro-grupo label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.filtro-grupo input[type="checkbox"] { width: 17px; height: 17px; }
+.filtro-meses { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.5rem; }
+.filtro-fecha { font-size: 0.85rem; color: #374151; }
+.filtro-fecha .input { margin-top: 0.2rem; }
+.filtro-acciones {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.7rem;
+}
+
 .input {
   width: 100%;
   padding: 0.6rem 0.7rem;
@@ -177,6 +242,8 @@ body {
 .credit-table tbody tr:last-child td { border-bottom: none; }
 
 .col-num, td.col-num { text-align: right; }
+td.saldo-pend { color: var(--danger); font-weight: 600; }
+td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 .thumb {
   width: 42px;
@@ -308,9 +375,100 @@ body {
   margin-top: 1rem;
 }
 
-.modal-imagen { width: min(720px, calc(100vw - 1.5rem)); padding: 0.8rem; }
-.imagen-view { display: flex; flex-direction: column; gap: 0.7rem; align-items: center; }
-.imagen-view img { max-width: 100%; max-height: 75dvh; border-radius: 8px; }
+/* Visor de imagen a pantalla completa */
+.modal-imagen {
+  border: none;
+  padding: 0;
+  margin: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  background: #000;
+}
+.modal-imagen::backdrop { background: rgba(0, 0, 0, 0.9); }
+.imagen-view {
+  width: 100vw;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.imagen-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top) 0.5rem 0.5rem;
+}
+.imagen-scroll img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.imagen-barra {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  padding: 0.7rem 0.7rem calc(0.7rem + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.85);
+}
+.imagen-barra .btn { text-decoration: none; }
+
+/* Abonos "a cuenta" y saldo */
+.abonos-box {
+  background: #f9fafb;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem;
+}
+.saldo-linea {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.6rem;
+}
+.saldo-linea .field-label { margin: 0; }
+.saldo-valor { font-size: 1.25rem; font-weight: 700; color: var(--primary); }
+.saldo-valor.saldo-cero { color: var(--ok); }
+.abonos-list { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.6rem; }
+.abono-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
+}
+.abono-item .abono-fecha { color: var(--gray); font-size: 0.82rem; }
+.abono-item button {
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0 0.2rem;
+}
+.abonos-vacio { color: var(--gray); font-size: 0.88rem; margin: 0 0 0.6rem; }
+.abono-nuevo { border-top: 1px dashed var(--border); padding-top: 0.6rem; margin-bottom: 0.6rem; }
+.abono-nuevo-btns { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+.card-saldo { font-size: 0.9rem; margin: 0.2rem 0 0; color: var(--gray); }
+.card-saldo strong { color: var(--primary); }
+.card-zona {
+  display: inline-block;
+  font-size: 0.72rem;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  margin-top: 0.2rem;
+}
 
 .settings-backup { margin-bottom: 0.85rem; }
 .settings-backup small { color: var(--gray); }

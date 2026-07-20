@@ -48,11 +48,34 @@ function diasHastaVencimiento(vencimientoISO) {
   return Math.round((venc - hoy) / 86400000);
 }
 
-/* El estado que se muestra: si está pendiente/parcial y ya pasó la fecha → vencido */
+/* ====== Zonas, meses y abonos "a cuenta" ====== */
+const ZONAS = ['MODELO', '3 DE MAYO', 'CIUDAD', 'MILAGROS', 'CARRETERA', 'PADRE ALDAMIZ', 'ALAMEDA'];
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const MAX_ABONOS = 8;
+
+function abonosDe(c) { return Array.isArray(c.abonos) ? c.abonos : []; }
+function totalAbonado(c) { return abonosDe(c).reduce((s, a) => s + (Number(a.monto) || 0), 0); }
+
+/* Saldo pendiente = monto total − suma de abonos.
+   Compatible con créditos antiguos (sin abonos) que ya estaban en 'pagado'. */
+function saldoDe(c) {
+  const monto = Number(c.monto) || 0;
+  if (abonosDe(c).length) return Math.max(0, monto - totalAbonado(c));
+  if (c.estado === 'pagado') return 0;
+  return monto;
+}
+
+/* Estado automático según los abonos: pagado / parcial / pendiente */
+function estadoCalculado(c) {
+  if (saldoDe(c) <= 0) return 'pagado';
+  return totalAbonado(c) > 0 ? 'parcial' : 'pendiente';
+}
+
+/* El estado que se muestra: si aún debe y ya pasó la fecha → vencido */
 function estadoEfectivo(c) {
-  if (c.estado === 'pagado') return 'pagado';
+  if (saldoDe(c) <= 0) return 'pagado';
   if (diasHastaVencimiento(c.vencimiento) < 0) return 'vencido';
-  return c.estado;
+  return totalAbonado(c) > 0 ? 'parcial' : 'pendiente';
 }
 
 const ETIQUETAS_ESTADO = {
@@ -70,7 +93,7 @@ function badgeEstado(c) {
 function textoVencimiento(c) {
   const dias = diasHastaVencimiento(c.vencimiento);
   const fecha = formatoFecha(c.vencimiento);
-  if (c.estado === 'pagado') return fecha;
+  if (saldoDe(c) <= 0) return fecha;
   if (dias < 0) return `<span class="venc-alerta">${fecha} (venció hace ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'})</span>`;
   if (dias === 0) return `<span class="venc-alerta">${fecha} (¡vence hoy!)</span>`;
   if (dias <= 5) return `<span class="venc-pronto">${fecha} (en ${dias} día${dias === 1 ? '' : 's'})</span>`;
@@ -287,14 +310,29 @@ async function recuperarContrasena() {
 }
 
 /* ====== Filtrado y orden ====== */
+function marcados(clase) {
+  return [...document.querySelectorAll('.' + clase + ':checked')].map(el => el.value);
+}
+
 function creditosVisibles() {
   const busqueda = $('#search').value.trim().toLowerCase();
-  const filtroEstado = $('#filter-estado').value;
+  const estados = marcados('fil-estado');
+  const zonas = marcados('fil-zona');
+  const meses = marcados('fil-mes').map(Number);
+  const desde = $('#fil-desde').value;
+  const hasta = $('#fil-hasta').value;
   const [campo, dir] = $('#sort-by').value.split('-');
 
   let lista = creditos.filter(c => {
-    if (busqueda && !c.cliente.toLowerCase().includes(busqueda) && !c.boleta.toLowerCase().includes(busqueda)) return false;
-    if (filtroEstado && estadoEfectivo(c) !== filtroEstado) return false;
+    if (busqueda && !c.cliente.toLowerCase().includes(busqueda) && !String(c.boleta).toLowerCase().includes(busqueda)) return false;
+    if (estados.length && !estados.includes(estadoEfectivo(c))) return false;
+    if (zonas.length && !zonas.includes(c.zona || '')) return false;
+    if (meses.length) {
+      const mes = c.fecha ? Number(c.fecha.split('-')[1]) : 0;
+      if (!meses.includes(mes)) return false;
+    }
+    if (desde && (!c.fecha || c.fecha < desde)) return false;
+    if (hasta && (!c.fecha || c.fecha > hasta)) return false;
     return true;
   });
 
@@ -308,7 +346,9 @@ function creditosVisibles() {
         if (!isNaN(va) && !isNaN(vb)) { va = Number(va); vb = Number(vb); }
         break;
       case 'cliente': va = a.cliente.toLowerCase(); vb = b.cliente.toLowerCase(); break;
+      case 'zona': va = (a.zona || '').toLowerCase(); vb = (b.zona || '').toLowerCase(); break;
       case 'monto': va = Number(a.monto); vb = Number(b.monto); break;
+      case 'saldo': va = saldoDe(a); vb = saldoDe(b); break;
       case 'fecha': va = a.fecha; vb = b.fecha; break;
       case 'vencimiento': default: va = a.vencimiento; vb = b.vencimiento; break;
     }
@@ -320,6 +360,15 @@ function creditosVisibles() {
   return lista;
 }
 
+/* Cuenta cuántos filtros hay activos y lo muestra en la burbuja del botón "Filtrar". */
+function actualizarContadorFiltro() {
+  const n = marcados('fil-estado').length + marcados('fil-zona').length + marcados('fil-mes').length
+    + ($('#fil-desde').value ? 1 : 0) + ($('#fil-hasta').value ? 1 : 0);
+  const bur = $('#filtro-contador');
+  bur.textContent = String(n);
+  bur.hidden = n === 0;
+}
+
 /* ====== Render ====== */
 function render() {
   const lista = creditosVisibles();
@@ -328,6 +377,7 @@ function render() {
   renderTarjetas(lista);
   renderFlechas();
   actualizarDatalist();
+  actualizarContadorFiltro();
   $('#empty-state').hidden = creditos.length > 0;
   sincronizarAvisos();
 }
@@ -365,11 +415,13 @@ function renderResumen() {
   let porCobrar = 0, vencidos = 0, cobrado = 0, activos = 0;
   for (const c of creditos) {
     const e = estadoEfectivo(c);
-    const monto = Number(c.monto) || 0;
-    if (e === 'pagado') {
-      cobrado += monto;
-    } else {
-      porCobrar += monto;
+    const saldo = saldoDe(c);
+    // Dinero cobrado: abonos registrados (+ monto completo de créditos antiguos ya pagados sin abonos)
+    if (abonosDe(c).length) cobrado += totalAbonado(c);
+    else if (e === 'pagado') cobrado += Number(c.monto) || 0;
+
+    if (e !== 'pagado') {
+      porCobrar += saldo;   // lo que falta cobrar
       activos++;
       if (e === 'vencido') vencidos++;
     }
@@ -388,12 +440,15 @@ function celdaFoto(c) {
 
 function renderTabla(lista) {
   const tbody = $('#table-body');
-  tbody.innerHTML = lista.map(c => `
+  tbody.innerHTML = lista.map(c => {
+    const saldo = saldoDe(c);
+    return `
     <tr>
       <td><strong>${escapeHtml(c.boleta)}</strong></td>
       <td>${escapeHtml(c.cliente)}</td>
+      <td>${c.zona ? escapeHtml(c.zona) : '—'}</td>
       <td class="col-num">${formatoMonto(c.monto)}</td>
-      <td>${formatoFecha(c.fecha)}</td>
+      <td class="col-num ${saldo > 0 ? 'saldo-pend' : 'saldo-ok'}">${saldo > 0 ? formatoMonto(saldo) : '✓'}</td>
       <td>${textoVencimiento(c)}</td>
       <td>${badgeEstado(c)}</td>
       <td>${celdaFoto(c)}</td>
@@ -403,8 +458,8 @@ function renderTabla(lista) {
           <button class="btn btn-danger btn-small" data-borrar="${c.id}">🗑️</button>
         </div>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 function renderTarjetas(lista) {
@@ -414,7 +469,11 @@ function renderTarjetas(lista) {
       <div class="card-main">
         <p class="card-title">${escapeHtml(c.cliente)}</p>
         <p class="card-sub">Boleta Nº ${escapeHtml(c.boleta)} · ${formatoFecha(c.fecha)}</p>
+        ${c.zona ? `<span class="card-zona">📍 ${escapeHtml(c.zona)}</span>` : ''}
         <p class="card-monto">${formatoMonto(c.monto)}</p>
+        ${saldoDe(c) > 0
+          ? `<p class="card-saldo">Saldo: <strong>${formatoMonto(saldoDe(c))}</strong></p>`
+          : `<p class="card-saldo">✅ Pagado completo</p>`}
         <p class="card-venc">Vence: ${textoVencimiento(c)}</p>
       </div>
       <div class="card-side">
@@ -451,12 +510,16 @@ function escapeHtml(str) {
 /* ====== Formulario ====== */
 const modalForm = $('#modal-form');
 let fotoActual = null;
+let abonosActuales = [];   // abonos "a cuenta" en edición
 
 function abrirFormulario(credito = null) {
   $('#credit-form').reset();
   fotoActual = null;
+  abonosActuales = [];
   vencimientoEditadoManual = false;
   $('#foto-preview-wrap').hidden = true;
+  $('#abono-nuevo').hidden = true;
+  $('#f-zona').value = credito ? (credito.zona || '') : '';
 
   if (credito) {
     $('#form-title').textContent = `Editar crédito — Boleta ${credito.boleta}`;
@@ -466,25 +529,88 @@ function abrirFormulario(credito = null) {
     $('#f-monto').value = credito.monto;
     $('#f-fecha').value = credito.fecha;
     $('#f-vencimiento').value = credito.vencimiento;
-    $('#f-estado').value = credito.estado;
     $('#f-notas').value = credito.notas || '';
     vencimientoEditadoManual = true; // no recalcular al editar
     if (credito.foto) {
       fotoActual = credito.foto;
       mostrarPreview(credito.foto);
     }
+    // Al editar: mostrar abonos y ocultar "pago inicial"
+    abonosActuales = abonosDe(credito).map(a => ({ monto: Number(a.monto) || 0, fecha: a.fecha || '' }));
+    $('#field-pago-inicial').hidden = true;
+    $('#abonos-box').hidden = false;
+    renderAbonos();
   } else {
     $('#form-title').textContent = 'Nuevo crédito';
     $('#f-id').value = '';
     $('#f-fecha').value = hoyISO();
     $('#f-vencimiento').value = sumarDias(hoyISO(), settings.dias);
+    // Al crear: mostrar "pago inicial" y ocultar abonos
+    $('#field-pago-inicial').hidden = false;
+    $('#abonos-box').hidden = true;
   }
   modalForm.showModal();
+}
+
+/* Dibuja la lista de abonos "a cuenta" y el saldo pendiente en el formulario. */
+function renderAbonos() {
+  const cont = $('#abonos-list');
+  if (!abonosActuales.length) {
+    cont.innerHTML = '<p class="abonos-vacio">Aún no hay pagos a cuenta.</p>';
+  } else {
+    cont.innerHTML = abonosActuales.map((a, i) => `
+      <div class="abono-item">
+        <span>ACUENTA ${i + 1}: <strong>${formatoMonto(a.monto)}</strong>
+          <span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'}</span></span>
+        <button type="button" data-quitar-abono="${i}" title="Quitar este pago">🗑️</button>
+      </div>`).join('');
+  }
+  const monto = Number($('#f-monto').value) || 0;
+  const abonado = abonosActuales.reduce((s, a) => s + (Number(a.monto) || 0), 0);
+  const saldo = Math.max(0, monto - abonado);
+  const el = $('#saldo-valor');
+  el.textContent = formatoMonto(saldo);
+  el.classList.toggle('saldo-cero', saldo <= 0);
+
+  const tope = abonosActuales.length >= MAX_ABONOS;
+  const btn = $('#btn-agregar-abono');
+  btn.disabled = tope;
+  btn.textContent = tope ? '✓ Máximo 8 pagos a cuenta' : '➕ Agregar a cuenta';
+}
+
+function abrirNuevoAbono() {
+  const monto = Number($('#f-monto').value) || 0;
+  const abonado = abonosActuales.reduce((s, a) => s + (Number(a.monto) || 0), 0);
+  const saldo = Math.max(0, monto - abonado);
+  $('#abono-monto').value = saldo > 0 ? saldo : '';
+  $('#abono-fecha').value = hoyISO();
+  $('#abono-nuevo').hidden = false;
+  $('#btn-agregar-abono').hidden = true;
+  $('#abono-monto').focus();
+}
+
+function confirmarNuevoAbono() {
+  const monto = Number($('#abono-monto').value);
+  if (!monto || monto <= 0) { toast('⚠️ Escribe un monto válido para el pago'); return; }
+  abonosActuales.push({ monto, fecha: $('#abono-fecha').value || hoyISO() });
+  $('#abono-nuevo').hidden = true;
+  $('#btn-agregar-abono').hidden = false;
+  renderAbonos();
 }
 
 function mostrarPreview(dataURL) {
   $('#foto-preview').src = dataURL;
   $('#foto-preview-wrap').hidden = false;
+}
+
+/* Abre la foto de la boleta a pantalla completa, con opción de descargar. */
+function abrirVisorImagen(credito) {
+  $('#imagen-grande').src = credito.foto;
+  const enlace = $('#btn-descargar-imagen');
+  enlace.href = credito.foto;
+  const nombre = String(credito.boleta || 'foto').replace(/[^\w.-]/g, '_');
+  enlace.download = `boleta-${nombre}.jpg`;
+  $('#modal-imagen').showModal();
 }
 
 function comprimirImagen(img, maxLado, calidad) {
@@ -501,19 +627,20 @@ function comprimirImagen(img, maxLado, calidad) {
   return canvas.toDataURL('image/jpeg', calidad);
 }
 
-/* Comprime la imagen. Reduce el tamaño hasta caber en un documento
-   de Firestore (límite 1 MB), probando calidades cada vez menores. */
+/* Guarda la imagen en alta calidad. Busca la mayor resolución/calidad que
+   quepa en un documento de Firestore (límite 1 MB); deja la foto bien
+   legible para leer la boleta. */
 function procesarImagen(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const intentos = [[1280, 0.8], [1024, 0.7], [800, 0.55], [640, 0.4], [480, 0.3]];
+      const intentos = [[2400, 0.92], [2000, 0.9], [2000, 0.82], [1600, 0.8], [1280, 0.75], [1024, 0.65], [800, 0.55]];
       let resultado = null;
       for (const [maxLado, calidad] of intentos) {
         resultado = comprimirImagen(img, maxLado, calidad);
-        if (resultado.length < 700000) break;
+        if (resultado.length < 900000) break;  // ~660 KB, holgado bajo el límite de 1 MB
       }
       resolve(resultado);
     };
@@ -548,18 +675,31 @@ async function guardarCredito(ev) {
   }
 
   const existente = creditos.find(c => c.id === id);
+  const fecha = $('#f-fecha').value;
+
+  // Abonos: al editar vienen de la sección; al crear, del "pago inicial" opcional
+  let abonos;
+  if (existente) {
+    abonos = abonosActuales.slice();
+  } else {
+    const pagoInicial = Number($('#f-pago-inicial').value) || 0;
+    abonos = pagoInicial > 0 ? [{ monto: pagoInicial, fecha }] : [];
+  }
+
   const credito = {
     id,
     boleta,
     cliente: $('#f-cliente').value.trim(),
+    zona: $('#f-zona').value,
     monto: Number($('#f-monto').value),
-    fecha: $('#f-fecha').value,
+    fecha,
     vencimiento: $('#f-vencimiento').value,
-    estado: $('#f-estado').value,
+    abonos,
     notas: $('#f-notas').value.trim(),
     foto: fotoActual,
     creado: existente ? existente.creado : Date.now(),
   };
+  credito.estado = estadoCalculado(credito);  // pagado / parcial / pendiente automático
 
   try {
     await guardarEnStore(credito);
@@ -628,11 +768,32 @@ async function importarRespaldo(file) {
   }
 }
 
+/* Llena el selector de zona del formulario y las casillas de zonas/meses del filtro. */
+function poblarSelectores() {
+  $('#f-zona').innerHTML = '<option value="">— Sin zona —</option>' +
+    ZONAS.map(z => `<option value="${z}">${z}</option>`).join('');
+  $('#filtro-zonas').innerHTML = ZONAS.map(z =>
+    `<label><input type="checkbox" class="fil-zona" value="${escapeHtml(z)}"> ${escapeHtml(z)}</label>`).join('');
+  $('#filtro-meses').innerHTML = MESES.map((m, i) =>
+    `<label><input type="checkbox" class="fil-mes" value="${i + 1}"> ${m}</label>`).join('');
+}
+
 /* ====== Eventos ====== */
 function inicializarEventos() {
+  poblarSelectores();
+
   $('#btn-new').addEventListener('click', () => abrirFormulario());
   $('#btn-cancelar').addEventListener('click', () => modalForm.close());
   $('#credit-form').addEventListener('submit', guardarCredito);
+
+  // Abonos "a cuenta" (en edición)
+  $('#btn-agregar-abono').addEventListener('click', abrirNuevoAbono);
+  $('#btn-abono-confirmar').addEventListener('click', confirmarNuevoAbono);
+  $('#btn-abono-cancelar').addEventListener('click', () => {
+    $('#abono-nuevo').hidden = true;
+    $('#btn-agregar-abono').hidden = false;
+  });
+  $('#f-monto').addEventListener('input', () => { if (!$('#abonos-box').hidden) renderAbonos(); });
 
   // Vencimiento automático: emisión + días configurados, salvo que el usuario lo haya tocado
   $('#f-fecha').addEventListener('change', () => {
@@ -649,10 +810,26 @@ function inicializarEventos() {
     $('#foto-preview-wrap').hidden = true;
   });
 
-  // Búsqueda, filtro y orden
+  // Búsqueda y orden
   $('#search').addEventListener('input', render);
-  $('#filter-estado').addEventListener('change', render);
   $('#sort-by').addEventListener('change', render);
+
+  // Panel de filtros (estado + zona + mes + rango de fechas, todos combinados)
+  $('#btn-filtrar').addEventListener('click', ev => {
+    ev.stopPropagation();
+    $('#filtro-panel').hidden = !$('#filtro-panel').hidden;
+  });
+  $('#filtro-panel').addEventListener('click', ev => ev.stopPropagation());
+  $('#filtro-panel').addEventListener('change', render);
+  $('#btn-filtro-cerrar').addEventListener('click', () => { $('#filtro-panel').hidden = true; });
+  $('#btn-filtro-limpiar').addEventListener('click', () => {
+    document.querySelectorAll('.fil-estado, .fil-zona, .fil-mes').forEach(cb => { cb.checked = false; });
+    $('#fil-desde').value = '';
+    $('#fil-hasta').value = '';
+    render();
+  });
+  // Cerrar el panel al tocar fuera de él
+  document.addEventListener('click', () => { $('#filtro-panel').hidden = true; });
 
   // Ordenar tocando el encabezado de la tabla
   document.querySelectorAll('.credit-table th[data-sort]').forEach(th => {
@@ -668,22 +845,23 @@ function inicializarEventos() {
     });
   });
 
-  // Acciones en filas y tarjetas (delegación)
+  // Acciones en filas, tarjetas y abonos (delegación)
   document.body.addEventListener('click', ev => {
     const editar = ev.target.closest('[data-editar]');
     const borrar = ev.target.closest('[data-borrar]');
     const verFoto = ev.target.closest('[data-ver-foto]');
+    const quitarAbono = ev.target.closest('[data-quitar-abono]');
     if (editar) {
       const c = creditos.find(x => x.id === editar.dataset.editar);
       if (c) abrirFormulario(c);
     } else if (borrar) {
       borrarCredito(borrar.dataset.borrar);
+    } else if (quitarAbono) {
+      abonosActuales.splice(Number(quitarAbono.dataset.quitarAbono), 1);
+      renderAbonos();
     } else if (verFoto) {
       const c = creditos.find(x => x.id === verFoto.dataset.verFoto);
-      if (c && c.foto) {
-        $('#imagen-grande').src = c.foto;
-        $('#modal-imagen').showModal();
-      }
+      if (c && c.foto) abrirVisorImagen(c);
     }
   });
   $('#btn-cerrar-imagen').addEventListener('click', () => $('#modal-imagen').close());
