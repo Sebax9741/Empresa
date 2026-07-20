@@ -11,6 +11,7 @@ Aplicación para controlar los créditos que le das a tus clientes de distribuci
 - 📷 **Foto de la boleta física** (cámara o galería), visible en la lista y ampliable
 - ☁️ **Nube en tiempo real**: entra con tu correo y contraseña en todos tus dispositivos a la vez (varias sesiones activas) y todos ven los mismos datos
 - 📶 Funciona **sin internet**: los cambios se guardan y se sincronizan solos al volver la conexión
+- 🔔 **Avisos de vencimiento**: en Android te llega una notificación el día que vence un crédito, aunque la app esté cerrada. En iPhone/PC, al abrir la app te avisa cuántos vencen hoy o están vencidos. Se puede activar/desactivar en ⚙️.
 - 📊 Resumen: por cobrar, cobrado, activos y vencidos
 - 💾 Exportar/importar respaldo en archivo (con fotos incluidas)
 

@@ -282,6 +282,11 @@ body {
 }
 .field small { font-weight: 400; color: var(--gray); }
 
+.field-check { display: flex; align-items: flex-start; gap: 0.5rem; }
+.field-check input { margin-top: 0.2rem; width: 18px; height: 18px; flex-shrink: 0; }
+.field-check > span { font-weight: 600; font-size: 0.9rem; }
+.field-check small { display: block; font-weight: 400; color: var(--gray); margin-top: 0.2rem; }
+
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
 .field-row .field { margin-bottom: 0.85rem; }
 

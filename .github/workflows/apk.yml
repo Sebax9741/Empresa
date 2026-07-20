@@ -38,6 +38,9 @@ jobs:
       - name: Crear proyecto Android
         run: npx cap add android
 
+      - name: Sincronizar plugins (notificaciones, etc.)
+        run: npx cap sync android
+
       - name: Generar íconos de la app
         run: |
           mkdir -p assets

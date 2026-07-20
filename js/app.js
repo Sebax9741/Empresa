@@ -3,6 +3,7 @@ let creditos = [];
 let settings = {
   dias: 30,
   moneda: '$',
+  avisos: true,
 };
 let vencimientoEditadoManual = false;
 
@@ -188,6 +189,7 @@ function suscribirNube(uid) {
   unsubSnapshot = fb.onSnapshot(coleccion, snap => {
     creditos = snap.docs.map(d => d.data());
     render();
+    avisoAlAbrir();
     ofrecerMigracionLocal(uid);
   }, err => {
     console.error('Error de sincronización:', err);
@@ -327,6 +329,36 @@ function render() {
   renderFlechas();
   actualizarDatalist();
   $('#empty-state').hidden = creditos.length > 0;
+  sincronizarAvisos();
+}
+
+/* Programa/actualiza los avisos de vencimiento (Android). Sin efecto en web/iPhone. */
+function sincronizarAvisos() {
+  if (global_Avisos()) {
+    window.Avisos.programar(creditos, { activado: settings.avisos, moneda: settings.moneda });
+  }
+}
+function global_Avisos() {
+  return typeof window !== 'undefined' && window.Avisos;
+}
+
+/* "Aviso al abrir la app": muestra una vez cuántos créditos vencen hoy o están vencidos. */
+let avisoInicialMostrado = false;
+function avisoAlAbrir() {
+  if (avisoInicialMostrado) return;
+  avisoInicialMostrado = true;
+  const hoy = hoyISO();
+  let venceHoy = 0, vencidos = 0;
+  for (const c of creditos) {
+    if (c.estado === 'pagado') continue;
+    if (c.vencimiento === hoy) venceHoy++;
+    else if (diasHastaVencimiento(c.vencimiento) < 0) vencidos++;
+  }
+  if (venceHoy + vencidos === 0) return;
+  const partes = [];
+  if (venceHoy) partes.push(`${venceHoy} vence${venceHoy === 1 ? '' : 'n'} hoy`);
+  if (vencidos) partes.push(`${vencidos} vencido${vencidos === 1 ? '' : 's'}`);
+  setTimeout(() => toast(`🔔 ${partes.join(' y ')}`), 600);
 }
 
 function renderResumen() {
@@ -660,6 +692,7 @@ function inicializarEventos() {
   $('#btn-settings').addEventListener('click', () => {
     $('#s-dias').value = settings.dias;
     $('#s-moneda').value = settings.moneda;
+    $('#s-avisos').checked = settings.avisos !== false;
     $('#modal-settings').showModal();
   });
   $('#btn-settings-cerrar').addEventListener('click', () => $('#modal-settings').close());
@@ -667,6 +700,7 @@ function inicializarEventos() {
     ev.preventDefault();
     settings.dias = Math.max(1, Number($('#s-dias').value) || 30);
     settings.moneda = $('#s-moneda').value.trim() || '$';
+    settings.avisos = $('#s-avisos').checked;
     guardarSettings();
     $('#modal-settings').close();
     render();
@@ -701,6 +735,7 @@ async function iniciarLocal() {
     creditos = [];
   }
   render();
+  avisoAlAbrir();
 }
 
 async function iniciar() {
