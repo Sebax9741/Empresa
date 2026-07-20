@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Config del negocio: guarda quién es el dueño (dónde viven los datos).
+    // Se crea UNA sola vez: el primer usuario que inicia sesión queda como dueño.
+    match /config/app {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && !exists(/databases/$(database)/documents/config/app)
+                    && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /usuarios/{ownerUid} {
+
+      function esMiembro() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/usuarios/$(ownerUid)/miembros/$(request.auth.uid));
+      }
+      function miMembresia() {
+        return get(/databases/$(database)/documents/usuarios/$(ownerUid)/miembros/$(request.auth.uid)).data;
+      }
+      function esAdmin() {
+        return esMiembro() && miMembresia().rol == 'admin';
+      }
+      function permiso(nombre) {
+        return esAdmin() || (esMiembro() && miMembresia().permisos[nombre] == true);
+      }
+
+      // Créditos del negocio (datos compartidos por el equipo)
+      match /creditos/{docId} {
+        allow read: if esMiembro();
+        allow create: if permiso('crear');
+        allow update: if permiso('editar') || permiso('pagos');
+        allow delete: if permiso('borrar');
+      }
+
+      // Miembros y sus permisos
+      match /miembros/{memberUid} {
+        allow read: if esMiembro();
+        // Bootstrap: el dueño crea su propio registro de administrador la 1ª vez
+        allow create: if request.auth != null
+                      && request.auth.uid == ownerUid
+                      && memberUid == ownerUid
+                      && request.resource.data.rol == 'admin';
+        // Gestión normal: solo un administrador crea/edita/borra miembros
+        allow create, update, delete: if esAdmin();
+      }
+    }
+  }
+}

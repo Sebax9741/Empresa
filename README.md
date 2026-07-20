@@ -13,7 +13,8 @@ Aplicación para controlar los créditos que le das a tus clientes de distribuci
 - 🔀 **Ordena** por vencimiento, boleta, cliente, zona, total, saldo o fecha
 - 🏷️ Estados: Pendiente, Pago parcial, Pagado — y marca **Vencido automáticamente** al pasar la fecha
 - 📷 **Foto de la boleta física** (cámara o galería) en alta calidad; se ve **a pantalla completa** y se puede **descargar**
-- ☁️ **Nube en tiempo real**: entra con tu correo y contraseña en todos tus dispositivos a la vez (varias sesiones activas) y todos ven los mismos datos
+- ☁️ **Nube en tiempo real**: entra con tu usuario y contraseña en todos tus dispositivos a la vez (varias sesiones activas) y todos ven los mismos datos
+- 👥 **Usuarios y permisos**: solo el administrador crea usuarios (con contraseña, sin correo); a cada uno le das o le quitas permisos (crear, editar, registrar pagos, **borrar**, ver/exportar cobranza). El acceso a los datos y el borrado quedan blindados en la base de datos
 - 📶 Funciona **sin internet**: los cambios se guardan y se sincronizan solos al volver la conexión
 - 🔔 **Avisos de vencimiento**: en Android te llega una notificación el día que vence un crédito, aunque la app esté cerrada. En iPhone/PC, al abrir la app te avisa cuántos vencen hoy o están vencidos. Se puede activar/desactivar en ⚙️.
 - 📊 Resumen: por cobrar, cobrado, activos y vencidos
@@ -33,16 +34,7 @@ Se usa **Firebase** de Google (el plan gratuito sobra para este uso).
 4. En el menú izquierdo: **Compilación → Firestore Database** → **Crear base de datos** → elige ubicación (ej: `southamerica-east1`) → **modo de producción** → Habilitar.
 5. En Firestore, pestaña **Reglas**, borra lo que hay y pega esto (permite que cada usuario vea SOLO sus propios datos) → **Publicar**:
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /usuarios/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-  }
-}
-```
+> **Copia el contenido completo del archivo [`firestore.rules`](firestore.rules) de este repositorio** y pégalo ahí. Esas reglas hacen que solo tu equipo vea los datos y que se respeten los permisos (por ejemplo, que un empleado sin permiso no pueda borrar).
 
 6. Ve a **⚙️ (arriba a la izquierda) → Configuración del proyecto** → baja hasta **"Tus apps"** → toca el ícono **`</>`** (Web) → ponle un nombre (ej: `creditos-web`) → **Registrar app**. Te mostrará un código con `firebaseConfig = { apiKey: "...", ... }`. **Copia esos valores.**
 
@@ -53,6 +45,16 @@ service cloud.firestore {
 3. Guarda con **"Commit changes"**.
 
 Al guardar, **el APK se recompila solo** con tu configuración (tarda ~5-10 minutos).
+
+## Usuarios y permisos (multiusuario)
+
+- **La primera vez que inicies sesión** con tu cuenta (tu correo actual y su contraseña) quedas automáticamente como **administrador dueño**. Entra una vez para activarlo.
+- Como administrador verás el botón **👥** arriba. Desde ahí:
+  - **Creas usuarios** para tus empleados: un usuario (ej. `juan`), un nombre y una contraseña. No usan correo; entran con ese usuario y contraseña.
+  - **Das o quitas permisos** a cada uno con casillas: crear créditos, editar, registrar pagos, **borrar créditos**, ver/exportar cobranza. O lo marcas como **administrador** (todos los permisos).
+  - **Quitas el acceso** a un usuario cuando quieras.
+- Nadie puede registrarse solo: **solo tú creas usuarios**.
+- Si un empleado **olvida su contraseña**, puede cambiarla él mismo desde ⚙️ (estando dentro), o le creas un usuario nuevo.
 
 ## PASO 3 — Instalar el APK en celular y tablet
 

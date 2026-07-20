@@ -12,6 +12,24 @@ let modoNube = false;
 let fb = null;            // SDK y referencias de Firebase
 let unsubSnapshot = null; // cancela la suscripción en tiempo real
 let migracionRevisada = false;
+let ownerUid = null;      // dónde viven los datos del negocio (dueño)
+let yo = null;            // membresía del usuario actual: { usuario, nombre, rol, permisos }
+
+/* Dominio interno para convertir "usuario" en un correo que entiende Firebase */
+const DOMINIO_USUARIOS = 'usuarios.empresa-ab.app';
+function usuarioAEmail(entrada) {
+  const v = String(entrada).trim();
+  return v.includes('@') ? v.toLowerCase() : `${v.toLowerCase()}@${DOMINIO_USUARIOS}`;
+}
+
+/* Permisos del usuario actual */
+const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true };
+function esAdmin() { return modoNube && !!(yo && yo.rol === 'admin'); }
+function puede(nombre) {
+  if (!modoNube) return true;         // modo local: un solo dueño, todo permitido
+  if (yo && yo.rol === 'admin') return true;
+  return !!(yo && yo.permisos && yo.permisos[nombre]);
+}
 
 const EMULADOR = new URLSearchParams(location.search).has('emulador');
 
@@ -159,8 +177,7 @@ function configNubeValida() {
 
 async function guardarEnStore(credito) {
   if (modoNube) {
-    const uid = fb.auth.currentUser.uid;
-    await fb.setDoc(fb.doc(fb.db, 'usuarios', uid, 'creditos', credito.id), credito);
+    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', credito.id), credito);
   } else {
     await DB.put(credito);
   }
@@ -168,8 +185,7 @@ async function guardarEnStore(credito) {
 
 async function eliminarDeStore(id) {
   if (modoNube) {
-    const uid = fb.auth.currentUser.uid;
-    await fb.deleteDoc(fb.doc(fb.db, 'usuarios', uid, 'creditos', id));
+    await fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', id));
   } else {
     await DB.delete(id);
   }
@@ -198,50 +214,108 @@ async function iniciarNube() {
   }
 
   fb = {
-    auth, db,
+    app, auth, db, cfg,
+    initializeApp: appMod.initializeApp,
+    deleteApp: appMod.deleteApp,
     collection: fsMod.collection,
     doc: fsMod.doc,
+    getDoc: fsMod.getDoc,
+    getDocs: fsMod.getDocs,
     setDoc: fsMod.setDoc,
+    updateDoc: fsMod.updateDoc,
     deleteDoc: fsMod.deleteDoc,
     onSnapshot: fsMod.onSnapshot,
+    getAuth: authMod.getAuth,
     signIn: authMod.signInWithEmailAndPassword,
     registrar: authMod.createUserWithEmailAndPassword,
-    recuperar: authMod.sendPasswordResetEmail,
+    updatePassword: authMod.updatePassword,
     salir: authMod.signOut,
+    connectAuthEmulator: authMod.connectAuthEmulator,
+    connectFirestoreEmulator: fsMod.connectFirestoreEmulator,
   };
   modoNube = true;
 
   authMod.onAuthStateChanged(auth, usuario => {
-    if (usuario) {
-      $('#auth-screen').hidden = true;
-      $('#settings-cuenta').hidden = false;
-      $('#cuenta-email').textContent = usuario.email;
-      banner(null);
-      suscribirNube(usuario.uid);
-    } else {
-      if (unsubSnapshot) { unsubSnapshot(); unsubSnapshot = null; }
-      creditos = [];
-      migracionRevisada = false;
-      render();
-      $('#settings-cuenta').hidden = true;
-      setModoAuth(false); // vuelve a la pantalla de "Iniciar sesión"
-      $('#auth-screen').hidden = false;
-    }
+    if (usuario) sesionIniciada(usuario);
+    else sesionCerrada();
   });
 }
 
-function suscribirNube(uid) {
+/* Al iniciar sesión: averigua el dueño (o lo crea la 1ª vez), lee la membresía
+   del usuario y aplica sus permisos. Si no es miembro, deniega el acceso. */
+async function sesionIniciada(usuario) {
+  try {
+    const cfgRef = fb.doc(fb.db, 'config', 'app');
+    let cfgSnap = await fb.getDoc(cfgRef);
+
+    if (!cfgSnap.exists()) {
+      // Primer usuario que entra = dueño/administrador (bootstrap)
+      await fb.setDoc(cfgRef, { ownerUid: usuario.uid, creado: Date.now() });
+      await fb.setDoc(fb.doc(fb.db, 'usuarios', usuario.uid, 'miembros', usuario.uid), {
+        usuario: usuario.email || 'administrador',
+        nombre: 'Administrador',
+        rol: 'admin',
+        permisos: { ...PERMISOS_TODOS },
+        creado: Date.now(),
+      });
+      cfgSnap = await fb.getDoc(cfgRef);
+    }
+
+    ownerUid = cfgSnap.data().ownerUid;
+    const miDoc = await fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', usuario.uid));
+    if (!miDoc.exists()) {
+      // Autenticado pero sin permiso: no es miembro del negocio
+      await fb.salir(fb.auth);
+      $('#auth-error').textContent = 'Tu usuario no tiene acceso. Pídele al administrador que te dé de alta.';
+      $('#auth-error').hidden = false;
+      return;
+    }
+    yo = miDoc.data();
+  } catch (e) {
+    console.error('Error al iniciar sesión:', e);
+    banner('⚠️ No se pudo verificar tu acceso. Revisa las reglas de Firestore o tu conexión.');
+    return;
+  }
+
+  $('#auth-screen').hidden = true;
+  $('#settings-cuenta').hidden = false;
+  $('#cuenta-email').textContent = `${yo.usuario}${esAdmin() ? ' (administrador)' : ''}`;
+  banner(null);
+  aplicarPermisos();
+  suscribirNube();
+}
+
+function sesionCerrada() {
+  if (unsubSnapshot) { unsubSnapshot(); unsubSnapshot = null; }
+  creditos = [];
+  ownerUid = null;
+  yo = null;
+  migracionRevisada = false;
+  render();
+  $('#settings-cuenta').hidden = true;
+  $('#auth-screen').hidden = false;
+}
+
+function suscribirNube() {
   if (unsubSnapshot) unsubSnapshot();
-  const coleccion = fb.collection(fb.db, 'usuarios', uid, 'creditos');
+  const coleccion = fb.collection(fb.db, 'usuarios', ownerUid, 'creditos');
   unsubSnapshot = fb.onSnapshot(coleccion, snap => {
     creditos = snap.docs.map(d => d.data());
     render();
     avisoAlAbrir();
-    ofrecerMigracionLocal(uid);
+    if (esAdmin()) ofrecerMigracionLocal(ownerUid);
   }, err => {
     console.error('Error de sincronización:', err);
     banner('⚠️ Error de sincronización con la nube. Revisa tu conexión o las reglas de Firestore.');
   });
+}
+
+/* Muestra/oculta botones según los permisos del usuario actual */
+function aplicarPermisos() {
+  $('#btn-new').hidden = !puede('crear');
+  $('#btn-cobranza').hidden = !puede('cobranza');
+  $('#btn-usuarios').hidden = !esAdmin();
+  render(); // redibuja la tabla para aplicar permisos de editar/borrar
 }
 
 /* Si el dispositivo tenía créditos guardados en modo local, ofrece subirlos a la cuenta */
@@ -264,19 +338,17 @@ async function ofrecerMigracionLocal(uid) {
   } catch (e) { /* sin datos locales */ }
 }
 
-/* ====== Autenticación ====== */
-let modoRegistro = false;
-
+/* ====== Autenticación (usuario + contraseña) ====== */
 const ERRORES_AUTH = {
-  'auth/invalid-email': 'El correo no es válido.',
-  'auth/user-not-found': 'No existe una cuenta con ese correo.',
-  'auth/wrong-password': 'Contraseña incorrecta.',
-  'auth/invalid-credential': 'Correo o contraseña incorrectos.',
-  'auth/email-already-in-use': 'Ya existe una cuenta con ese correo. Usa "Iniciar sesión".',
+  'auth/invalid-email': 'El usuario no es válido.',
+  'auth/user-not-found': 'Usuario o contraseña incorrectos.',
+  'auth/wrong-password': 'Usuario o contraseña incorrectos.',
+  'auth/invalid-credential': 'Usuario o contraseña incorrectos.',
   'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
   'auth/network-request-failed': 'Sin conexión a internet. Inténtalo de nuevo.',
   'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos.',
   'auth/missing-password': 'Escribe tu contraseña.',
+  'auth/email-already-in-use': 'Ese usuario ya existe.',
 };
 
 function errorAuth(e) {
@@ -285,32 +357,15 @@ function errorAuth(e) {
   el.hidden = false;
 }
 
-function setModoAuth(registro) {
-  modoRegistro = registro;
-  $('#auth-error').hidden = true;
-  $('#btn-auth-principal').textContent = modoRegistro ? 'Crear cuenta' : 'Iniciar sesión';
-  $('#auth-subtitle').textContent = modoRegistro
-    ? 'Crea tu cuenta (solo necesitas hacerlo una vez)'
-    : 'Inicia sesión para ver tus créditos en todos tus dispositivos';
-  $('#btn-auth-alternar').textContent = modoRegistro
-    ? '¿Ya tienes cuenta? Iniciar sesión'
-    : '¿No tienes cuenta? Crear cuenta nueva';
-}
-
 async function enviarAuth(ev) {
   ev.preventDefault();
   $('#auth-error').hidden = true;
-  const email = $('#a-email').value.trim();
+  const email = usuarioAEmail($('#a-email').value);
   const pass = $('#a-pass').value;
   const boton = $('#btn-auth-principal');
   boton.disabled = true;
   try {
-    if (modoRegistro) {
-      await fb.registrar(fb.auth, email, pass);
-      toast('✅ Cuenta creada. ¡Bienvenido!');
-    } else {
-      await fb.signIn(fb.auth, email, pass);
-    }
+    await fb.signIn(fb.auth, email, pass);
     $('#a-pass').value = '';
   } catch (e) {
     errorAuth(e);
@@ -319,17 +374,126 @@ async function enviarAuth(ev) {
   }
 }
 
-async function recuperarContrasena() {
-  const email = $('#a-email').value.trim();
-  if (!email) {
-    errorAuth({ code: 'auth/invalid-email' });
+/* ====== Administración de usuarios (solo admin) ====== */
+const PERMISOS_LISTA = [
+  ['crear', 'Crear créditos'],
+  ['editar', 'Editar créditos'],
+  ['pagos', 'Registrar pagos'],
+  ['borrar', 'Borrar créditos'],
+  ['cobranza', 'Ver/exportar cobranza'],
+];
+
+async function abrirUsuarios() {
+  if (!esAdmin()) return;
+  await renderUsuarios();
+  $('#u-form-nuevo').reset();
+  $('#modal-usuarios').showModal();
+}
+
+async function renderUsuarios() {
+  const cont = $('#usuarios-list');
+  cont.innerHTML = '<p class="abonos-vacio">Cargando…</p>';
+  let docs = [];
+  try {
+    const snap = await fb.getDocs(fb.collection(fb.db, 'usuarios', ownerUid, 'miembros'));
+    docs = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+  } catch (e) {
+    cont.innerHTML = '<p class="abonos-vacio">No se pudo cargar la lista.</p>';
     return;
   }
+  docs.sort((a, b) => (a.rol === 'admin' ? -1 : 1) - (b.rol === 'admin' ? -1 : 1));
+  cont.innerHTML = docs.map(m => {
+    const esDueno = m.uid === ownerUid;
+    const permisosHtml = esDueno ? '<em>Todos los permisos</em>' : PERMISOS_LISTA.map(([k, etiqueta]) => `
+      <label class="u-perm"><input type="checkbox" data-perm="${k}" data-uid="${m.uid}" ${m.permisos && m.permisos[k] ? 'checked' : ''}> ${etiqueta}</label>`).join('');
+    return `
+      <div class="usuario-item">
+        <div class="usuario-cab">
+          <strong>${escapeHtml(m.usuario || '(sin nombre)')}</strong>
+          <span class="usuario-rol">${m.rol === 'admin' ? '👑 Administrador' : '👤 Empleado'}</span>
+          ${esDueno ? '' : `<button type="button" class="btn btn-danger btn-small" data-borrar-usuario="${m.uid}">Quitar</button>`}
+        </div>
+        <div class="usuario-perms">${permisosHtml}</div>
+      </div>`;
+  }).join('');
+}
+
+function crearUsuarioAuthSecundaria(email, pass) {
+  // Crea el usuario en una app Firebase aparte para NO cerrar la sesión del admin
+  const seg = fb.initializeApp(fb.cfg, 'secundaria-' + Date.now());
+  const segAuth = fb.getAuth(seg);
+  if (EMULADOR) fb.connectAuthEmulator(segAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  return fb.registrar(segAuth, email, pass)
+    .then(cred => fb.salir(segAuth).then(() => cred.user.uid))
+    .finally(() => fb.deleteApp(seg));
+}
+
+async function crearUsuario(ev) {
+  ev.preventDefault();
+  if (!esAdmin()) return;
+  const usuario = $('#u-usuario').value.trim().toLowerCase();
+  const nombre = $('#u-nombre').value.trim();
+  const pass = $('#u-pass').value;
+  const rolAdmin = $('#u-admin').checked;
+  if (!usuario || pass.length < 6) { toast('⚠️ Usuario y contraseña (mín. 6) son obligatorios'); return; }
+  if (usuario.includes('@') || /\s/.test(usuario)) { toast('⚠️ El usuario no debe tener espacios ni @'); return; }
+
+  const permisos = {};
+  for (const [k] of PERMISOS_LISTA) permisos[k] = rolAdmin || $(`#u-perm-${k}`).checked;
+
+  const boton = $('#btn-u-crear');
+  boton.disabled = true;
   try {
-    await fb.recuperar(fb.auth, email);
-    toast(`📧 Te enviamos un correo a ${email} para restablecer tu contraseña`);
+    const uid = await crearUsuarioAuthSecundaria(usuarioAEmail(usuario), pass);
+    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid), {
+      usuario, nombre: nombre || usuario, rol: rolAdmin ? 'admin' : 'empleado', permisos, creado: Date.now(),
+    });
+    toast(`✅ Usuario "${usuario}" creado`);
+    $('#u-form-nuevo').reset();
+    await renderUsuarios();
   } catch (e) {
-    errorAuth(e);
+    console.error(e);
+    toast(e.code === 'auth/email-already-in-use' ? '⚠️ Ese usuario ya existe' : '❌ No se pudo crear el usuario');
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+async function cambiarPermiso(uid, perm, valor) {
+  try {
+    await fb.updateDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid), { [`permisos.${perm}`]: valor });
+    toast('✅ Permiso actualizado');
+  } catch (e) {
+    toast('❌ No se pudo actualizar el permiso');
+    renderUsuarios();
+  }
+}
+
+async function borrarUsuario(uid) {
+  if (uid === ownerUid) return;
+  if (!confirm('¿Quitarle el acceso a este usuario? No podrá volver a entrar.')) return;
+  try {
+    await fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid));
+    toast('🚪 Acceso retirado');
+    await renderUsuarios();
+  } catch (e) {
+    toast('❌ No se pudo quitar el acceso');
+  }
+}
+
+async function cambiarMiContrasena() {
+  const nueva = prompt('Escribe tu nueva contraseña (mínimo 6 caracteres):');
+  if (nueva === null) return;
+  if (nueva.length < 6) { toast('⚠️ Debe tener al menos 6 caracteres'); return; }
+  try {
+    await fb.updatePassword(fb.auth.currentUser, nueva);
+    toast('✅ Contraseña cambiada');
+  } catch (e) {
+    if (e.code === 'auth/requires-recent-login') {
+      toast('Por seguridad, cierra sesión y vuelve a entrar para cambiarla.');
+    } else {
+      toast('❌ No se pudo cambiar la contraseña');
+    }
   }
 }
 
@@ -478,8 +642,8 @@ function renderTabla(lista) {
       <td>${celdaFoto(c)}</td>
       <td>
         <div class="row-actions">
-          <button class="btn btn-secondary btn-small" data-editar="${c.id}">✏️</button>
-          <button class="btn btn-danger btn-small" data-borrar="${c.id}">🗑️</button>
+          ${(puede('editar') || puede('pagos')) ? `<button class="btn btn-secondary btn-small" data-editar="${c.id}">✏️</button>` : ''}
+          ${puede('borrar') ? `<button class="btn btn-danger btn-small" data-borrar="${c.id}">🗑️</button>` : ''}
         </div>
       </td>
     </tr>`;
@@ -505,8 +669,8 @@ function renderTarjetas(lista) {
         ${c.foto ? `<img src="${c.foto}" class="thumb" alt="Boleta ${c.boleta}" data-ver-foto="${c.id}">` : ''}
       </div>
       <div class="card-actions">
-        <button class="btn btn-secondary btn-small" data-editar="${c.id}">✏️ Editar</button>
-        <button class="btn btn-danger btn-small" data-borrar="${c.id}">🗑️ Borrar</button>
+        ${(puede('editar') || puede('pagos')) ? `<button class="btn btn-secondary btn-small" data-editar="${c.id}">✏️ Editar</button>` : ''}
+        ${puede('borrar') ? `<button class="btn btn-danger btn-small" data-borrar="${c.id}">🗑️ Borrar</button>` : ''}
       </div>
     </article>
   `).join('');
@@ -543,6 +707,9 @@ function abrirFormulario(credito = null) {
   vencimientoEditadoManual = false;
   $('#foto-preview-wrap').hidden = true;
   $('#abono-nuevo').hidden = true;
+  // Reactiva todos los campos (por si venían bloqueados de una edición anterior)
+  ['f-boleta', 'f-cliente', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => { $('#' + id).disabled = false; });
+  $('#foto-acciones-wrap').style.display = '';
   $('#f-zona').value = credito ? (credito.zona || '') : '';
 
   if (credito) {
@@ -564,6 +731,12 @@ function abrirFormulario(credito = null) {
     $('#field-pago-inicial').hidden = true;
     $('#abonos-box').hidden = false;
     renderAbonos();
+    // Si solo puede registrar pagos (no editar), bloquea los demás campos
+    const soloEditarCampos = puede('editar');
+    ['f-boleta', 'f-cliente', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => {
+      $('#' + id).disabled = !soloEditarCampos;
+    });
+    $('#foto-acciones-wrap').style.display = soloEditarCampos ? '' : 'none';
   } else {
     $('#form-title').textContent = 'Nuevo crédito';
     $('#f-id').value = '';
@@ -835,6 +1008,7 @@ async function guardarCredito(ev) {
 async function borrarCredito(id) {
   const c = creditos.find(x => x.id === id);
   if (!c) return;
+  if (!puede('borrar')) { toast('🔒 No tienes permiso para borrar créditos'); return; }
   if (!confirm(`¿Borrar el crédito de la boleta Nº ${c.boleta} (${c.cliente})?\nEsta acción no se puede deshacer.`)) return;
   try {
     await eliminarDeStore(id);
@@ -1016,13 +1190,26 @@ function inicializarEventos() {
 
   // Autenticación (modo nube)
   $('#auth-form').addEventListener('submit', enviarAuth);
-  $('#btn-auth-alternar').addEventListener('click', () => setModoAuth(!modoRegistro));
-  $('#btn-auth-olvide').addEventListener('click', recuperarContrasena);
   $('#btn-logout').addEventListener('click', async () => {
-    if (confirm('¿Cerrar sesión? Tus datos siguen guardados en la nube.')) {
+    if (confirm('¿Cerrar sesión?')) {
       $('#modal-settings').close();
       await fb.salir(fb.auth);
     }
+  });
+  $('#btn-cambiar-pass').addEventListener('click', cambiarMiContrasena);
+
+  // Panel de administración de usuarios (solo admin)
+  $('#btn-usuarios').addEventListener('click', abrirUsuarios);
+  $('#btn-usuarios-cerrar').addEventListener('click', () => $('#modal-usuarios').close());
+  $('#u-form-nuevo').addEventListener('submit', crearUsuario);
+  $('#u-admin').addEventListener('change', ev => { $('#u-permisos-detalle').style.display = ev.target.checked ? 'none' : ''; });
+  $('#usuarios-list').addEventListener('change', ev => {
+    const cb = ev.target.closest('[data-perm]');
+    if (cb) cambiarPermiso(cb.dataset.uid, cb.dataset.perm, cb.checked);
+  });
+  $('#usuarios-list').addEventListener('click', ev => {
+    const btn = ev.target.closest('[data-borrar-usuario]');
+    if (btn) borrarUsuario(btn.dataset.borrarUsuario);
   });
 }
 

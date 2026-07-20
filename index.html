@@ -19,22 +19,20 @@
   <div id="auth-screen" class="auth-screen" hidden>
     <div class="auth-box">
       <h1>💳 Control de Créditos</h1>
-      <p class="auth-subtitle" id="auth-subtitle">Inicia sesión para ver tus créditos en todos tus dispositivos</p>
+      <p class="auth-subtitle" id="auth-subtitle">Inicia sesión con tu usuario y contraseña</p>
       <form id="auth-form">
         <label class="field">
-          <span>Correo electrónico</span>
-          <input type="email" id="a-email" class="input" required autocomplete="email" placeholder="tu@correo.com">
+          <span>Usuario</span>
+          <input type="text" id="a-email" class="input" required autocomplete="username" autocapitalize="none" placeholder="tu usuario">
         </label>
         <label class="field">
           <span>Contraseña</span>
-          <input type="password" id="a-pass" class="input" required minlength="6" autocomplete="current-password" placeholder="Mínimo 6 caracteres">
+          <input type="password" id="a-pass" class="input" required minlength="6" autocomplete="current-password" placeholder="Tu contraseña">
         </label>
         <p id="auth-error" class="auth-error" hidden></p>
         <button type="submit" class="btn btn-primary btn-block" id="btn-auth-principal">Iniciar sesión</button>
       </form>
-      <button type="button" id="btn-auth-alternar" class="btn-link">¿No tienes cuenta? Crear cuenta nueva</button>
-      <button type="button" id="btn-auth-olvide" class="btn-link">Olvidé mi contraseña</button>
-      <p class="auth-nota">💡 Usa el mismo correo y contraseña en tu celular, tablet y computadora: todos verán los mismos datos, actualizados al instante.</p>
+      <p class="auth-nota">💡 ¿No tienes usuario o lo olvidaste? Pídeselo al administrador. Usa el mismo usuario y contraseña en tu celular, tablet y computadora.</p>
     </div>
   </div>
 
@@ -42,6 +40,7 @@
     <div class="header-inner">
       <h1>💳 Control de Créditos</h1>
       <div class="header-actions">
+        <button id="btn-usuarios" class="btn-icon" title="Usuarios" aria-label="Usuarios" hidden>👥</button>
         <button id="btn-cobranza" class="btn-icon" title="Hoja de cobranza" aria-label="Hoja de cobranza">🧾</button>
         <button id="btn-settings" class="btn-icon" title="Configuración" aria-label="Configuración">⚙️</button>
         <button id="btn-new" class="btn btn-primary">＋ Nuevo crédito</button>
@@ -251,7 +250,7 @@
 
       <div class="field">
         <span class="field-label">Foto de la boleta física</span>
-        <div class="photo-actions">
+        <div class="photo-actions" id="foto-acciones-wrap">
           <label class="btn btn-secondary photo-btn">
             📷 Tomar foto
             <input type="file" id="f-foto-camara" accept="image/*" capture="environment" hidden>
@@ -272,6 +271,41 @@
         <button type="submit" class="btn btn-primary" id="btn-guardar">Guardar</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Modal: administración de usuarios (solo admin) -->
+  <dialog id="modal-usuarios" class="modal modal-usuarios">
+    <h2>👥 Usuarios</h2>
+
+    <form id="u-form-nuevo" class="u-nuevo">
+      <h3>Crear usuario</h3>
+      <div class="field-row">
+        <label class="field"><span>Usuario *</span>
+          <input type="text" id="u-usuario" class="input" required autocapitalize="none" placeholder="ej: juan"></label>
+        <label class="field"><span>Nombre</span>
+          <input type="text" id="u-nombre" class="input" placeholder="opcional"></label>
+      </div>
+      <label class="field"><span>Contraseña *</span>
+        <input type="text" id="u-pass" class="input" required minlength="6" placeholder="mínimo 6 caracteres"></label>
+      <label class="field field-check"><input type="checkbox" id="u-admin">
+        <span>Administrador <small>(todos los permisos, puede gestionar usuarios)</small></span></label>
+      <div id="u-permisos-detalle" class="u-permisos-detalle">
+        <span class="field-label">Permisos</span>
+        <label class="u-perm"><input type="checkbox" id="u-perm-crear" checked> Crear créditos</label>
+        <label class="u-perm"><input type="checkbox" id="u-perm-editar" checked> Editar créditos</label>
+        <label class="u-perm"><input type="checkbox" id="u-perm-pagos" checked> Registrar pagos</label>
+        <label class="u-perm"><input type="checkbox" id="u-perm-borrar"> Borrar créditos</label>
+        <label class="u-perm"><input type="checkbox" id="u-perm-cobranza" checked> Ver/exportar cobranza</label>
+      </div>
+      <button type="submit" id="btn-u-crear" class="btn btn-primary btn-block">➕ Crear usuario</button>
+    </form>
+
+    <h3>Usuarios existentes</h3>
+    <div id="usuarios-list" class="usuarios-list"></div>
+
+    <div class="modal-buttons">
+      <button type="button" id="btn-usuarios-cerrar" class="btn btn-secondary">Cerrar</button>
+    </div>
   </dialog>
 
   <!-- Modal: Hoja de cobranza del día -->
@@ -321,9 +355,12 @@
     <form id="settings-form" method="dialog">
       <h2>⚙️ Configuración</h2>
       <div class="settings-cuenta" id="settings-cuenta" hidden>
-        <span class="field-label">Cuenta</span>
+        <span class="field-label">Mi cuenta</span>
         <p class="cuenta-email" id="cuenta-email"></p>
-        <button type="button" id="btn-logout" class="btn btn-secondary btn-small">🚪 Cerrar sesión</button>
+        <div class="cuenta-botones">
+          <button type="button" id="btn-cambiar-pass" class="btn btn-secondary btn-small">🔑 Cambiar mi contraseña</button>
+          <button type="button" id="btn-logout" class="btn btn-secondary btn-small">🚪 Cerrar sesión</button>
+        </div>
       </div>
       <label class="field">
         <span>Días de crédito por defecto</span>
