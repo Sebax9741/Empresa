@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="description" content="Control de créditos a clientes: boletas, montos, vencimientos y estados.">
+  <title>Control de Créditos</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Créditos">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <h1>💳 Control de Créditos</h1>
+      <div class="header-actions">
+        <button id="btn-settings" class="btn-icon" title="Configuración" aria-label="Configuración">⚙️</button>
+        <button id="btn-new" class="btn btn-primary">＋ Nuevo crédito</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Resumen -->
+    <section class="summary" id="summary">
+      <div class="summary-card">
+        <span class="summary-label">Por cobrar</span>
+        <span class="summary-value" id="sum-pendiente">0</span>
+      </div>
+      <div class="summary-card summary-danger">
+        <span class="summary-label">Vencidos</span>
+        <span class="summary-value" id="sum-vencidos">0</span>
+      </div>
+      <div class="summary-card summary-ok">
+        <span class="summary-label">Cobrado</span>
+        <span class="summary-value" id="sum-pagado">0</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Créditos activos</span>
+        <span class="summary-value" id="sum-activos">0</span>
+      </div>
+    </section>
+
+    <!-- Barra de filtros -->
+    <section class="toolbar">
+      <input type="search" id="search" class="input search-input" placeholder="🔍 Buscar por cliente o Nro de boleta…">
+      <select id="filter-estado" class="input">
+        <option value="">Todos los estados</option>
+        <option value="pendiente">Pendientes</option>
+        <option value="vencido">Vencidos</option>
+        <option value="parcial">Pago parcial</option>
+        <option value="pagado">Pagados</option>
+      </select>
+      <select id="sort-by" class="input">
+        <option value="vencimiento-asc">Vencimiento ↑ (más próximo)</option>
+        <option value="vencimiento-desc">Vencimiento ↓</option>
+        <option value="boleta-asc">Nro boleta ↑</option>
+        <option value="boleta-desc">Nro boleta ↓</option>
+        <option value="cliente-asc">Cliente A–Z</option>
+        <option value="cliente-desc">Cliente Z–A</option>
+        <option value="monto-desc">Monto mayor</option>
+        <option value="monto-asc">Monto menor</option>
+        <option value="fecha-desc">Más recientes</option>
+        <option value="fecha-asc">Más antiguos</option>
+      </select>
+    </section>
+
+    <!-- Tabla (escritorio / tablet horizontal) -->
+    <section class="table-wrap">
+      <table class="credit-table" id="credit-table">
+        <thead>
+          <tr>
+            <th data-sort="boleta">Nro Boleta <span class="sort-arrow"></span></th>
+            <th data-sort="cliente">Cliente <span class="sort-arrow"></span></th>
+            <th data-sort="monto" class="col-num">Monto <span class="sort-arrow"></span></th>
+            <th data-sort="fecha">Emisión <span class="sort-arrow"></span></th>
+            <th data-sort="vencimiento">Vencimiento <span class="sort-arrow"></span></th>
+            <th>Estado</th>
+            <th>Boleta</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </section>
+
+    <!-- Tarjetas (celular) -->
+    <section class="cards" id="cards"></section>
+
+    <div class="empty-state" id="empty-state" hidden>
+      <p>📋 Aún no hay créditos registrados.</p>
+      <p>Toca <strong>“＋ Nuevo crédito”</strong> para agregar el primero.</p>
+    </div>
+  </main>
+
+  <!-- Modal: formulario de crédito -->
+  <dialog id="modal-form" class="modal">
+    <form id="credit-form" method="dialog">
+      <h2 id="form-title">Nuevo crédito</h2>
+      <input type="hidden" id="f-id">
+
+      <label class="field">
+        <span>Nro de boleta *</span>
+        <input type="text" id="f-boleta" class="input" required inputmode="numeric" placeholder="Ej: 001234">
+      </label>
+
+      <label class="field">
+        <span>Nombre del cliente *</span>
+        <input type="text" id="f-cliente" class="input" required placeholder="Ej: Almacén Doña Rosa" list="clientes-list">
+        <datalist id="clientes-list"></datalist>
+      </label>
+
+      <label class="field">
+        <span>Monto total *</span>
+        <input type="number" id="f-monto" class="input" required min="0" step="any" inputmode="decimal" placeholder="0">
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>Fecha de emisión</span>
+          <input type="date" id="f-fecha" class="input" required>
+        </label>
+        <label class="field">
+          <span>Vencimiento <small>(automático, editable)</small></span>
+          <input type="date" id="f-vencimiento" class="input" required>
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Estado</span>
+        <select id="f-estado" class="input">
+          <option value="pendiente">🕐 Pendiente</option>
+          <option value="parcial">🪙 Pago parcial</option>
+          <option value="pagado">✅ Pagado</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Notas</span>
+        <textarea id="f-notas" class="input" rows="2" placeholder="Opcional: abonos, acuerdos, etc."></textarea>
+      </label>
+
+      <div class="field">
+        <span class="field-label">Foto de la boleta física</span>
+        <div class="photo-actions">
+          <label class="btn btn-secondary photo-btn">
+            📷 Tomar foto
+            <input type="file" id="f-foto-camara" accept="image/*" capture="environment" hidden>
+          </label>
+          <label class="btn btn-secondary photo-btn">
+            🖼️ Elegir imagen
+            <input type="file" id="f-foto-archivo" accept="image/*" hidden>
+          </label>
+        </div>
+        <div id="foto-preview-wrap" class="foto-preview-wrap" hidden>
+          <img id="foto-preview" class="foto-preview" alt="Vista previa de la boleta">
+          <button type="button" id="btn-quitar-foto" class="btn btn-danger btn-small">Quitar foto</button>
+        </div>
+      </div>
+
+      <div class="modal-buttons">
+        <button type="button" id="btn-cancelar" class="btn btn-secondary">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btn-guardar">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal: ver imagen de boleta -->
+  <dialog id="modal-imagen" class="modal modal-imagen">
+    <div class="imagen-view">
+      <img id="imagen-grande" alt="Boleta">
+      <button id="btn-cerrar-imagen" class="btn btn-secondary">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Modal: configuración -->
+  <dialog id="modal-settings" class="modal">
+    <form id="settings-form" method="dialog">
+      <h2>⚙️ Configuración</h2>
+      <label class="field">
+        <span>Días de crédito por defecto</span>
+        <input type="number" id="s-dias" class="input" min="1" max="365" required>
+        <small>El vencimiento se calcula automáticamente: fecha de emisión + estos días.</small>
+      </label>
+      <label class="field">
+        <span>Símbolo de moneda</span>
+        <input type="text" id="s-moneda" class="input" maxlength="6" placeholder="$">
+      </label>
+      <div class="settings-backup">
+        <span class="field-label">Respaldo de datos</span>
+        <div class="photo-actions">
+          <button type="button" id="btn-exportar" class="btn btn-secondary">⬇️ Exportar respaldo</button>
+          <label class="btn btn-secondary photo-btn">
+            ⬆️ Importar respaldo
+            <input type="file" id="input-importar" accept=".json,application/json" hidden>
+          </label>
+        </div>
+        <small>Exporta un archivo con todos tus créditos (incluye fotos) para guardarlo o pasarlo a otro dispositivo.</small>
+      </div>
+      <div class="modal-buttons">
+        <button type="button" id="btn-settings-cerrar" class="btn btn-secondary">Cerrar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/db.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
