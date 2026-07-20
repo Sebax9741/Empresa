@@ -7,10 +7,10 @@
    en MODO LOCAL (los datos solo se guardan en cada dispositivo).
    ============================================================ */
 window.FIREBASE_CONFIG = {
-  apiKey: "PEGA_AQUI_TU_API_KEY",
-  authDomain: "PEGA_AQUI_TU_AUTH_DOMAIN",
-  projectId: "PEGA_AQUI_TU_PROJECT_ID",
-  storageBucket: "PEGA_AQUI_TU_STORAGE_BUCKET",
-  messagingSenderId: "PEGA_AQUI_TU_SENDER_ID",
-  appId: "PEGA_AQUI_TU_APP_ID"
+  apiKey: "AIzaSyA8j0t_y6hW-ZHI-aMQzeh0HNsfr9O9_cY",
+  authDomain: "empresa-ab.firebaseapp.com",
+  projectId: "empresa-ab",
+  storageBucket: "empresa-ab.firebasestorage.app",
+  messagingSenderId: "822723527542",
+  appId: "1:822723527542:web:9dd60e0cdf3cf3586df057"
 };
