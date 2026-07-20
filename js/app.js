@@ -53,6 +53,11 @@ const ZONAS = ['MODELO', '3 DE MAYO', 'CIUDAD', 'MILAGROS', 'CARRETERA', 'PADRE 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const MAX_ABONOS = 8;
 
+/* Métodos de pago (como tu hoja de cobranza: efectivo / Yape / BCP) */
+const METODOS = { efectivo: '💵 Efectivo', yape: '📱 Yape', bcp: '🏦 BCP' };
+function metodoDe(a) { return (a && a.metodo && METODOS[a.metodo]) ? a.metodo : 'efectivo'; }
+function metodoLabel(m) { return METODOS[m] || METODOS.efectivo; }
+
 function abonosDe(c) { return Array.isArray(c.abonos) ? c.abonos : []; }
 function totalAbonado(c) { return abonosDe(c).reduce((s, a) => s + (Number(a.monto) || 0), 0); }
 
@@ -98,6 +103,25 @@ function textoVencimiento(c) {
   if (dias === 0) return `<span class="venc-alerta">${fecha} (¡vence hoy!)</span>`;
   if (dias <= 5) return `<span class="venc-pronto">${fecha} (en ${dias} día${dias === 1 ? '' : 's'})</span>`;
   return fecha;
+}
+
+/* Arma la hoja de cobranza de un día: todos los pagos "a cuenta" con esa fecha,
+   de todas las boletas, con sus totales por método (efectivo / Yape / BCP). */
+function hojaCobranza(lista, fechaISO) {
+  const filas = [];
+  const totales = { efectivo: 0, yape: 0, bcp: 0, total: 0 };
+  for (const c of lista) {
+    for (const a of abonosDe(c)) {
+      if (a.fecha !== fechaISO) continue;
+      const monto = Number(a.monto) || 0;
+      const metodo = metodoDe(a);
+      filas.push({ boleta: c.boleta, cliente: c.cliente, zona: c.zona || '', monto, metodo });
+      totales[metodo] += monto;
+      totales.total += monto;
+    }
+  }
+  filas.sort((x, y) => String(x.boleta).localeCompare(String(y.boleta), undefined, { numeric: true }));
+  return { filas, totales };
 }
 
 let toastTimer = null;
@@ -536,7 +560,7 @@ function abrirFormulario(credito = null) {
       mostrarPreview(credito.foto);
     }
     // Al editar: mostrar abonos y ocultar "pago inicial"
-    abonosActuales = abonosDe(credito).map(a => ({ monto: Number(a.monto) || 0, fecha: a.fecha || '' }));
+    abonosActuales = abonosDe(credito).map(a => ({ monto: Number(a.monto) || 0, fecha: a.fecha || '', metodo: metodoDe(a) }));
     $('#field-pago-inicial').hidden = true;
     $('#abonos-box').hidden = false;
     renderAbonos();
@@ -561,7 +585,7 @@ function renderAbonos() {
     cont.innerHTML = abonosActuales.map((a, i) => `
       <div class="abono-item">
         <span>ACUENTA ${i + 1}: <strong>${formatoMonto(a.monto)}</strong>
-          <span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'}</span></span>
+          <span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}</span></span>
         <button type="button" data-quitar-abono="${i}" title="Quitar este pago">🗑️</button>
       </div>`).join('');
   }
@@ -584,6 +608,7 @@ function abrirNuevoAbono() {
   const saldo = Math.max(0, monto - abonado);
   $('#abono-monto').value = saldo > 0 ? saldo : '';
   $('#abono-fecha').value = hoyISO();
+  $('#abono-metodo').value = 'efectivo';
   $('#abono-nuevo').hidden = false;
   $('#btn-agregar-abono').hidden = true;
   $('#abono-monto').focus();
@@ -592,7 +617,7 @@ function abrirNuevoAbono() {
 function confirmarNuevoAbono() {
   const monto = Number($('#abono-monto').value);
   if (!monto || monto <= 0) { toast('⚠️ Escribe un monto válido para el pago'); return; }
-  abonosActuales.push({ monto, fecha: $('#abono-fecha').value || hoyISO() });
+  abonosActuales.push({ monto, fecha: $('#abono-fecha').value || hoyISO(), metodo: $('#abono-metodo').value });
   $('#abono-nuevo').hidden = true;
   $('#btn-agregar-abono').hidden = false;
   renderAbonos();
@@ -661,6 +686,96 @@ async function manejarFoto(input) {
   input.value = '';
 }
 
+/* ====== Hoja de cobranza (modal) ====== */
+function abrirCobranza() {
+  if (!$('#cob-fecha').value) $('#cob-fecha').value = hoyISO();
+  renderCobranza();
+  $('#modal-cobranza').showModal();
+}
+
+function renderCobranza() {
+  const fecha = $('#cob-fecha').value || hoyISO();
+  const { filas, totales } = hojaCobranza(creditos, fecha);
+
+  $('#cob-totales').innerHTML = `
+    <div class="cob-total-card"><span class="et">💵 Efectivo</span><span class="val">${formatoMonto(totales.efectivo)}</span></div>
+    <div class="cob-total-card"><span class="et">📱 Yape</span><span class="val">${formatoMonto(totales.yape)}</span></div>
+    <div class="cob-total-card"><span class="et">🏦 BCP</span><span class="val">${formatoMonto(totales.bcp)}</span></div>
+    <div class="cob-total-card total"><span class="et">Total del día</span><span class="val">${formatoMonto(totales.total)}</span></div>`;
+
+  $('#cob-body').innerHTML = filas.map(f => `
+    <tr>
+      <td><strong>${escapeHtml(f.boleta)}</strong></td>
+      <td>${escapeHtml(f.cliente)}</td>
+      <td>${f.zona ? escapeHtml(f.zona) : '—'}</td>
+      <td class="col-num">${formatoMonto(f.monto)}</td>
+      <td><span class="pago-tag pago-${f.metodo}">${metodoLabel(f.metodo)}</span></td>
+    </tr>`).join('');
+
+  $('#cob-vacio').hidden = filas.length > 0;
+  $('#cob-tabla').hidden = filas.length === 0;
+}
+
+function exportarCobranzaExcel() {
+  const fecha = $('#cob-fecha').value || hoyISO();
+  const { filas, totales } = hojaCobranza(creditos, fecha);
+  const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+  const filasCsv = filas.map(f => [f.boleta, f.cliente, f.zona, f.monto, metodoLabel(f.metodo).replace(/[^\wáéíóúÁÉÍÓÚ ]/g, '').trim()].map(esc).join(';'));
+  const lineas = [
+    `Hoja de cobranza;${formatoFecha(fecha)}`,
+    '',
+    ['Boleta', 'Cliente', 'Zona', 'Monto', 'Pago'].map(esc).join(';'),
+    ...filasCsv,
+    '',
+    ['', '', 'Efectivo', totales.efectivo].map(esc).join(';'),
+    ['', '', 'Yape', totales.yape].map(esc).join(';'),
+    ['', '', 'BCP', totales.bcp].map(esc).join(';'),
+    ['', '', 'TOTAL', totales.total].map(esc).join(';'),
+  ];
+  const blob = new Blob(['﻿' + lineas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `cobranza-${fecha}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('⬇️ Hoja de cobranza exportada');
+}
+
+function imprimirCobranza() {
+  const fecha = $('#cob-fecha').value || hoyISO();
+  const { filas, totales } = hojaCobranza(creditos, fecha);
+  const filasHtml = filas.map(f => `<tr>
+      <td>${escapeHtml(f.boleta)}</td><td>${escapeHtml(f.cliente)}</td>
+      <td>${escapeHtml(f.zona || '—')}</td><td style="text-align:right">${formatoMonto(f.monto)}</td>
+      <td>${metodoLabel(f.metodo)}</td></tr>`).join('');
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Cobranza ${formatoFecha(fecha)}</title>
+    <style>
+      body{font-family:system-ui,sans-serif;padding:20px;color:#111}
+      h1{font-size:18px;margin:0 0 4px} .sub{color:#555;margin:0 0 16px}
+      table{width:100%;border-collapse:collapse;font-size:13px}
+      th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}
+      th{background:#f0f0f0}
+      .tot{margin-top:16px;font-size:14px} .tot div{margin:2px 0}
+      .tot strong{display:inline-block;min-width:110px}
+    </style></head><body>
+    <h1>🧾 Hoja de cobranza</h1>
+    <p class="sub">Fecha: ${formatoFecha(fecha)} — ${filas.length} cobro(s)</p>
+    <table><thead><tr><th>Boleta</th><th>Cliente</th><th>Zona</th><th style="text-align:right">Monto</th><th>Pago</th></tr></thead>
+    <tbody>${filasHtml || '<tr><td colspan="5" style="text-align:center">Sin cobros este día</td></tr>'}</tbody></table>
+    <div class="tot">
+      <div><strong>💵 Efectivo:</strong> ${formatoMonto(totales.efectivo)}</div>
+      <div><strong>📱 Yape:</strong> ${formatoMonto(totales.yape)}</div>
+      <div><strong>🏦 BCP:</strong> ${formatoMonto(totales.bcp)}</div>
+      <div><strong>Total del día:</strong> ${formatoMonto(totales.total)}</div>
+    </div>
+    <script>window.onload=function(){window.print();}<\/script>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  w.document.write(html);
+  w.document.close();
+}
+
 async function guardarCredito(ev) {
   ev.preventDefault();
 
@@ -683,7 +798,7 @@ async function guardarCredito(ev) {
     abonos = abonosActuales.slice();
   } else {
     const pagoInicial = Number($('#f-pago-inicial').value) || 0;
-    abonos = pagoInicial > 0 ? [{ monto: pagoInicial, fecha }] : [];
+    abonos = pagoInicial > 0 ? [{ monto: pagoInicial, fecha, metodo: $('#f-pago-metodo').value }] : [];
   }
 
   const credito = {
@@ -865,6 +980,13 @@ function inicializarEventos() {
     }
   });
   $('#btn-cerrar-imagen').addEventListener('click', () => $('#modal-imagen').close());
+
+  // Hoja de cobranza
+  $('#btn-cobranza').addEventListener('click', abrirCobranza);
+  $('#cob-fecha').addEventListener('change', renderCobranza);
+  $('#btn-cob-cerrar').addEventListener('click', () => $('#modal-cobranza').close());
+  $('#btn-cob-excel').addEventListener('click', exportarCobranzaExcel);
+  $('#btn-cob-imprimir').addEventListener('click', imprimirCobranza);
 
   // Configuración
   $('#btn-settings').addEventListener('click', () => {

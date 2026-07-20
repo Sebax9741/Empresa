@@ -6,7 +6,8 @@ Aplicación para controlar los créditos que le das a tus clientes de distribuci
 
 - 📋 Lista de créditos con: **Nro de boleta, cliente, zona, monto total, saldo, vencimiento y estado**
 - 📍 **Zona** al crear (MODELO, 3 DE MAYO, CIUDAD, MILAGROS, CARRETERA, PADRE ALDAMIZ, ALAMEDA)
-- 💵 **Pago inicial** al crear y **"Agregar a cuenta"** al editar: registra los adelantos (hasta 8), cada uno con su **fecha**; el **saldo** y el estado (pendiente/parcial/pagado) se calculan solos
+- 💵 **Pago inicial** al crear y **"Agregar a cuenta"** al editar: registra los adelantos (hasta 8), cada uno con su **fecha** y **método** (💵 Efectivo / 📱 Yape / 🏦 BCP); el **saldo** y el estado (pendiente/parcial/pagado) se calculan solos
+- 🧾 **Hoja de cobranza** (botón 🧾): elige un día y ves todo lo cobrado esa fecha con los **totales de Efectivo, Yape y BCP** y el total general; se puede **imprimir** o **exportar a Excel**
 - 📅 **Vencimiento automático** (emisión + días configurables en ⚙️), pero **editable**
 - 🧮 **Panel "Filtrar"** con casillas combinables: por **estado**, por **zona**, por **mes** (Ene–Dic) y por **rango de fechas**, todo junto
 - 🔀 **Ordena** por vencimiento, boleta, cliente, zona, total, saldo o fecha

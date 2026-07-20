@@ -548,6 +548,46 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .cuenta-email { margin: 0.2rem 0 0.5rem; font-weight: 600; }
 
+/* ====== Hoja de cobranza ====== */
+.modal-cobranza { width: min(640px, calc(100vw - 1.5rem)); }
+.cobranza-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.cobranza-head h2 { margin: 0; }
+.cob-fecha-field { margin: 0; min-width: 160px; }
+.cob-fecha-field > span { margin-bottom: 0.2rem; }
+
+.cob-totales {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin: 0.9rem 0;
+}
+.cob-total-card {
+  background: #f9fafb;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem;
+  text-align: center;
+}
+.cob-total-card .et { display: block; font-size: 0.72rem; color: var(--gray); }
+.cob-total-card .val { font-weight: 700; font-size: 0.95rem; }
+.cob-total-card.total { background: var(--primary-light); border-color: var(--primary); }
+
+.cob-tabla-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+.cob-tabla { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.cob-tabla th, .cob-tabla td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.cob-tabla th { background: #f9fafb; }
+.cob-tabla tbody tr:last-child td { border-bottom: none; }
+.cob-vacio { text-align: center; color: var(--gray); padding: 1.2rem; }
+
+.pago-tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+.pago-efectivo { background: var(--ok-light); color: var(--ok); }
+.pago-yape { background: #ede9fe; color: #7c3aed; }
+.pago-bcp { background: #dbeafe; color: #1d4ed8; }
+
+@media (max-width: 560px) {
+  .cob-totales { grid-template-columns: 1fr 1fr; }
+}
+
 /* ====== Toast ====== */
 .toast {
   position: fixed;

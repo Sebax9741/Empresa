@@ -42,6 +42,7 @@
     <div class="header-inner">
       <h1>💳 Control de Créditos</h1>
       <div class="header-actions">
+        <button id="btn-cobranza" class="btn-icon" title="Hoja de cobranza" aria-label="Hoja de cobranza">🧾</button>
         <button id="btn-settings" class="btn-icon" title="Configuración" aria-label="Configuración">⚙️</button>
         <button id="btn-new" class="btn btn-primary">＋ Nuevo crédito</button>
       </div>
@@ -183,10 +184,20 @@
       </label>
 
       <!-- Solo al crear un crédito nuevo -->
-      <label class="field" id="field-pago-inicial">
-        <span>Pago inicial (a cuenta) <small>opcional</small></span>
-        <input type="number" id="f-pago-inicial" class="input" min="0" step="any" inputmode="decimal" placeholder="0">
-      </label>
+      <div class="field field-row" id="field-pago-inicial">
+        <label class="field">
+          <span>Pago inicial (a cuenta) <small>opcional</small></span>
+          <input type="number" id="f-pago-inicial" class="input" min="0" step="any" inputmode="decimal" placeholder="0">
+        </label>
+        <label class="field">
+          <span>¿Cómo pagó?</span>
+          <select id="f-pago-metodo" class="input">
+            <option value="efectivo">💵 Efectivo</option>
+            <option value="yape">📱 Yape</option>
+            <option value="bcp">🏦 BCP</option>
+          </select>
+        </label>
+      </div>
 
       <div class="field-row">
         <label class="field">
@@ -217,6 +228,14 @@
               <input type="date" id="abono-fecha" class="input">
             </label>
           </div>
+          <label class="field">
+            <span>¿Cómo pagó?</span>
+            <select id="abono-metodo" class="input">
+              <option value="efectivo">💵 Efectivo</option>
+              <option value="yape">📱 Yape</option>
+              <option value="bcp">🏦 BCP</option>
+            </select>
+          </label>
           <div class="abono-nuevo-btns">
             <button type="button" id="btn-abono-cancelar" class="btn btn-secondary btn-small">Cancelar</button>
             <button type="button" id="btn-abono-confirmar" class="btn btn-primary btn-small">Agregar pago</button>
@@ -253,6 +272,35 @@
         <button type="submit" class="btn btn-primary" id="btn-guardar">Guardar</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Modal: Hoja de cobranza del día -->
+  <dialog id="modal-cobranza" class="modal modal-cobranza">
+    <div class="cobranza-head">
+      <h2>🧾 Hoja de cobranza</h2>
+      <label class="field cob-fecha-field">
+        <span>Fecha</span>
+        <input type="date" id="cob-fecha" class="input">
+      </label>
+    </div>
+
+    <div class="cob-totales" id="cob-totales"></div>
+
+    <div class="cob-tabla-wrap">
+      <table class="cob-tabla" id="cob-tabla">
+        <thead>
+          <tr><th>Boleta</th><th>Cliente</th><th>Zona</th><th class="col-num">Monto</th><th>Pago</th></tr>
+        </thead>
+        <tbody id="cob-body"></tbody>
+      </table>
+    </div>
+    <p class="cob-vacio" id="cob-vacio" hidden>No hay cobros registrados en esta fecha.</p>
+
+    <div class="modal-buttons">
+      <button type="button" id="btn-cob-cerrar" class="btn btn-secondary">Cerrar</button>
+      <button type="button" id="btn-cob-imprimir" class="btn btn-secondary">🖨️ Imprimir</button>
+      <button type="button" id="btn-cob-excel" class="btn btn-primary">⬇️ Exportar a Excel</button>
+    </div>
   </dialog>
 
   <!-- Visor de imagen a pantalla completa -->
