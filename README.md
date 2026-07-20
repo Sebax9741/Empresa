@@ -59,6 +59,34 @@ Al guardar, **el APK se recompila solo** con tu configuración (tarda ~5-10 minu
 
 > Cada vez que se cambia algo del código, GitHub recompila el APK automáticamente. Para actualizar la app, vuelve a descargar e instalar el APK desde Releases (se instala encima, sin perder nada: tus datos están en la nube).
 
+## Instalar en iPhone / iPad (y en la computadora)
+
+En iPhone no se usa el APK (eso es solo de Android). La app se instala desde **Safari** y queda igual que una app normal. Para eso primero hay que publicar la web en **Firebase Hosting** (gratis, usa tu mismo proyecto). Se hace **una sola vez**:
+
+### Paso 1 — Generar la "llave" de publicación (en Firebase)
+
+1. En https://console.firebase.google.com abre tu proyecto → engranaje **⚙️ → Configuración del proyecto**.
+2. Pestaña **"Cuentas de servicio"** → botón **"Generar nueva clave privada"** → **"Generar clave"**. Se descarga un archivo `.json`. Ábrelo con un editor de texto y **copia todo su contenido**.
+
+### Paso 2 — Guardar esa llave en GitHub (secreta)
+
+1. En GitHub, entra a este repositorio → **Settings** (Configuración) → en el menú izquierdo **Secrets and variables → Actions**.
+2. Botón **"New repository secret"**.
+3. En **Name** escribe exactamente: `FIREBASE_SERVICE_ACCOUNT`
+4. En **Secret** pega todo el contenido del archivo `.json` del paso 1 → **"Add secret"**.
+
+Con eso, cada vez que se cambie el código, la web se publica sola en:
+**`https://empresa-ab.web.app`**
+
+### Paso 3 — Instalar en el iPhone
+
+1. Abre **Safari** (tiene que ser Safari) y entra a **`https://empresa-ab.web.app`**.
+2. Toca el botón **Compartir** (el cuadrito con la flecha hacia arriba, abajo en el centro).
+3. Baja y toca **"Agregar a pantalla de inicio"** → **"Agregar"**.
+4. Te queda el ícono en la pantalla como cualquier app. Ábrela, crea tu cuenta o inicia sesión con tu correo, y verás los mismos datos que en el celular Android y la tablet.
+
+> La misma dirección `https://empresa-ab.web.app` sirve también para **abrirla en la computadora** (cualquier navegador) y en Android.
+
 ## Usarla en la computadora
 
 Opciones (la app es la misma):

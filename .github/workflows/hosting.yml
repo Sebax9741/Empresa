@@ -1,0 +1,34 @@
+name: Publicar web (Firebase Hosting)
+
+on:
+  push:
+    branches: [ main, master, 'claude/**' ]
+    paths-ignore: [ '**.md', 'android-keys/**' ]
+  workflow_dispatch:
+
+jobs:
+  hosting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Preparar carpeta web
+        run: |
+          mkdir -p www
+          cp -r index.html css js icons manifest.webmanifest sw.js www/
+
+      - name: Verificar que existe el secreto de Firebase
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" ]; then
+            echo "::error::Falta el secreto FIREBASE_SERVICE_ACCOUNT. Sigue los pasos del README (sección iPhone) para agregarlo."
+            exit 1
+          fi
+
+      - name: Publicar en Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: empresa-ab
+          channelId: live
