@@ -1,3 +1,5 @@
+import { descargarXlsx } from './xlsx-lite.js';
+
 /* ====== Estado global ====== */
 let creditos = [];
 let settings = {
@@ -901,26 +903,20 @@ function renderCobranza() {
 function exportarCobranzaExcel() {
   const fecha = $('#cob-fecha').value || hoyISO();
   const { filas, totales } = hojaCobranza(creditos, fecha);
-  const esc = v => `"${String(v).replace(/"/g, '""')}"`;
-  const filasCsv = filas.map(f => [f.boleta, f.cliente, f.zona, f.monto, metodoLabel(f.metodo).replace(/[^\wáéíóúÁÉÍÓÚ ]/g, '').trim()].map(esc).join(';'));
-  const lineas = [
-    `Hoja de cobranza;${formatoFecha(fecha)}`,
-    '',
-    ['Boleta', 'Cliente', 'Zona', 'Monto', 'Pago'].map(esc).join(';'),
-    ...filasCsv,
-    '',
-    ['', '', 'Efectivo', totales.efectivo].map(esc).join(';'),
-    ['', '', 'Yape', totales.yape].map(esc).join(';'),
-    ['', '', 'BCP', totales.bcp].map(esc).join(';'),
-    ['', '', 'TOTAL', totales.total].map(esc).join(';'),
+  const limpiaMetodo = m => metodoLabel(m).replace(/[^\wáéíóúÁÉÍÓÚ ]/g, '').trim();
+  const aoa = [
+    ['Hoja de cobranza', formatoFecha(fecha)],
+    [],
+    ['Boleta', 'Cliente', 'Zona', 'Monto', 'Pago'],
+    ...filas.map(f => [f.boleta, f.cliente, f.zona || '', Number(f.monto) || 0, limpiaMetodo(f.metodo)]),
+    [],
+    ['', '', 'Efectivo', Number(totales.efectivo) || 0],
+    ['', '', 'Yape', Number(totales.yape) || 0],
+    ['', '', 'BCP', Number(totales.bcp) || 0],
+    ['', '', 'TOTAL', Number(totales.total) || 0],
   ];
-  const blob = new Blob(['﻿' + lineas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `cobranza-${fecha}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast('⬇️ Hoja de cobranza exportada');
+  descargarXlsx(`cobranza-${fecha}.xlsx`, 'Cobranza', aoa);
+  toast('⬇️ Hoja de cobranza exportada (.xlsx)');
 }
 
 function imprimirCobranza() {
