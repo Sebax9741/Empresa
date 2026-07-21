@@ -903,19 +903,75 @@ function renderCobranza() {
 function exportarCobranzaExcel() {
   const fecha = $('#cob-fecha').value || hoyISO();
   const { filas, totales } = hojaCobranza(creditos, fecha);
-  const limpiaMetodo = m => metodoLabel(m).replace(/[^\wáéíóúÁÉÍÓÚ ]/g, '').trim();
-  const aoa = [
-    ['Hoja de cobranza', formatoFecha(fecha)],
+  const dinero = `"${settings.moneda}"#,##0`;
+
+  // Paleta (coincide con la app y con los colores por método)
+  const OLIVA = '6D7350', BLANCO = 'FFFFFF', CARBON = '2B2B2D', GRIS_TXT = '77776E';
+  const CEBRA = 'F4F4F0', TOT_BG = 'ECEEDD';
+  const MET = {
+    efectivo: { bg: 'E2EFE5', txt: '2F6B3F', emoji: '💵', nombre: 'Efectivo' },
+    yape:     { bg: 'EDE9FE', txt: '6D28D9', emoji: '📱', nombre: 'Yape' },
+    bcp:      { bg: 'DBEAFE', txt: '1D4ED8', emoji: '🏦', nombre: 'BCP' },
+  };
+
+  const titulo   = { bold: true, size: 15, color: CARBON, align: 'left' };
+  const subtit   = { size: 11, color: GRIS_TXT, align: 'left' };
+  const th       = { bold: true, color: BLANCO, bg: OLIVA, align: 'center', border: true };
+  const thIzq    = { bold: true, color: BLANCO, bg: OLIVA, align: 'left', border: true };
+  const tdTxt    = b => ({ align: 'left', border: true, bg: b ? CEBRA : undefined });
+  const tdNum    = b => ({ align: 'right', border: true, fmt: dinero, bg: b ? CEBRA : undefined });
+  const tdMet    = m => ({ align: 'center', border: true, bold: true, color: MET[m].txt, bg: MET[m].bg });
+  const cardEt   = m => ({ align: 'left', bold: true, color: MET[m].txt, bg: MET[m].bg });
+  const cardVal  = m => ({ align: 'right', bold: true, color: MET[m].txt, bg: MET[m].bg, fmt: dinero });
+  const totEt    = { bold: true, align: 'right', color: CARBON, bg: TOT_BG, border: true };
+  const totVal   = { bold: true, align: 'right', color: CARBON, bg: TOT_BG, border: true, fmt: dinero };
+
+  const filasXlsx = [
+    [{ v: 'HOJA DE COBRANZA', s: titulo }],
+    [{ v: formatoFecha(fecha), s: subtit }],
     [],
-    ['Boleta', 'Cliente', 'Zona', 'Monto', 'Pago'],
-    ...filas.map(f => [f.boleta, f.cliente, f.zona || '', Number(f.monto) || 0, limpiaMetodo(f.metodo)]),
+    // Resumen por método (tres tarjetas)
+    [
+      { v: `${MET.efectivo.emoji} Efectivo`, s: cardEt('efectivo') }, { v: Number(totales.efectivo) || 0, s: cardVal('efectivo') },
+      { v: `${MET.yape.emoji} Yape`, s: cardEt('yape') }, { v: Number(totales.yape) || 0, s: cardVal('yape') },
+      { v: `${MET.bcp.emoji} BCP`, s: cardEt('bcp') }, { v: Number(totales.bcp) || 0, s: cardVal('bcp') },
+    ],
     [],
-    ['', '', 'Efectivo', Number(totales.efectivo) || 0],
-    ['', '', 'Yape', Number(totales.yape) || 0],
-    ['', '', 'BCP', Number(totales.bcp) || 0],
-    ['', '', 'TOTAL', Number(totales.total) || 0],
+    // Encabezado de la tabla
+    [
+      { v: 'Boleta', s: th }, { v: 'Cliente', s: thIzq }, { v: 'Zona', s: thIzq },
+      { v: 'Monto', s: th }, { v: 'Pago', s: th },
+    ],
   ];
-  descargarXlsx(`cobranza-${fecha}.xlsx`, 'Cobranza', aoa);
+
+  filas.forEach((f, i) => {
+    const z = i % 2 === 1; // cebra
+    const m = MET[f.metodo] ? f.metodo : 'efectivo';
+    filasXlsx.push([
+      { v: f.boleta, s: { align: 'center', border: true, bg: z ? CEBRA : undefined } },
+      { v: f.cliente, s: tdTxt(z) },
+      { v: f.zona || '—', s: tdTxt(z) },
+      { v: Number(f.monto) || 0, s: tdNum(z) },
+      { v: `${MET[m].emoji} ${MET[m].nombre}`, s: tdMet(m) },
+    ]);
+  });
+
+  if (!filas.length) {
+    filasXlsx.push([{ v: 'Sin cobros registrados en esta fecha', s: { align: 'left', color: GRIS_TXT } }]);
+  }
+
+  // Fila de TOTAL
+  filasXlsx.push([
+    { v: '', s: { border: true } }, { v: '', s: { border: true } }, { v: '', s: { border: true } },
+    { v: 'TOTAL', s: totEt }, { v: Number(totales.total) || 0, s: totVal },
+  ]);
+
+  descargarXlsx(`cobranza-${fecha}.xlsx`, {
+    nombre: 'Cobranza',
+    cols: [12, 26, 16, 14, 16],
+    merges: ['A1:E1', 'A2:E2'],
+    filas: filasXlsx,
+  });
   toast('⬇️ Hoja de cobranza exportada (.xlsx)');
 }
 
