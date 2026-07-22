@@ -6,6 +6,8 @@ let settings = {
   dias: 30,
   moneda: '$',
   avisos: true,
+  atajo1: 15,   // atajo rápido 1: días después de la emisión
+  atajo2: 45,   // atajo rápido 2: días después de la emisión
 };
 let vencimientoEditadoManual = false;
 
@@ -711,11 +713,28 @@ const modalForm = $('#modal-form');
 let fotoActual = null;
 let abonosActuales = [];   // abonos "a cuenta" en edición
 
+/* Pone las etiquetas de los botones-atajo según la configuración */
+function actualizarAtajosVenc() {
+  const b1 = $('#btn-atajo-1'), b2 = $('#btn-atajo-2');
+  if (b1) b1.textContent = `+${settings.atajo1} días`;
+  if (b2) b2.textContent = `+${settings.atajo2} días`;
+}
+
+/* Aplica un atajo: vencimiento = fecha de emisión + X días */
+function aplicarAtajoVenc(dias) {
+  const base = $('#f-fecha').value || hoyISO();
+  $('#f-vencimiento').value = sumarDias(base, dias);
+  vencimientoEditadoManual = true; // respeta la elección del atajo
+}
+
 function abrirFormulario(credito = null) {
   $('#credit-form').reset();
   fotoActual = null;
   abonosActuales = [];
   vencimientoEditadoManual = false;
+  actualizarAtajosVenc();
+  $('#btn-atajo-1').disabled = false;
+  $('#btn-atajo-2').disabled = false;
   $('#foto-preview-wrap').hidden = true;
   $('#abono-nuevo').hidden = true;
   // Reactiva todos los campos (por si venían bloqueados de una edición anterior)
@@ -747,6 +766,8 @@ function abrirFormulario(credito = null) {
     ['f-boleta', 'f-cliente', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => {
       $('#' + id).disabled = !soloEditarCampos;
     });
+    $('#btn-atajo-1').disabled = !soloEditarCampos;
+    $('#btn-atajo-2').disabled = !soloEditarCampos;
     $('#foto-acciones-wrap').style.display = soloEditarCampos ? '' : 'none';
   } else {
     $('#form-title').textContent = 'Nuevo crédito';
@@ -1153,6 +1174,10 @@ function inicializarEventos() {
   });
   $('#f-vencimiento').addEventListener('input', () => { vencimientoEditadoManual = true; });
 
+  // Atajos rápidos de vencimiento (X días después de la emisión)
+  $('#btn-atajo-1').addEventListener('click', () => aplicarAtajoVenc(settings.atajo1));
+  $('#btn-atajo-2').addEventListener('click', () => aplicarAtajoVenc(settings.atajo2));
+
   $('#f-foto-camara').addEventListener('change', ev => manejarFoto(ev.target));
   $('#f-foto-archivo').addEventListener('change', ev => manejarFoto(ev.target));
   $('#btn-quitar-foto').addEventListener('click', () => {
@@ -1228,6 +1253,8 @@ function inicializarEventos() {
     $('#s-dias').value = settings.dias;
     $('#s-moneda').value = settings.moneda;
     $('#s-avisos').checked = settings.avisos !== false;
+    $('#s-atajo1').value = settings.atajo1;
+    $('#s-atajo2').value = settings.atajo2;
     $('#modal-settings').showModal();
   });
   $('#btn-settings-cerrar').addEventListener('click', () => $('#modal-settings').close());
@@ -1236,7 +1263,10 @@ function inicializarEventos() {
     settings.dias = Math.max(1, Number($('#s-dias').value) || 30);
     settings.moneda = $('#s-moneda').value.trim() || '$';
     settings.avisos = $('#s-avisos').checked;
+    settings.atajo1 = Math.min(365, Math.max(1, Number($('#s-atajo1').value) || 15));
+    settings.atajo2 = Math.min(365, Math.max(1, Number($('#s-atajo2').value) || 45));
     guardarSettings();
+    actualizarAtajosVenc();
     $('#modal-settings').close();
     render();
     toast('✅ Configuración guardada');
