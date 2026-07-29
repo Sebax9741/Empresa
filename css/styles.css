@@ -432,6 +432,50 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .cliente-picker { display: flex; gap: 0.4rem; align-items: center; }
 .cliente-picker .input { flex: 1; min-width: 0; }
 .cliente-picker .btn { white-space: nowrap; flex-shrink: 0; }
+
+/* Buscador de clientes con sugerencias */
+.combo { position: relative; flex: 1; min-width: 0; }
+.combo .input { width: 100%; }
+.combo-lista {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.combo-op {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+.combo-op:hover, .combo-op.activa { background: var(--primary-light); }
+.combo-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.combo-nombre mark { background: transparent; color: var(--primary-dark); font-weight: 700; }
+.combo-zona {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--primary-dark);
+  background: var(--primary-light);
+  border-radius: 999px;
+  padding: 0.08rem 0.5rem;
+}
+.combo-op.activa .combo-zona { background: var(--card); }
+.combo-vacio { padding: 0.6rem; color: var(--muted); font-size: 0.86rem; }
 .cliente-ayuda { display: block; margin-top: 0.25rem; color: var(--muted); font-size: 0.78rem; }
 
 /* Modal de clientes */

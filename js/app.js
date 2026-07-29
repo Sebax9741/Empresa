@@ -783,25 +783,96 @@ function clientePorNombre(nombre) {
 
 function creditosDeCliente(id) { return creditos.filter(c => c.clienteId === id); }
 
-/* Llena el selector de clientes del formulario de créditos */
-function llenarSelectClientes(valorSeleccionado = '') {
-  const sel = $('#f-cliente');
-  if (!sel) return;
-  const opciones = clientes.map(c =>
-    `<option value="${escapeHtml(c.id)}">${escapeHtml(c.nombre)}${c.zona ? ` — ${escapeHtml(c.zona)}` : ''}</option>`
-  ).join('');
-  const vacio = clientes.length
-    ? '<option value="">— Selecciona un cliente —</option>'
-    : '<option value="">— Aún no hay clientes registrados —</option>';
-  sel.innerHTML = vacio + opciones;
+/* ---- Buscador de clientes del formulario de créditos ----
+   Se escribe el nombre y va sugiriendo los clientes que coinciden.
+   El id del cliente elegido queda guardado en el campo oculto #f-cliente. */
+let comboIndice = -1;   // sugerencia resaltada con las flechas del teclado
 
-  // Créditos antiguos: el cliente no está registrado, se conserva su nombre
-  if (valorSeleccionado && String(valorSeleccionado).startsWith('libre:')) {
-    const nombre = String(valorSeleccionado).slice(6);
-    sel.insertAdjacentHTML('beforeend',
-      `<option value="${escapeHtml(valorSeleccionado)}">${escapeHtml(nombre)} (sin registrar)</option>`);
+function textoCliente(valor) {
+  if (!valor) return '';
+  if (String(valor).startsWith('libre:')) return String(valor).slice(6);
+  const c = clientePorId(valor);
+  return c ? c.nombre : '';
+}
+
+/* Pone (o limpia) el cliente elegido en el formulario */
+function llenarSelectClientes(valorSeleccionado = '') {
+  const oculto = $('#f-cliente');
+  const caja = $('#f-cliente-buscar');
+  if (!oculto || !caja) return;
+  let valor = valorSeleccionado || '';
+  // Si el cliente elegido ya no existe (lo borraron), se limpia
+  if (valor && !String(valor).startsWith('libre:') && !clientePorId(valor)) valor = '';
+  oculto.value = valor;
+  caja.value = textoCliente(valor);
+  caja.placeholder = clientes.length
+    ? 'Escribe el nombre del cliente…'
+    : 'Aún no hay clientes: toca “➕ Nuevo”';
+  cerrarSugerencias();
+}
+
+/* Busca por nombre (y también por zona o dirección). Los que empiezan
+   con lo escrito salen primero. Ignora mayúsculas y tildes. */
+function clientesQueCoinciden(texto) {
+  const q = normalizarNombre(texto);
+  if (!q) return clientes.slice(0, 60);
+  const empiezan = [], contienen = [];
+  for (const c of clientes) {
+    const nombre = normalizarNombre(c.nombre);
+    if (nombre.startsWith(q)) empiezan.push(c);
+    else if (nombre.includes(q)
+      || normalizarNombre(c.zona).includes(q)
+      || normalizarNombre(c.direccion).includes(q)) contienen.push(c);
   }
-  if (valorSeleccionado) sel.value = valorSeleccionado;
+  return empiezan.concat(contienen).slice(0, 60);
+}
+
+/* Marca en negrita la parte del nombre que coincide con lo escrito */
+function resaltarCoincidencia(nombre, texto) {
+  const q = String(texto || '').trim();
+  if (!q) return escapeHtml(nombre);
+  const i = nombre.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return escapeHtml(nombre);
+  return escapeHtml(nombre.slice(0, i))
+    + `<mark>${escapeHtml(nombre.slice(i, i + q.length))}</mark>`
+    + escapeHtml(nombre.slice(i + q.length));
+}
+
+function renderSugerencias(texto) {
+  const lista = $('#cliente-sugerencias');
+  if (!lista) return;
+  const encontrados = clientesQueCoinciden(texto);
+  comboIndice = -1;
+
+  if (!clientes.length) {
+    lista.innerHTML = '<li class="combo-vacio">Aún no tienes clientes registrados. Toca “➕ Nuevo”.</li>';
+  } else if (!encontrados.length) {
+    lista.innerHTML = `<li class="combo-vacio">Ningún cliente coincide con “${escapeHtml(texto)}”.</li>`;
+  } else {
+    lista.innerHTML = encontrados.map(c => `
+      <li class="combo-op" role="option" data-id="${escapeHtml(c.id)}">
+        <span class="combo-nombre">${resaltarCoincidencia(c.nombre, texto)}</span>
+        ${c.zona ? `<span class="combo-zona">${escapeHtml(c.zona)}</span>` : ''}
+      </li>`).join('');
+  }
+  lista.hidden = false;
+  $('#f-cliente-buscar').setAttribute('aria-expanded', 'true');
+}
+
+function cerrarSugerencias() {
+  const lista = $('#cliente-sugerencias');
+  if (!lista) return;
+  lista.hidden = true;
+  comboIndice = -1;
+  const caja = $('#f-cliente-buscar');
+  if (caja) caja.setAttribute('aria-expanded', 'false');
+}
+
+function seleccionarCliente(id) {
+  $('#f-cliente').value = id;
+  $('#f-cliente-buscar').value = textoCliente(id);
+  cerrarSugerencias();
+  aplicarClienteSeleccionado();
 }
 
 /* Al elegir un cliente: pone su zona automáticamente y la bloquea */
@@ -1101,7 +1172,7 @@ function abrirFormulario(credito = null) {
   $('#foto-preview-wrap').hidden = true;
   $('#abono-nuevo').hidden = true;
   // Reactiva todos los campos (por si venían bloqueados de una edición anterior)
-  ['f-boleta', 'f-cliente', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => { $('#' + id).disabled = false; });
+  ['f-boleta', 'f-cliente-buscar', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => { $('#' + id).disabled = false; });
   $('#foto-acciones-wrap').style.display = '';
   $('#btn-cliente-nuevo').hidden = !puede('clientes');
   $('#btn-cliente-nuevo').disabled = false;
@@ -1136,7 +1207,7 @@ function abrirFormulario(credito = null) {
     renderAbonos();
     // Si solo puede registrar pagos (no editar), bloquea los demás campos
     const soloEditarCampos = puede('editar');
-    ['f-boleta', 'f-cliente', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => {
+    ['f-boleta', 'f-cliente-buscar', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => {
       $('#' + id).disabled = !soloEditarCampos;
     });
     $('#btn-atajo-1').disabled = !soloEditarCampos;
@@ -1583,8 +1654,64 @@ function inicializarEventos() {
   $('#btn-atajo-1').addEventListener('click', () => aplicarAtajoVenc(settings.atajo1));
   $('#btn-atajo-2').addEventListener('click', () => aplicarAtajoVenc(settings.atajo2));
 
-  // Clientes: al elegir uno se pone su zona automáticamente
-  $('#f-cliente').addEventListener('change', aplicarClienteSeleccionado);
+  // Buscador de clientes: escribes y te sugiere los que coinciden
+  const cajaCliente = $('#f-cliente-buscar');
+  const listaCliente = $('#cliente-sugerencias');
+
+  // Mientras escribes solo se filtran las sugerencias: el cliente elegido
+  // no cambia hasta que tocas uno (o el nombre coincide exacto al salir).
+  cajaCliente.addEventListener('input', () => renderSugerencias(cajaCliente.value));
+  cajaCliente.addEventListener('focus', () => renderSugerencias(cajaCliente.value));
+  cajaCliente.addEventListener('click', () => renderSugerencias(cajaCliente.value));
+
+  // Al tocar una sugerencia (pointerdown evita que el campo pierda el foco antes)
+  listaCliente.addEventListener('pointerdown', ev => {
+    const op = ev.target.closest('.combo-op');
+    if (!op) return;
+    ev.preventDefault();
+    seleccionarCliente(op.dataset.id);
+  });
+
+  cajaCliente.addEventListener('keydown', ev => {
+    const ops = [...listaCliente.querySelectorAll('.combo-op')];
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (listaCliente.hidden) { renderSugerencias(cajaCliente.value); return; }
+      if (!ops.length) return;
+      comboIndice = ev.key === 'ArrowDown'
+        ? (comboIndice + 1) % ops.length
+        : (comboIndice - 1 + ops.length) % ops.length;
+      ops.forEach((o, i) => o.classList.toggle('activa', i === comboIndice));
+      ops[comboIndice].scrollIntoView({ block: 'nearest' });
+    } else if (ev.key === 'Enter') {
+      if (!listaCliente.hidden) {
+        ev.preventDefault();            // no guardar el crédito sin querer
+        if (comboIndice >= 0 && ops[comboIndice]) seleccionarCliente(ops[comboIndice].dataset.id);
+        else if (ops.length === 1) seleccionarCliente(ops[0].dataset.id);
+        else cerrarSugerencias();
+      }
+    } else if (ev.key === 'Escape') {
+      if (!listaCliente.hidden) {
+        ev.preventDefault();
+        ev.stopPropagation();           // cierra la lista, no el formulario
+        cerrarSugerencias();
+      }
+    }
+  });
+
+  /* Al salir del campo:
+     - vacío            -> se queda sin cliente
+     - nombre exacto    -> se elige ese cliente
+     - texto cualquiera -> se restaura el cliente que ya estaba elegido */
+  cajaCliente.addEventListener('blur', () => {
+    cerrarSugerencias();
+    const texto = cajaCliente.value.trim();
+    const exacto = texto ? clientePorNombre(texto) : null;
+    if (!texto) $('#f-cliente').value = '';
+    else if (exacto) $('#f-cliente').value = exacto.id;
+    cajaCliente.value = textoCliente($('#f-cliente').value);
+    aplicarClienteSeleccionado();
+  });
   $('#btn-cliente-nuevo').addEventListener('click', () => {
     abrirClientes();
     $('#cli-nombre').focus();
