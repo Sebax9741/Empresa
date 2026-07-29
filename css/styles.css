@@ -170,6 +170,27 @@ body {
 .summary-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
 .summary-value { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
 
+/* ====== Resumen de lo filtrado ====== */
+.filtro-resumen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin: -0.3rem 0 1rem;
+}
+.filtro-resumen-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.5rem 0.9rem;
+  flex: 1 1 200px;
+}
+.filtro-resumen-label { font-size: 0.78rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.filtro-resumen-valor { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; margin-left: auto; }
+
 /* ====== Toolbar ====== */
 .toolbar {
   display: flex;

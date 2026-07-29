@@ -702,6 +702,7 @@ function actualizarContadorFiltro() {
 function render() {
   const lista = creditosVisibles();
   renderResumen();
+  renderResumenFiltro(lista);
   renderTabla(lista);
   renderTarjetas(lista);
   renderFlechas();
@@ -709,6 +710,14 @@ function render() {
   if ($('#modal-info').open) renderInfo();   // la ficha se mantiene al día
   $('#empty-state').hidden = creditos.length > 0;
   sincronizarAvisos();
+}
+
+/* Total que deben y cantidad de créditos según lo que está filtrado ahora mismo */
+function renderResumenFiltro(lista) {
+  let debe = 0;
+  for (const c of lista) debe += saldoDe(c);
+  $('#filtro-resumen-cantidad').textContent = String(lista.length);
+  $('#filtro-resumen-debe').textContent = formatoMonto(debe);
 }
 
 /* Programa/actualiza los avisos de vencimiento (Android). Sin efecto en web/iPhone. */
