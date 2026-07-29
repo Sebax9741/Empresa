@@ -158,7 +158,7 @@ function textoVencimiento(c) {
 /* La hoja de cobranza de un día: todos los pagos "a cuenta" hechos esa
    fecha, sin importar de qué crédito vengan. Cada fila dice a qué crédito
    (boleta) y a qué cliente pertenece, cómo pagó y quién lo cobró. */
-function hojaCobranza(lista, fechaISO) {
+function hojaCobranza(lista, fechaISO, codigoHoja = '') {
   const filas = [];
   const totales = { efectivo: 0, yape: 0, bcp: 0, total: 0 };
   for (const c of lista) {
@@ -180,6 +180,8 @@ function hojaCobranza(lista, fechaISO) {
         cobradoPor: a.registradoPor || '',
         firma: a.firma || '',
         registrado: a.registrado || 0,
+        fechaEmision: c.fecha,
+        fechaDespacho: c.fechaDespacho,
       });
       totales[metodo] += monto;
       totales.total += monto;
@@ -188,7 +190,7 @@ function hojaCobranza(lista, fechaISO) {
   // En el orden en que se fueron cobrando durante el día
   filas.sort((x, y) => (x.registrado - y.registrado)
     || String(x.boleta).localeCompare(String(y.boleta), undefined, { numeric: true }));
-  return { filas, totales };
+  return { filas, totales, codigoHoja };
 }
 
 /* Todos los días que tienen cobros, del más reciente al más antiguo */
@@ -203,7 +205,12 @@ function diasConCobros(lista) {
       dias.set(a.fecha, d);
     }
   }
-  return [...dias.values()].sort((x, y) => y.fecha.localeCompare(x.fecha));
+  const resultado = [...dias.values()].sort((x, y) => y.fecha.localeCompare(x.fecha));
+  // Asignar código HC a cada día (HC001, HC002, etc.)
+  resultado.forEach((d, idx) => {
+    d.codigo = 'HC' + String(idx + 1).padStart(3, '0');
+  });
+  return resultado;
 }
 
 let toastTimer = null;
@@ -1702,7 +1709,7 @@ function abrirFormulario(credito = null) {
   $('#foto-preview-wrap').hidden = true;
   $('#abono-nuevo').hidden = true;
   // Reactiva todos los campos (por si venían bloqueados de una edición anterior)
-  ['f-boleta', 'f-cliente-buscar', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => { $('#' + id).disabled = false; });
+  ['f-boleta', 'f-cliente-buscar', 'f-zona', 'f-monto', 'f-fecha', 'f-fecha-despacho', 'f-vencimiento', 'f-notas'].forEach(id => { $('#' + id).disabled = false; });
   $('#foto-acciones-wrap').style.display = '';
   $('#btn-cliente-nuevo').hidden = !puede('clientes');
   $('#btn-cliente-nuevo').disabled = false;
@@ -1723,6 +1730,7 @@ function abrirFormulario(credito = null) {
     $('#f-boleta').value = credito.boleta;
     $('#f-monto').value = credito.monto;
     $('#f-fecha').value = credito.fecha;
+    $('#f-fecha-despacho').value = credito.fechaDespacho || '';
     $('#f-vencimiento').value = credito.vencimiento;
     $('#f-notas').value = credito.notas || '';
     vencimientoEditadoManual = true; // no recalcular al editar
@@ -1747,7 +1755,7 @@ function abrirFormulario(credito = null) {
     renderAbonos();
     // Si solo puede registrar pagos (no editar), bloquea los demás campos
     const soloEditarCampos = puede('editar');
-    ['f-boleta', 'f-cliente-buscar', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => {
+    ['f-boleta', 'f-cliente-buscar', 'f-zona', 'f-monto', 'f-fecha', 'f-fecha-despacho', 'f-vencimiento', 'f-notas'].forEach(id => {
       $('#' + id).disabled = !soloEditarCampos;
     });
     $('#btn-atajo-1').disabled = !soloEditarCampos;
@@ -1929,7 +1937,9 @@ function abrirCobranza() {
 
 function renderCobranza() {
   const fecha = $('#cob-fecha').value || hoyISO();
-  const { filas, totales } = hojaCobranza(creditos, fecha);
+  const dias = diasConCobros(creditos);
+  const diaInfo = dias.find(d => d.fecha === fecha) || { codigo: 'HC—' };
+  const { filas, totales } = hojaCobranza(creditos, fecha, diaInfo.codigo);
 
   $('#cob-totales').innerHTML = `
     <div class="cob-total-card"><span class="et">💵 Efectivo</span><span class="val">${formatoMonto(totales.efectivo)}</span></div>
@@ -1961,7 +1971,6 @@ function renderCobranza() {
     ? `Hoja del ${formatoFecha(fecha)} — ${filas.length} pago(s) de ${clientesDistintos} cliente(s)`
     : `Hoja del ${formatoFecha(fecha)} — sin movimientos`;
 
-  const dias = diasConCobros(creditos);
   const hayFecha = dias.some(d => d.fecha === fecha);
   const opciones = dias.map(d =>
     `<option value="${d.fecha}">${formatoFecha(d.fecha)} — ${d.pagos} pago(s) · ${formatoMonto(d.total)}</option>`).join('');
@@ -1987,7 +1996,9 @@ function saltarDiaCobranza(direccion) {
 
 function exportarCobranzaExcel() {
   const fecha = $('#cob-fecha').value || hoyISO();
-  const { filas, totales } = hojaCobranza(creditos, fecha);
+  const dias = diasConCobros(creditos);
+  const diaInfo = dias.find(d => d.fecha === fecha) || { codigo: 'HC—' };
+  const { filas, totales } = hojaCobranza(creditos, fecha, diaInfo.codigo);
   const dinero = `"${settings.moneda}"#,##0`;
 
   // Paleta (coincide con la app y con los colores por método)
@@ -2025,7 +2036,8 @@ function exportarCobranzaExcel() {
     // Encabezado de la tabla
     [
       { v: 'Código', s: th }, { v: 'Cliente', s: thIzq }, { v: 'Zona', s: thIzq },
-      { v: 'Boleta', s: th }, { v: 'Cobrado', s: th }, { v: 'Queda debiendo', s: th },
+      { v: 'Boleta', s: th }, { v: 'Fecha emisión', s: th }, { v: 'Fecha despacho', s: th },
+      { v: 'Cobrado', s: th }, { v: 'Queda debiendo', s: th },
       { v: 'Pago', s: th }, { v: 'Cobró', s: thIzq },
     ],
   ];
@@ -2038,6 +2050,8 @@ function exportarCobranzaExcel() {
       { v: f.cliente, s: tdTxt(z) },
       { v: f.zona || '—', s: tdTxt(z) },
       { v: f.boleta, s: { align: 'center', border: true, bg: z ? CEBRA : undefined } },
+      { v: f.fechaEmision ? formatoFecha(f.fechaEmision) : '—', s: tdTxt(z) },
+      { v: f.fechaDespacho ? formatoFecha(f.fechaDespacho) : '—', s: tdTxt(z) },
       { v: Number(f.monto) || 0, s: tdNum(z) },
       { v: Number(f.saldo) || 0, s: tdNum(z) },
       { v: `${MET[m].emoji} ${MET[m].nombre}`, s: tdMet(m) },
@@ -2052,14 +2066,15 @@ function exportarCobranzaExcel() {
   // Fila de TOTAL
   filasXlsx.push([
     { v: '', s: { border: true } }, { v: '', s: { border: true } }, { v: '', s: { border: true } },
-    { v: 'TOTAL', s: totEt }, { v: Number(totales.total) || 0, s: totVal },
-    { v: '', s: { border: true } }, { v: '', s: { border: true } }, { v: '', s: { border: true } },
+    { v: '', s: { border: true } }, { v: '', s: { border: true } }, { v: 'TOTAL', s: totEt },
+    { v: Number(totales.total) || 0, s: totVal }, { v: '', s: { border: true } },
+    { v: '', s: { border: true } }, { v: '', s: { border: true } },
   ]);
 
   descargarXlsx(`cobranza-${fecha}.xlsx`, {
     nombre: 'Cobranza',
-    cols: [10, 26, 15, 11, 13, 16, 14, 14],
-    merges: ['A1:H1', 'A2:H2'],
+    cols: [10, 26, 15, 11, 12, 12, 13, 16, 14, 14],
+    merges: ['A1:J1', 'A2:J2'],
     filas: filasXlsx,
   });
   toast('⬇️ Hoja de cobranza exportada (.xlsx)');
@@ -2071,6 +2086,8 @@ function imprimirCobranza() {
   const filasHtml = filas.map(f => `<tr>
       <td>${escapeHtml(f.codigo || '—')}</td><td>${escapeHtml(f.cliente)}</td>
       <td>${escapeHtml(f.zona || '—')}</td><td>${escapeHtml(f.boleta)}</td>
+      <td>${f.fechaEmision ? formatoFecha(f.fechaEmision) : '—'}</td>
+      <td>${f.fechaDespacho ? formatoFecha(f.fechaDespacho) : '—'}</td>
       <td style="text-align:right">${formatoMonto(f.monto)}</td>
       <td style="text-align:right">${f.saldo > 0 ? formatoMonto(f.saldo) : 'saldado'}</td>
       <td>${metodoLabel(f.metodo)}</td><td>${escapeHtml(f.cobradoPor || '—')}</td>
@@ -2088,9 +2105,10 @@ function imprimirCobranza() {
     <h1>🧾 Hoja de cobranza</h1>
     <p class="sub">Fecha: ${formatoFecha(fecha)} — ${filas.length} cobro(s)</p>
     <table><thead><tr><th>Código</th><th>Cliente</th><th>Zona</th><th>Boleta</th>
+    <th>Fecha emisión</th><th>Fecha despacho</th>
     <th style="text-align:right">Cobrado</th><th style="text-align:right">Queda debiendo</th>
     <th>Pago</th><th>Cobró</th><th>Firma</th></tr></thead>
-    <tbody>${filasHtml || '<tr><td colspan="9" style="text-align:center">Sin cobros este día</td></tr>'}</tbody></table>
+    <tbody>${filasHtml || '<tr><td colspan="11" style="text-align:center">Sin cobros este día</td></tr>'}</tbody></table>
     <div class="tot">
       <div><strong>💵 Efectivo:</strong> ${formatoMonto(totales.efectivo)}</div>
       <div><strong>📱 Yape:</strong> ${formatoMonto(totales.yape)}</div>
@@ -2151,6 +2169,7 @@ async function guardarCredito(ev) {
     zona,
     monto: Number($('#f-monto').value),
     fecha,
+    fechaDespacho: $('#f-fecha-despacho').value || null,
     vencimiento: $('#f-vencimiento').value,
     abonos,
     notas: $('#f-notas').value.trim(),
