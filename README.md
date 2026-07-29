@@ -15,6 +15,9 @@ Aplicación para controlar los créditos que le das a tus clientes de distribuci
 - 🏷️ Estados: Pendiente, Pago parcial, Pagado — y marca **Vencido automáticamente** al pasar la fecha
 - 📷 **Foto de la boleta física** (cámara o galería) en alta calidad; se ve **a pantalla completa** y se puede **descargar**
 - ☁️ **Nube en tiempo real**: entra con tu usuario y contraseña en todos tus dispositivos a la vez (varias sesiones activas) y todos ven los mismos datos
+- 🔒 **Código de seguridad (4 dígitos)**: lo pone el administrador en ⚙️ y se pide para **borrar un crédito** o **borrar una "a cuenta"**. Se guarda solo su huella (SHA-256 con sal), nunca el código en claro
+- 🕵️ **Constancia en cada "a cuenta"**: se guarda automáticamente **quién** la registró y **en qué día real** lo hizo. Si la fecha del pago no coincide con el día en que se registró, aparece un **⚠️** para que lo revises
+- 🚫 **Candado por día**: un empleado **no puede quitar las "a cuenta" de otros días** (solo el administrador). Sí puede registrar un pago con fecha pasada, pero queda la constancia del día real en que lo hizo
 - 👥 **Usuarios y permisos**: solo el administrador crea usuarios (con contraseña, sin correo); a cada uno le das o le quitas permisos (crear, editar, registrar pagos, **borrar**, ver/exportar cobranza, registrar/editar clientes). El acceso a los datos y el borrado quedan blindados en la base de datos
 - 📶 Funciona **sin internet**: los cambios se guardan y se sincronizan solos al volver la conexión
 - 🔔 **Avisos de vencimiento**: en Android te llega una notificación el día que vence un crédito, aunque la app esté cerrada. En iPhone/PC, al abrir la app te avisa cuántos vencen hoy o están vencidos. Se puede activar/desactivar en ⚙️.

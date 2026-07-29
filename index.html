@@ -330,6 +330,19 @@
     </div>
   </dialog>
 
+  <!-- Modal: pedir el código de seguridad antes de borrar -->
+  <dialog id="modal-pin" class="modal modal-pin">
+    <h2>🔒 Código de seguridad</h2>
+    <p class="pin-motivo" id="pin-motivo"></p>
+    <input type="password" id="pin-input" class="input pin-input" inputmode="numeric" maxlength="4"
+           autocomplete="off" placeholder="● ● ● ●" aria-label="Código de 4 dígitos">
+    <p class="auth-error" id="pin-error" hidden></p>
+    <div class="modal-buttons">
+      <button type="button" id="btn-pin-cancelar" class="btn btn-secondary">Cancelar</button>
+      <button type="button" id="btn-pin-ok" class="btn btn-danger">Confirmar y borrar</button>
+    </div>
+  </dialog>
+
   <!-- Modal: Clientes (base de datos de clientes con su zona) -->
   <dialog id="modal-clientes" class="modal modal-clientes">
     <h2>🧑‍🤝‍🧑 Clientes</h2>
@@ -454,6 +467,21 @@
           <small>Notificación en tu celular Android, aunque la app esté cerrada. (En iPhone/PC el aviso aparece al abrir la app.)</small>
         </span>
       </label>
+      <!-- Solo el administrador: código de seguridad para borrar -->
+      <div class="field settings-seguridad" id="settings-seguridad" hidden>
+        <span class="field-label">🔒 Código de seguridad</span>
+        <small>Un código de 4 dígitos que se pedirá para <strong>borrar un crédito</strong> o <strong>borrar una “a cuenta”</strong>.</small>
+        <p class="pin-estado" id="pin-estado"></p>
+        <div class="pin-config">
+          <input type="password" id="s-pin-actual" class="input pin-corto" inputmode="numeric" maxlength="4"
+                 autocomplete="off" placeholder="Código actual" hidden>
+          <input type="password" id="s-pin-nuevo" class="input pin-corto" inputmode="numeric" maxlength="4"
+                 autocomplete="off" placeholder="Nuevo código">
+          <button type="button" id="btn-pin-guardar" class="btn btn-secondary btn-small">Guardar código</button>
+          <button type="button" id="btn-pin-quitar" class="btn btn-secondary btn-small" hidden>Quitar</button>
+        </div>
+      </div>
+
       <div class="settings-backup">
         <span class="field-label">Respaldo de datos</span>
         <div class="photo-actions">

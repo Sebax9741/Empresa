@@ -87,6 +87,24 @@ function metodoDe(a) { return (a && a.metodo && METODOS[a.metodo]) ? a.metodo : 
 function metodoLabel(m) { return METODOS[m] || METODOS.efectivo; }
 
 function abonosDe(c) { return Array.isArray(c.abonos) ? c.abonos : []; }
+
+/* Quién está usando la app ahora (para dejar constancia en cada "a cuenta") */
+function quienSoy() { return (modoNube && yo && yo.usuario) ? yo.usuario : 'dueño'; }
+
+/* Un empleado solo puede quitar una "a cuenta" que él mismo registró HOY.
+   Las de días anteriores quedan bloqueadas: solo el administrador las toca. */
+function puedeQuitarAbono(a) {
+  if (!modoNube) return true;              // modo local: un solo dueño
+  if (esAdmin()) return true;
+  if (!a || !a.registradoFecha) return false;   // "a cuenta" antigua: solo el admin
+  return a.registradoFecha === hoyISO() && a.registradoPor === quienSoy();
+}
+
+/* Marca las "a cuenta" cuya fecha de pago no coincide con el día en que
+   se registraron (sirve para detectar fechas puestas a mano) */
+function abonoConFechaCambiada(a) {
+  return !!(a && a.registradoFecha && a.fecha && a.registradoFecha !== a.fecha);
+}
 function totalAbonado(c) { return abonosDe(c).reduce((s, a) => s + (Number(a.monto) || 0), 0); }
 
 /* Saldo pendiente = monto total − suma de abonos.
@@ -308,6 +326,7 @@ async function sesionIniciada(usuario) {
   $('#cuenta-email').textContent = `${yo.usuario}${esAdmin() ? ' (administrador)' : ''}`;
   banner(null);
   aplicarPermisos();
+  await cargarSeguridad();
   suscribirNube();
 }
 
@@ -703,12 +722,18 @@ function renderTabla(lista) {
 function abonosResumenHtml(c) {
   const lista = abonosDe(c);
   if (!lista.length) return '';
-  const chips = lista.map((a, i) => `
-    <span class="abono-chip" title="${escapeHtml(metodoLabel(metodoDe(a)))}">
+  const chips = lista.map((a, i) => {
+    const quien = a.registradoPor
+      ? ` — registrado por ${a.registradoPor} el ${formatoFecha(a.registradoFecha)}`
+      : '';
+    const ojo = abonoConFechaCambiada(a) ? '<span class="chip-ojo" >⚠️</span>' : '';
+    return `
+    <span class="abono-chip" title="${escapeHtml(metodoLabel(metodoDe(a)) + quien)}">
       <b>A${i + 1}</b>
       <span class="chip-monto">${formatoMonto(a.monto)}</span>
-      <span class="chip-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'}</span>
-    </span>`).join('');
+      <span class="chip-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'}</span>${ojo}
+    </span>`;
+  }).join('');
   return `<div class="card-abonos"><span class="card-abonos-tit">A cuenta:</span>${chips}</div>`;
 }
 
@@ -756,6 +781,140 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
+}
+
+/* ====== Código de seguridad (4 dígitos) ======
+   Se pide para borrar un crédito o una "a cuenta". El código NO se guarda
+   tal cual: se guarda su huella (SHA-256 con sal), así nadie puede leerlo
+   mirando la base de datos. */
+let seguridad = { pinHash: '', sal: '' };
+
+function pinConfigurado() { return !!(seguridad && seguridad.pinHash); }
+
+async function huellaPin(pin, sal) {
+  const texto = `${sal}:${pin}`;
+  if (window.crypto && crypto.subtle && crypto.subtle.digest) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  // Reserva por si el navegador no tiene crypto.subtle (navegadores muy viejos)
+  let h = 0;
+  for (let i = 0; i < texto.length; i++) { h = ((h << 5) - h + texto.charCodeAt(i)) | 0; }
+  return 'simple' + (h >>> 0).toString(16);
+}
+
+async function cargarSeguridad() {
+  if (modoNube) {
+    try {
+      const snap = await fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'seguridad'));
+      seguridad = snap.exists() ? snap.data() : { pinHash: '', sal: '' };
+    } catch (e) { seguridad = { pinHash: '', sal: '' }; }
+  } else {
+    try { seguridad = JSON.parse(localStorage.getItem('creditos-seguridad')) || { pinHash: '', sal: '' }; }
+    catch (e) { seguridad = { pinHash: '', sal: '' }; }
+  }
+  actualizarEstadoPin();
+}
+
+async function guardarSeguridad() {
+  if (modoNube) {
+    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'seguridad'), seguridad);
+  } else {
+    localStorage.setItem('creditos-seguridad', JSON.stringify(seguridad));
+  }
+}
+
+/* Pide el código y devuelve true solo si es correcto.
+   Si todavía no hay código configurado, deja pasar. */
+function pedirPin(motivo) {
+  if (!pinConfigurado()) return Promise.resolve(true);
+  const dlg = $('#modal-pin');
+  const caja = $('#pin-input');
+  const error = $('#pin-error');
+  $('#pin-motivo').textContent = motivo;
+  caja.value = '';
+  error.hidden = true;
+  dlg.showModal();
+  setTimeout(() => caja.focus(), 50);
+
+  return new Promise(resolve => {
+    let intentos = 0;
+    const terminar = ok => {
+      $('#btn-pin-ok').removeEventListener('click', comprobar);
+      $('#btn-pin-cancelar').removeEventListener('click', cancelar);
+      caja.removeEventListener('keydown', porTecla);
+      dlg.removeEventListener('cancel', cancelar);
+      dlg.close();
+      resolve(ok);
+    };
+    const cancelar = ev => { if (ev) ev.preventDefault(); terminar(false); };
+    const comprobar = async () => {
+      const pin = caja.value.trim();
+      if (!/^\d{4}$/.test(pin)) { error.textContent = 'Escribe los 4 dígitos.'; error.hidden = false; return; }
+      const huella = await huellaPin(pin, seguridad.sal || '');
+      if (huella === seguridad.pinHash) { terminar(true); return; }
+      intentos++;
+      caja.value = '';
+      error.textContent = intentos >= 3
+        ? 'Código incorrecto. Si no lo recuerdas, cámbialo desde ⚙️ Configuración (solo el administrador).'
+        : 'Código incorrecto.';
+      error.hidden = false;
+      caja.focus();
+    };
+    const porTecla = ev => { if (ev.key === 'Enter') { ev.preventDefault(); comprobar(); } };
+    $('#btn-pin-ok').addEventListener('click', comprobar);
+    $('#btn-pin-cancelar').addEventListener('click', cancelar);
+    caja.addEventListener('keydown', porTecla);
+    dlg.addEventListener('cancel', cancelar);
+  });
+}
+
+function actualizarEstadoPin() {
+  const caja = $('#settings-seguridad');
+  if (!caja) return;
+  // Solo el dueño/administrador puede poner o cambiar el código
+  caja.hidden = modoNube && !esAdmin();
+  const puesto = pinConfigurado();
+  $('#pin-estado').textContent = puesto
+    ? '✅ Código activo: se pedirá al borrar.'
+    : '⚠️ Sin código: por ahora se puede borrar sin pedirlo.';
+  $('#pin-estado').classList.toggle('pin-activo', puesto);
+  $('#s-pin-actual').hidden = !puesto;
+  $('#btn-pin-quitar').hidden = !puesto;
+  $('#s-pin-actual').value = '';
+  $('#s-pin-nuevo').value = '';
+}
+
+async function guardarPin() {
+  const nuevo = $('#s-pin-nuevo').value.trim();
+  if (!/^\d{4}$/.test(nuevo)) { toast('⚠️ El código debe tener 4 dígitos'); return; }
+  if (pinConfigurado()) {
+    const actual = $('#s-pin-actual').value.trim();
+    const huella = await huellaPin(actual, seguridad.sal || '');
+    if (huella !== seguridad.pinHash) { toast('⚠️ El código actual no es correcto'); return; }
+  }
+  const sal = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  seguridad = { pinHash: await huellaPin(nuevo, sal), sal, actualizado: Date.now() };
+  try {
+    await guardarSeguridad();
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar el código. Revisa tu conexión.');
+    return;
+  }
+  actualizarEstadoPin();
+  toast('🔒 Código de seguridad guardado');
+}
+
+async function quitarPin() {
+  const actual = $('#s-pin-actual').value.trim();
+  const huella = await huellaPin(actual, seguridad.sal || '');
+  if (huella !== seguridad.pinHash) { toast('⚠️ Escribe el código actual para quitarlo'); return; }
+  if (!confirm('¿Quitar el código? Se podrá borrar sin pedirlo.')) return;
+  seguridad = { pinHash: '', sal: '' };
+  try { await guardarSeguridad(); } catch (e) { toast('❌ No se pudo guardar. Revisa tu conexión.'); return; }
+  actualizarEstadoPin();
+  toast('🔓 Código quitado');
 }
 
 /* ====== Base de datos de clientes ======
@@ -1201,7 +1360,16 @@ function abrirFormulario(credito = null) {
       mostrarPreview(credito.foto);
     }
     // Al editar: mostrar abonos y ocultar "pago inicial"
-    abonosActuales = abonosDe(credito).map(a => ({ monto: Number(a.monto) || 0, fecha: a.fecha || '', metodo: metodoDe(a) }));
+    // Se conserva la constancia (quién y cuándo registró cada pago): es la
+    // prueba que permite detectar fechas cambiadas a mano.
+    abonosActuales = abonosDe(credito).map(a => ({
+      monto: Number(a.monto) || 0,
+      fecha: a.fecha || '',
+      metodo: metodoDe(a),
+      registradoPor: a.registradoPor || '',
+      registradoFecha: a.registradoFecha || '',
+      registrado: a.registrado || 0,
+    }));
     $('#field-pago-inicial').hidden = true;
     $('#abonos-box').hidden = false;
     renderAbonos();
@@ -1228,18 +1396,44 @@ function abrirFormulario(credito = null) {
   modalForm.showModal();
 }
 
+/* Quita una "a cuenta", pidiendo antes el código de seguridad */
+async function quitarAbonoConCodigo(indice) {
+  const a = abonosActuales[indice];
+  if (!a) return;
+  if (!puedeQuitarAbono(a)) {
+    toast('🔒 Solo el administrador puede quitar pagos de otros días');
+    return;
+  }
+  const autorizado = await pedirPin(
+    `Vas a borrar la ACUENTA ${indice + 1} de ${formatoMonto(a.monto)} (${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'}).`);
+  if (!autorizado) { toast('🔒 Borrado cancelado'); return; }
+  abonosActuales.splice(indice, 1);
+  renderAbonos();
+}
+
 /* Dibuja la lista de abonos "a cuenta" y el saldo pendiente en el formulario. */
 function renderAbonos() {
   const cont = $('#abonos-list');
   if (!abonosActuales.length) {
     cont.innerHTML = '<p class="abonos-vacio">Aún no hay pagos a cuenta.</p>';
   } else {
-    cont.innerHTML = abonosActuales.map((a, i) => `
+    cont.innerHTML = abonosActuales.map((a, i) => {
+      const constancia = a.registradoPor
+        ? `<span class="abono-constancia${abonoConFechaCambiada(a) ? ' abono-ojo' : ''}">
+             ${abonoConFechaCambiada(a) ? '⚠️ ' : '🖊️ '}Registrado por ${escapeHtml(a.registradoPor)}
+             el ${formatoFecha(a.registradoFecha)}</span>`
+        : '';
+      const puedeQuitar = puedeQuitarAbono(a);
+      return `
       <div class="abono-item">
-        <span>ACUENTA ${i + 1}: <strong>${formatoMonto(a.monto)}</strong>
-          <span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}</span></span>
-        <button type="button" data-quitar-abono="${i}" title="Quitar este pago">🗑️</button>
-      </div>`).join('');
+        <span class="abono-datos">ACUENTA ${i + 1}: <strong>${formatoMonto(a.monto)}</strong>
+          <span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}</span>
+          ${constancia}</span>
+        ${puedeQuitar
+          ? `<button type="button" data-quitar-abono="${i}" title="Quitar este pago">🗑️</button>`
+          : '<span class="abono-bloqueado" title="Solo el administrador puede quitar los pagos de otros días">🔒</span>'}
+      </div>`;
+    }).join('');
   }
   const monto = Number($('#f-monto').value) || 0;
   const abonado = abonosActuales.reduce((s, a) => s + (Number(a.monto) || 0), 0);
@@ -1270,7 +1464,15 @@ function abrirNuevoAbono() {
 function confirmarNuevoAbono() {
   const monto = Number($('#abono-monto').value);
   if (!monto || monto <= 0) { toast('⚠️ Escribe un monto válido para el pago'); return; }
-  abonosActuales.push({ monto, fecha: $('#abono-fecha').value || hoyISO(), metodo: $('#abono-metodo').value });
+  abonosActuales.push({
+    monto,
+    fecha: $('#abono-fecha').value || hoyISO(),
+    metodo: $('#abono-metodo').value,
+    // Constancia automática: quién lo registró y en qué día/hora real
+    registradoPor: quienSoy(),
+    registradoFecha: hoyISO(),
+    registrado: Date.now(),
+  });
   $('#abono-nuevo').hidden = true;
   $('#btn-agregar-abono').hidden = false;
   renderAbonos();
@@ -1554,6 +1756,8 @@ async function borrarCredito(id) {
   if (!c) return;
   if (!puede('borrar')) { toast('🔒 No tienes permiso para borrar créditos'); return; }
   if (!confirm(`¿Borrar el crédito de la boleta Nº ${c.boleta} (${c.cliente})?\nEsta acción no se puede deshacer.`)) return;
+  const autorizado = await pedirPin(`Vas a borrar el crédito de la boleta Nº ${c.boleta} (${c.cliente}).`);
+  if (!autorizado) { toast('🔒 Borrado cancelado'); return; }
   try {
     await eliminarDeStore(id);
   } catch (e) {
@@ -1783,8 +1987,7 @@ function inicializarEventos() {
     } else if (borrar) {
       borrarCredito(borrar.dataset.borrar);
     } else if (quitarAbono) {
-      abonosActuales.splice(Number(quitarAbono.dataset.quitarAbono), 1);
-      renderAbonos();
+      quitarAbonoConCodigo(Number(quitarAbono.dataset.quitarAbono));
     } else if (verFoto) {
       const c = creditos.find(x => x.id === verFoto.dataset.verFoto);
       if (c && c.foto) abrirVisorImagen(c);
@@ -1806,6 +2009,7 @@ function inicializarEventos() {
     $('#s-avisos').checked = settings.avisos !== false;
     $('#s-atajo1').value = settings.atajo1;
     $('#s-atajo2').value = settings.atajo2;
+    actualizarEstadoPin();
     $('#modal-settings').showModal();
   });
   $('#btn-settings-cerrar').addEventListener('click', () => $('#modal-settings').close());
@@ -1822,6 +2026,10 @@ function inicializarEventos() {
     render();
     toast('✅ Configuración guardada');
   });
+
+  // Código de seguridad
+  $('#btn-pin-guardar').addEventListener('click', guardarPin);
+  $('#btn-pin-quitar').addEventListener('click', quitarPin);
 
   $('#btn-exportar').addEventListener('click', exportarRespaldo);
   $('#input-importar').addEventListener('change', ev => {
@@ -1862,6 +2070,7 @@ async function iniciarLocal() {
     creditos = [];
     clientes = [];
   }
+  await cargarSeguridad();
   llenarSelectClientes();
   renderClientes();
   render();

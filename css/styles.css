@@ -433,6 +433,31 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .cliente-picker .input { flex: 1; min-width: 0; }
 .cliente-picker .btn { white-space: nowrap; flex-shrink: 0; }
 
+/* Código de seguridad */
+.modal-pin { width: min(360px, calc(100vw - 2rem)); text-align: center; }
+.modal-pin h2 { margin-top: 0; }
+.pin-motivo { color: var(--muted); font-size: 0.88rem; margin: 0 0 0.9rem; }
+.pin-input {
+  text-align: center;
+  font-size: 1.6rem;
+  letter-spacing: 0.6rem;
+  font-weight: 700;
+  padding: 0.6rem;
+}
+.modal-pin .modal-buttons { justify-content: center; }
+
+.settings-seguridad { border-top: 1px solid var(--border); padding-top: 0.9rem; }
+.pin-config { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.4rem; }
+.pin-corto { width: 130px; margin: 0; text-align: center; letter-spacing: 0.2rem; }
+.pin-estado { font-size: 0.82rem; color: var(--warning); margin: 0.4rem 0 0; }
+.pin-estado.pin-activo { color: var(--ok); }
+
+/* Constancia de quién y cuándo registró cada "a cuenta" */
+.abono-datos { display: block; min-width: 0; }
+.abono-constancia { display: block; font-size: 0.74rem; color: var(--muted); margin-top: 0.1rem; }
+.abono-constancia.abono-ojo { color: var(--warning); font-weight: 600; }
+.abono-bloqueado { font-size: 1rem; opacity: 0.55; padding: 0 0.2rem; cursor: help; }
+
 /* Buscador de clientes con sugerencias */
 .combo { position: relative; flex: 1; min-width: 0; }
 .combo .input { width: 100%; }
@@ -862,3 +887,5 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
   .field-row { grid-template-columns: 1fr; gap: 0; }
 }
+
+.abono-chip .chip-ojo { font-size: 0.72rem; margin-left: 0.1rem; }

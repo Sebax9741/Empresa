@@ -45,6 +45,14 @@ service cloud.firestore {
         allow create, update, delete: if permiso('clientes') || permiso('crear');
       }
 
+      // Ajustes del negocio (por ahora: la huella del código de seguridad).
+      // Todos la pueden leer para comprobar el código, pero solo el
+      // administrador la puede cambiar.
+      match /config/{docId} {
+        allow read: if esMiembro();
+        allow write: if esAdmin();
+      }
+
       // Miembros y sus permisos
       match /miembros/{memberUid} {
         allow read: if esMiembro();
