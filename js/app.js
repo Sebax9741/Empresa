@@ -665,6 +665,7 @@ function render() {
   renderTarjetas(lista);
   renderFlechas();
   actualizarContadorFiltro();
+  if ($('#modal-info').open) renderInfo();   // la ficha se mantiene al día
   $('#empty-state').hidden = creditos.length > 0;
   sincronizarAvisos();
 }
@@ -741,8 +742,9 @@ function renderTabla(lista) {
       <td>${celdaFoto(c)}</td>
       <td>
         <div class="row-actions">
-          ${(puede('editar') || puede('pagos')) ? `<button class="btn btn-secondary btn-small" data-editar="${c.id}">✏️</button>` : ''}
-          ${puede('borrar') ? `<button class="btn btn-danger btn-small" data-borrar="${c.id}">🗑️</button>` : ''}
+          <button class="btn btn-secondary btn-small" data-info="${c.id}" title="Ver información">ℹ️</button>
+          ${puede('editar') ? `<button class="btn btn-secondary btn-small" data-editar="${c.id}" title="Editar">✏️</button>` : ''}
+          ${puede('borrar') ? `<button class="btn btn-danger btn-small" data-borrar="${c.id}" title="Borrar">🗑️</button>` : ''}
         </div>
       </td>
     </tr>`;
@@ -794,7 +796,8 @@ function renderTarjetas(lista) {
         ${c.foto ? `<img src="${c.foto}" class="thumb" alt="Boleta ${c.boleta}" data-ver-foto="${c.id}">` : ''}
       </div>
       <div class="card-actions">
-        ${(puede('editar') || puede('pagos')) ? `<button class="btn btn-secondary btn-small" data-editar="${c.id}">✏️ Editar</button>` : ''}
+        <button class="btn btn-secondary btn-small" data-info="${c.id}">ℹ️ Información</button>
+        ${puede('editar') ? `<button class="btn btn-secondary btn-small" data-editar="${c.id}">✏️ Editar</button>` : ''}
         ${puede('borrar') ? `<button class="btn btn-danger btn-small" data-borrar="${c.id}">🗑️ Borrar</button>` : ''}
       </div>
     </article>`;
@@ -813,6 +816,79 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
+}
+
+/* ====== Firma digital del cliente ======
+   Pensado para una tablet con lápiz táctil, pero funciona igual con el
+   dedo o con el mouse. */
+let firmaCtx = null;
+let firmaDibujando = false;
+let firmaHayTrazo = false;
+
+function prepararCanvasFirma() {
+  const canvas = $('#firma-canvas');
+  const ancho = Math.max(260, Math.floor(canvas.parentElement.clientWidth) - 2);
+  const alto = 200;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(ancho * dpr);
+  canvas.height = Math.round(alto * dpr);
+  canvas.style.width = ancho + 'px';
+  canvas.style.height = alto + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, ancho, alto);
+  ctx.strokeStyle = '#1f2024';
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  firmaCtx = ctx;
+  firmaHayTrazo = false;
+}
+
+function puntoFirma(ev) {
+  const r = $('#firma-canvas').getBoundingClientRect();
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+
+/* Exporta la firma a un tamaño fijo, para que ocupe poco en la base */
+function firmaComoImagen() {
+  const origen = $('#firma-canvas');
+  const salida = document.createElement('canvas');
+  salida.width = 600;
+  salida.height = 200;
+  const ctx = salida.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, salida.width, salida.height);
+  ctx.drawImage(origen, 0, 0, salida.width, salida.height);
+  return salida.toDataURL('image/png');
+}
+
+/* Abre el recuadro de firma. Devuelve la imagen, o null si se cancela. */
+function abrirFirma() {
+  const dlg = $('#modal-firma');
+  dlg.showModal();
+  prepararCanvasFirma();
+  return new Promise(resolve => {
+    const terminar = valor => {
+      $('#btn-firma-ok').removeEventListener('click', aceptar);
+      $('#btn-firma-cancelar').removeEventListener('click', cancelar);
+      $('#btn-firma-borrar').removeEventListener('click', borrar);
+      dlg.removeEventListener('cancel', cancelar);
+      dlg.close();
+      resolve(valor);
+    };
+    const aceptar = () => {
+      if (!firmaHayTrazo) { toast('✍️ El recuadro está vacío: pida la firma'); return; }
+      terminar(firmaComoImagen());
+    };
+    const cancelar = ev => { if (ev) ev.preventDefault(); terminar(null); };
+    const borrar = () => prepararCanvasFirma();
+    $('#btn-firma-ok').addEventListener('click', aceptar);
+    $('#btn-firma-cancelar').addEventListener('click', cancelar);
+    $('#btn-firma-borrar').addEventListener('click', borrar);
+    dlg.addEventListener('cancel', cancelar);
+  });
 }
 
 /* ====== Código de seguridad (4 dígitos) ======
@@ -1359,6 +1435,137 @@ async function importarClientesDesdeCreditos() {
   toast(`✅ ${creados} cliente(s) registrados, ${enlazados} crédito(s) enlazados`);
 }
 
+/* ====== Ficha de información del crédito (solo lectura + cobro) ======
+   Es la pantalla que usan los empleados en la calle: ven todo el detalle
+   del crédito y registran el cobro con la firma del cliente, pero no
+   pueden cambiar nada de lo ya registrado. */
+let infoCreditoId = null;
+let firmaPendiente = null;
+
+function abrirInfo(credito) {
+  infoCreditoId = credito.id;
+  firmaPendiente = null;
+  $('#cobro-monto').value = '';
+  $('#cobro-metodo').value = 'efectivo';
+  $('#firma-preview-wrap').hidden = true;
+  $('#btn-firma').textContent = '✍️ Agregar firma';
+  renderInfo();
+  $('#modal-info').showModal();
+}
+
+function renderInfo() {
+  const c = creditos.find(x => x.id === infoCreditoId);
+  if (!c) { $('#modal-info').close(); return; }
+
+  const debe = saldoDe(c);
+  const pagado = totalAbonado(c);
+  const cli = c.clienteId ? clientePorId(c.clienteId) : null;
+
+  $('#info-cliente').textContent = c.cliente;
+  $('#info-sub').textContent = `Boleta Nº ${c.boleta} · Emitido el ${formatoFecha(c.fecha)}`;
+  $('#info-estado').innerHTML = badgeEstado(c);
+  $('#info-total').textContent = formatoMonto(c.monto);
+  $('#info-debe').textContent = formatoMonto(debe);
+  $('#info-pagado').textContent = formatoMonto(pagado);
+
+  const filas = [
+    ['Zona', c.zona || '—'],
+    ['Vence', textoVencimiento(c)],
+    cli && cli.direccion ? ['Dirección', escapeHtml(cli.direccion)] : null,
+    cli && cli.telefono ? ['Teléfono', escapeHtml(cli.telefono)] : null,
+    c.notas ? ['Notas', escapeHtml(c.notas)] : null,
+  ].filter(Boolean);
+  $('#info-datos').innerHTML = filas
+    .map(([et, val]) => `<div class="info-fila"><dt>${et}</dt><dd>${val}</dd></div>`).join('');
+
+  // Pagos a cuenta, con su firma si la tienen
+  const abonos = abonosDe(c);
+  $('#info-abonos').innerHTML = abonos.length
+    ? abonos.map((a, i) => `
+      <div class="info-abono">
+        <div class="info-abono-datos">
+          <strong>ACUENTA ${i + 1}: ${formatoMonto(a.monto)}</strong>
+          <span class="info-abono-meta">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}</span>
+          ${a.registradoPor ? `<span class="info-abono-meta${abonoConFechaCambiada(a) ? ' abono-ojo' : ''}">
+            ${abonoConFechaCambiada(a) ? '⚠️' : '🖊️'} ${escapeHtml(a.registradoPor)} · ${formatoFecha(a.registradoFecha)}</span>` : ''}
+        </div>
+        ${a.firma
+          ? `<img src="${a.firma}" class="firma-mini" alt="Firma" data-ver-firma="${i}" title="Ver la firma">`
+          : '<span class="sin-firma" title="Este pago no tiene firma">sin firma</span>'}
+      </div>`).join('')
+    : '<p class="abonos-vacio">Todavía no hay pagos a cuenta.</p>';
+
+  $('#info-foto-wrap').hidden = !c.foto;
+  if (c.foto) $('#info-foto').src = c.foto;
+
+  // El apartado de cobro solo para quien tenga permiso de registrar pagos
+  const puedeCobrar = puede('pagos') && debe > 0 && abonos.length < MAX_ABONOS;
+  $('#info-cobro').hidden = !puedeCobrar;
+  if (puedeCobrar) {
+    $('#cobro-fecha').value = hoyISO();      // siempre hoy y bloqueada
+    $('#btn-cobro-todo').textContent = `Saldar todo lo que debe (${formatoMonto(debe)})`;
+  }
+}
+
+async function pedirFirmaCobro() {
+  const firma = await abrirFirma();
+  if (!firma) return;
+  firmaPendiente = firma;
+  $('#firma-preview').src = firma;
+  $('#firma-preview-wrap').hidden = false;
+  $('#btn-firma').textContent = '✍️ Repetir firma';
+}
+
+async function registrarCobro() {
+  const c = creditos.find(x => x.id === infoCreditoId);
+  if (!c) return;
+  if (!puede('pagos')) { toast('🔒 No tienes permiso para registrar pagos'); return; }
+
+  const monto = Number($('#cobro-monto').value);
+  const debe = saldoDe(c);
+  if (!monto || monto <= 0) { toast('⚠️ Escribe el monto cobrado'); return; }
+  if (monto > debe + 0.005) { toast(`⚠️ El cliente solo debe ${formatoMonto(debe)}`); return; }
+  if (abonosDe(c).length >= MAX_ABONOS) { toast(`⚠️ Este crédito ya tiene ${MAX_ABONOS} pagos a cuenta`); return; }
+  if (!firmaPendiente) { toast('✍️ Falta la firma del cliente'); return; }
+
+  const actualizado = {
+    ...c,
+    abonos: [...abonosDe(c), {
+      monto,
+      fecha: hoyISO(),                 // la fecha del cobro es siempre hoy
+      metodo: $('#cobro-metodo').value,
+      registradoPor: quienSoy(),
+      registradoFecha: hoyISO(),
+      registrado: Date.now(),
+      firma: firmaPendiente,
+    }],
+  };
+  actualizado.estado = estadoCalculado(actualizado);
+
+  const boton = $('#btn-registrar-cobro');
+  boton.disabled = true;
+  try {
+    await guardarEnStore(actualizado);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo registrar el cobro. Revisa tu conexión.');
+    boton.disabled = false;
+    return;
+  }
+  boton.disabled = false;
+
+  const i = creditos.findIndex(x => x.id === c.id);
+  if (i >= 0) creditos[i] = actualizado;
+
+  firmaPendiente = null;
+  $('#cobro-monto').value = '';
+  $('#firma-preview-wrap').hidden = true;
+  $('#btn-firma').textContent = '✍️ Agregar firma';
+  render();
+  renderInfo();
+  toast(saldoDe(actualizado) <= 0 ? '✅ Crédito saldado por completo' : '✅ Cobro registrado con firma');
+}
+
 /* ====== Formulario ====== */
 const modalForm = $('#modal-form');
 let fotoActual = null;
@@ -1379,6 +1586,9 @@ function aplicarAtajoVenc(dias) {
 }
 
 function abrirFormulario(credito = null) {
+  // Editar créditos es solo del administrador: los demás ven la ficha
+  if (credito && !puede('editar')) { abrirInfo(credito); return; }
+  if (!credito && !puede('crear')) { toast('🔒 No tienes permiso para crear créditos'); return; }
   $('#credit-form').reset();
   fotoActual = null;
   abonosActuales = [];
@@ -1427,6 +1637,7 @@ function abrirFormulario(credito = null) {
       registradoPor: a.registradoPor || '',
       registradoFecha: a.registradoFecha || '',
       registrado: a.registrado || 0,
+      firma: a.firma || '',
     }));
     $('#field-pago-inicial').hidden = true;
     $('#abonos-box').hidden = false;
@@ -1487,6 +1698,7 @@ function renderAbonos() {
         <span class="abono-datos">ACUENTA ${i + 1}: <strong>${formatoMonto(a.monto)}</strong>
           <span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}</span>
           ${constancia}</span>
+        ${a.firma ? `<img src="${a.firma}" class="firma-mini" alt="Firma" data-ver-firma-form="${i}" title="Ver la firma del cliente">` : ''}
         ${puedeQuitar
           ? `<button type="button" data-quitar-abono="${i}" title="Quitar este pago">🗑️</button>`
           : '<span class="abono-bloqueado" title="Solo el administrador puede quitar los pagos de otros días">🔒</span>'}
@@ -1542,13 +1754,17 @@ function mostrarPreview(dataURL) {
 }
 
 /* Abre la foto de la boleta a pantalla completa, con opción de descargar. */
-function abrirVisorImagen(credito) {
-  $('#imagen-grande').src = credito.foto;
+function mostrarImagenGrande(dataUrl, nombreArchivo) {
+  $('#imagen-grande').src = dataUrl;
   const enlace = $('#btn-descargar-imagen');
-  enlace.href = credito.foto;
-  const nombre = String(credito.boleta || 'foto').replace(/[^\w.-]/g, '_');
-  enlace.download = `boleta-${nombre}.jpg`;
+  enlace.href = dataUrl;
+  enlace.download = String(nombreArchivo).replace(/[^\w.-]/g, '_');
   $('#modal-imagen').showModal();
+}
+
+function abrirVisorImagen(credito) {
+  const nombre = String(credito.boleta || 'foto').replace(/[^\w.-]/g, '_');
+  mostrarImagenGrande(credito.foto, `boleta-${nombre}.jpg`);
 }
 
 function comprimirImagen(img, maxLado, calidad) {
@@ -1578,7 +1794,9 @@ function procesarImagen(file) {
       let resultado = null;
       for (const [maxLado, calidad] of intentos) {
         resultado = comprimirImagen(img, maxLado, calidad);
-        if (resultado.length < 900000) break;  // ~660 KB, holgado bajo el límite de 1 MB
+        // Se deja sitio para las firmas de los pagos (hasta 8, ~14 KB cada una)
+        // dentro del límite de 1 MB por documento de Firestore
+        if (resultado.length < 760000) break;
       }
       resolve(resultado);
     };
@@ -2035,11 +2253,28 @@ function inicializarEventos() {
 
   // Acciones en filas, tarjetas y abonos (delegación)
   document.body.addEventListener('click', ev => {
+    const info = ev.target.closest('[data-info]');
     const editar = ev.target.closest('[data-editar]');
     const borrar = ev.target.closest('[data-borrar]');
     const verFoto = ev.target.closest('[data-ver-foto]');
+    const verFirma = ev.target.closest('[data-ver-firma]');
+    const verFotoInfo = ev.target.closest('[data-ver-foto-info]');
     const quitarAbono = ev.target.closest('[data-quitar-abono]');
-    if (editar) {
+    if (info) {
+      const c = creditos.find(x => x.id === info.dataset.info);
+      if (c) abrirInfo(c);
+    } else if (verFirma) {
+      const c = creditos.find(x => x.id === infoCreditoId);
+      const a = c && abonosDe(c)[Number(verFirma.dataset.verFirma)];
+      if (a && a.firma) mostrarImagenGrande(a.firma, `firma-${c.boleta}-${Number(verFirma.dataset.verFirma) + 1}.png`);
+    } else if (ev.target.closest('[data-ver-firma-form]')) {
+      const idx = Number(ev.target.closest('[data-ver-firma-form]').dataset.verFirmaForm);
+      const a = abonosActuales[idx];
+      if (a && a.firma) mostrarImagenGrande(a.firma, `firma-${$('#f-boleta').value || 'pago'}-${idx + 1}.png`);
+    } else if (verFotoInfo) {
+      const c = creditos.find(x => x.id === infoCreditoId);
+      if (c && c.foto) abrirVisorImagen(c);
+    } else if (editar) {
       const c = creditos.find(x => x.id === editar.dataset.editar);
       if (c) abrirFormulario(c);
     } else if (borrar) {
@@ -2094,6 +2329,39 @@ function inicializarEventos() {
       toast('⚠️ Guardada solo en este dispositivo');
     }
   });
+
+  // Ficha de información y cobro con firma
+  $('#btn-info-cerrar').addEventListener('click', () => $('#modal-info').close());
+  $('#btn-firma').addEventListener('click', pedirFirmaCobro);
+  $('#btn-registrar-cobro').addEventListener('click', registrarCobro);
+  $('#btn-cobro-todo').addEventListener('click', () => {
+    const c = creditos.find(x => x.id === infoCreditoId);
+    if (c) $('#cobro-monto').value = saldoDe(c);
+  });
+
+  // Lienzo de la firma: lápiz táctil, dedo o mouse
+  const lienzo = $('#firma-canvas');
+  lienzo.addEventListener('pointerdown', ev => {
+    if (!firmaCtx) return;
+    ev.preventDefault();
+    lienzo.setPointerCapture(ev.pointerId);
+    firmaDibujando = true;
+    firmaHayTrazo = true;
+    const pt = puntoFirma(ev);
+    firmaCtx.beginPath();
+    firmaCtx.moveTo(pt.x, pt.y);
+    firmaCtx.lineTo(pt.x + 0.1, pt.y);   // un toque suelto también deja marca
+    firmaCtx.stroke();
+  });
+  lienzo.addEventListener('pointermove', ev => {
+    if (!firmaDibujando || !firmaCtx) return;
+    ev.preventDefault();
+    const pt = puntoFirma(ev);
+    firmaCtx.lineTo(pt.x, pt.y);
+    firmaCtx.stroke();
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(tipo =>
+    lienzo.addEventListener(tipo, () => { firmaDibujando = false; }));
 
   // Código de seguridad
   $('#btn-pin-guardar').addEventListener('click', guardarPin);

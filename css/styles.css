@@ -898,3 +898,114 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-size: 0.82rem;
   margin: 0 0 0.8rem;
 }
+
+/* ====== Ficha de información del crédito ====== */
+.modal-info { width: min(560px, calc(100vw - 1.5rem)); }
+.info-cab { display: flex; align-items: flex-start; gap: 0.7rem; justify-content: space-between; }
+.info-cab-txt { min-width: 0; }
+.info-cab h2 { margin: 0 0 0.15rem; font-size: 1.15rem; word-break: break-word; }
+.info-sub { margin: 0; color: var(--muted); font-size: 0.84rem; }
+.info-titulo { font-size: 0.95rem; margin: 1.1rem 0 0.5rem; }
+
+.info-montos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 0.9rem; }
+.info-monto {
+  background: var(--bg-tint);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.info-monto span { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.info-monto strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.info-monto-debe strong { color: var(--primary); }
+.info-monto-pagado strong { color: var(--ok); }
+
+.info-datos { margin: 0.9rem 0 0; padding: 0; }
+.info-fila { display: flex; gap: 0.6rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+.info-fila dt { margin: 0; color: var(--muted); min-width: 95px; flex-shrink: 0; font-weight: 600; }
+.info-fila dd { margin: 0; min-width: 0; word-break: break-word; }
+
+.info-abonos { display: flex; flex-direction: column; gap: 0.4rem; }
+.info-abono {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  justify-content: space-between;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+}
+.info-abono-datos { display: flex; flex-direction: column; min-width: 0; }
+.info-abono-datos strong { font-size: 0.92rem; }
+.info-abono-meta { font-size: 0.76rem; color: var(--muted); }
+.info-abono-meta.abono-ojo { color: var(--warning); font-weight: 600; }
+.sin-firma { font-size: 0.72rem; color: var(--muted); font-style: italic; flex-shrink: 0; }
+
+.firma-mini {
+  width: 82px;
+  height: 34px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: zoom-in;
+  flex-shrink: 0;
+}
+
+.info-foto { width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: zoom-in; display: block; }
+
+/* Apartado de cobro (empleados en la calle) */
+.info-cobro {
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 2px solid var(--primary-light);
+}
+.info-cobro .btn-block { margin-bottom: 0.6rem; }
+.firma-zona {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem;
+  margin-bottom: 0.7rem;
+}
+.firma-preview-wrap { margin: 0.4rem 0; }
+.firma-preview {
+  width: 100%;
+  max-height: 110px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+/* ====== Recuadro de firma ====== */
+.modal-firma { width: min(560px, calc(100vw - 1.5rem)); }
+.firma-ayuda { color: var(--muted); font-size: 0.86rem; margin: 0 0 0.6rem; }
+.firma-caja {
+  position: relative;
+  background: #fff;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  line-height: 0;
+}
+#firma-canvas {
+  touch-action: none;          /* el lápiz dibuja, no desplaza la pantalla */
+  cursor: crosshair;
+  display: block;
+}
+.firma-linea {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 42px;
+  border-bottom: 1px dashed #c9c9c0;
+  pointer-events: none;
+}
+.firma-botones { justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; }
+
+@media (max-width: 520px) {
+  .info-montos { grid-template-columns: 1fr; }
+}

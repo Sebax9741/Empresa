@@ -330,6 +330,86 @@
     </div>
   </dialog>
 
+  <!-- Modal: información del crédito (solo lectura) y registro de cobro con firma -->
+  <dialog id="modal-info" class="modal modal-info">
+    <div class="info-cab">
+      <div class="info-cab-txt">
+        <h2 id="info-cliente">Cliente</h2>
+        <p class="info-sub" id="info-sub"></p>
+      </div>
+      <div id="info-estado"></div>
+    </div>
+
+    <div class="info-montos">
+      <div class="info-monto"><span>Total</span><strong id="info-total">—</strong></div>
+      <div class="info-monto info-monto-debe"><span>Debe</span><strong id="info-debe">—</strong></div>
+      <div class="info-monto info-monto-pagado"><span>Pagado</span><strong id="info-pagado">—</strong></div>
+    </div>
+
+    <dl class="info-datos" id="info-datos"></dl>
+
+    <h3 class="info-titulo">💵 Pagos a cuenta</h3>
+    <div id="info-abonos" class="info-abonos"></div>
+
+    <div id="info-foto-wrap" hidden>
+      <h3 class="info-titulo">📷 Boleta física</h3>
+      <img id="info-foto" class="info-foto" alt="Boleta" data-ver-foto-info>
+    </div>
+
+    <!-- Solo para quien tenga permiso de registrar pagos -->
+    <div class="info-cobro" id="info-cobro" hidden>
+      <h3 class="info-titulo">🧾 Registrar cobro</h3>
+      <div class="field-row">
+        <label class="field">
+          <span>Monto cobrado *</span>
+          <input type="number" id="cobro-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0">
+        </label>
+        <label class="field">
+          <span>Fecha <small>(hoy, no se puede cambiar)</small></span>
+          <input type="date" id="cobro-fecha" class="input" disabled>
+        </label>
+      </div>
+      <button type="button" id="btn-cobro-todo" class="btn btn-secondary btn-small btn-block">Saldar todo lo que debe</button>
+      <label class="field">
+        <span>¿Cómo pagó? *</span>
+        <select id="cobro-metodo" class="input">
+          <option value="efectivo">💵 Efectivo</option>
+          <option value="yape">📱 Yape</option>
+          <option value="bcp">🏦 BCP</option>
+        </select>
+      </label>
+
+      <div class="firma-zona">
+        <span class="field-label">Firma del cliente *</span>
+        <div class="firma-preview-wrap" id="firma-preview-wrap" hidden>
+          <img id="firma-preview" class="firma-preview" alt="Firma del cliente">
+        </div>
+        <button type="button" id="btn-firma" class="btn btn-secondary btn-block">✍️ Agregar firma</button>
+      </div>
+
+      <button type="button" id="btn-registrar-cobro" class="btn btn-primary btn-block">✅ Registrar cobro</button>
+    </div>
+
+    <div class="modal-buttons">
+      <button type="button" id="btn-info-cerrar" class="btn btn-secondary">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Modal: firma digital del cliente (tablet con lápiz o dedo) -->
+  <dialog id="modal-firma" class="modal modal-firma">
+    <h2>✍️ Firma del cliente</h2>
+    <p class="firma-ayuda" id="firma-ayuda">Firme dentro del recuadro con el lápiz o el dedo.</p>
+    <div class="firma-caja">
+      <canvas id="firma-canvas"></canvas>
+      <span class="firma-linea"></span>
+    </div>
+    <div class="modal-buttons firma-botones">
+      <button type="button" id="btn-firma-borrar" class="btn btn-secondary">🧹 Borrar</button>
+      <button type="button" id="btn-firma-cancelar" class="btn btn-secondary">Cancelar</button>
+      <button type="button" id="btn-firma-ok" class="btn btn-primary">Guardar firma</button>
+    </div>
+  </dialog>
+
   <!-- Modal: pedir el código de seguridad antes de borrar -->
   <dialog id="modal-pin" class="modal modal-pin">
     <h2>🔒 Código de seguridad</h2>
