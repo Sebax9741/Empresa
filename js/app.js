@@ -176,10 +176,36 @@ function hojaCerrada(fechaISO) {
   const h = hojaDe(fechaISO);
   return !!(h && h.cerrada);
 }
+/* La hora de apertura y de cierre la pone el SERVIDOR de Firebase, no el
+   dispositivo: así no sirve de nada cambiar la hora del celular o la tablet.
+   Mientras el dato viaja a la nube, Firestore la devuelve vacía; en cuanto
+   el servidor confirma, la suscripción trae la hora real.
+   En modo local (un solo dueño) se usa la del equipo, que es la única que hay. */
+function marcaDeTiempo() {
+  return (modoNube && fb) ? fb.serverTimestamp() : Date.now();
+}
+
+function momentoDe(ts) {
+  if (!ts) return null;                                  // aún sin confirmar el servidor
+  if (typeof ts.toDate === 'function') return ts.toDate();   // Timestamp de Firestore
+  if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000);
+  if (typeof ts === 'number') return new Date(ts);        // hojas antiguas (hora del equipo)
+  return null;
+}
+
 function fechaDeTimestamp(ts) {
-  if (!ts) return '';
-  const d = new Date(ts);
+  const d = momentoDe(ts);
+  if (!d) return '';
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/* "29/07/2026 a las 14:32" — vacío mientras el servidor no confirme la hora */
+function fechaHoraDeTimestamp(ts) {
+  const d = momentoDe(ts);
+  if (!d) return '';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${formatoFecha(fechaDeTimestamp(ts))} a las ${hh}:${mm}`;
 }
 
 async function crearHojaCobranza(fechaISO) {
@@ -189,15 +215,17 @@ async function crearHojaCobranza(fechaISO) {
     fecha: fechaISO,
     creada: true,
     creadaPor: quienSoy(),
-    creadaEn: Date.now(),
+    creadaEn: marcaDeTiempo(),        // hora del servidor, no del dispositivo
     cerrada: false,
     cerradaPor: null,
     cerradaEn: null,
   };
   try {
     await guardarHojaEnStore(hoja);
+    // Copia local sin la hora: la suscripción la reemplaza con la del servidor
+    const local = { ...hoja, creadaEn: null };
     const i = hojas.findIndex(h => h.fecha === fechaISO);
-    if (i >= 0) hojas[i] = hoja; else hojas.push(hoja);
+    if (i >= 0) hojas[i] = local; else hojas.push(local);
     renderCobranza();
     toast(`✅ Hoja de cobranza del ${formatoFecha(fechaISO)} creada`);
   } catch (e) {
@@ -212,11 +240,15 @@ async function cerrarHojaCobranza(fechaISO) {
   if (!h) { toast('Esta hoja todavía no se ha creado'); return; }
   if (h.cerrada) { toast('Esta hoja ya está cerrada'); return; }
   if (!confirm(`¿Cerrar la hoja de cobranza del ${formatoFecha(fechaISO)}?\nYa no se podrá agregar ni quitar cobros de ese día sin tu código de seguridad.`)) return;
-  const actualizado = { ...h, cerrada: true, cerradaPor: quienSoy(), cerradaEn: Date.now() };
   try {
-    await guardarHojaEnStore(actualizado);
+    await actualizarHojaEnStore(fechaISO, {
+      cerrada: true,
+      cerradaPor: quienSoy(),
+      cerradaEn: marcaDeTiempo(),        // hora del servidor, no del dispositivo
+    });
+    // Copia local sin la hora: la suscripción la reemplaza con la del servidor
     const i = hojas.findIndex(x => x.fecha === fechaISO);
-    if (i >= 0) hojas[i] = actualizado;
+    if (i >= 0) hojas[i] = { ...h, cerrada: true, cerradaPor: quienSoy(), cerradaEn: null };
     renderCobranza();
     toast(`🔒 Hoja de cobranza del ${formatoFecha(fechaISO)} cerrada`);
   } catch (e) {
@@ -381,6 +413,14 @@ async function guardarHojaEnStore(hoja) {
   }
 }
 
+/* Cambia solo los campos indicados: así no se pisa la hora de apertura que
+   ya puso el servidor (que este dispositivo puede no tener todavía). */
+async function actualizarHojaEnStore(fechaISO, cambios) {
+  if (modoNube) {
+    await fb.updateDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'hojas', fechaISO), cambios);
+  }
+}
+
 async function eliminarClienteDeStore(id) {
   if (modoNube) {
     await fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'clientes', id));
@@ -423,6 +463,7 @@ async function iniciarNube() {
     updateDoc: fsMod.updateDoc,
     deleteDoc: fsMod.deleteDoc,
     onSnapshot: fsMod.onSnapshot,
+    serverTimestamp: fsMod.serverTimestamp,
     getAuth: authMod.getAuth,
     signIn: authMod.signInWithEmailAndPassword,
     registrar: authMod.createUserWithEmailAndPassword,
@@ -2214,20 +2255,37 @@ function renderEstadoHoja(fecha) {
   btnCrear.hidden = true;
   btnCerrar.hidden = true;
 
+  const detalle = $('#cob-estado-detalle');
   const h = hojaDe(fecha);
   if (!h) {
     badge.textContent = '⚠️ Esta hoja aún no se ha creado';
     badge.className = 'cob-estado-badge cob-estado-sin-crear';
     btnCrear.hidden = !puede('hojaCrear');
-  } else if (h.cerrada) {
-    const cuando = h.cerradaEn ? formatoFecha(fechaDeTimestamp(h.cerradaEn)) : '';
-    badge.textContent = `🔒 Cerrada por ${h.cerradaPor || '—'}${cuando ? ' el ' + cuando : ''}`;
+    detalle.textContent = '';
+    detalle.hidden = true;
+    return;
+  }
+
+  if (h.cerrada) {
+    badge.textContent = '🔒 Cerrada';
     badge.className = 'cob-estado-badge cob-estado-cerrada';
   } else {
-    badge.textContent = `🟢 Abierta — creada por ${h.creadaPor || '—'}`;
+    badge.textContent = '🟢 Abierta';
     badge.className = 'cob-estado-badge cob-estado-abierta';
     btnCerrar.hidden = !esAdmin();
   }
+
+  // Horas de apertura y cierre: siempre las del servidor
+  const abierta = fechaHoraDeTimestamp(h.creadaEn);
+  const cerrada = fechaHoraDeTimestamp(h.cerradaEn);
+  const lineas = [
+    `🕐 Abierta por ${h.creadaPor || '—'} ${abierta ? 'el ' + abierta : '(hora pendiente de confirmar)'}`,
+  ];
+  if (h.cerrada) {
+    lineas.push(`🔒 Cerrada por ${h.cerradaPor || '—'} ${cerrada ? 'el ' + cerrada : '(hora pendiente de confirmar)'}`);
+  }
+  detalle.innerHTML = lineas.map(t => `<span>${escapeHtml(t)}</span>`).join('');
+  detalle.hidden = false;
 }
 
 function renderCobranza() {
@@ -2318,9 +2376,20 @@ function exportarCobranzaExcel() {
   const totEt    = { bold: true, align: 'right', color: CARBON, bg: TOT_BG, border: true };
   const totVal   = { bold: true, align: 'right', color: CARBON, bg: TOT_BG, border: true, fmt: dinero };
 
+  // Constancia de apertura y cierre (horas puestas por el servidor)
+  const hojaDia = hojaDe(fecha);
+  const lineaApertura = hojaDia
+    ? `Abierta por ${hojaDia.creadaPor || '—'}${fechaHoraDeTimestamp(hojaDia.creadaEn) ? ' el ' + fechaHoraDeTimestamp(hojaDia.creadaEn) : ''}`
+    : 'Hoja no creada';
+  const lineaCierre = hojaDia && hojaDia.cerrada
+    ? `Cerrada por ${hojaDia.cerradaPor || '—'}${fechaHoraDeTimestamp(hojaDia.cerradaEn) ? ' el ' + fechaHoraDeTimestamp(hojaDia.cerradaEn) : ''}`
+    : 'Sin cerrar';
+
   const filasXlsx = [
     [{ v: 'HOJA DE COBRANZA', s: titulo }],
     [{ v: formatoFecha(fecha), s: subtit }],
+    [{ v: `🕐 ${lineaApertura}`, s: subtit }],
+    [{ v: `🔒 ${lineaCierre}`, s: subtit }],
     [],
     // Resumen por método (tres tarjetas)
     [
@@ -2370,7 +2439,7 @@ function exportarCobranzaExcel() {
   descargarXlsx(`cobranza-${fecha}.xlsx`, {
     nombre: 'Cobranza',
     cols: [10, 26, 15, 11, 12, 12, 13, 16, 14, 14],
-    merges: ['A1:J1', 'A2:J2'],
+    merges: ['A1:J1', 'A2:J2', 'A3:J3', 'A4:J4'],
     filas: filasXlsx,
   });
   toast('⬇️ Hoja de cobranza exportada (.xlsx)');
@@ -2379,6 +2448,16 @@ function exportarCobranzaExcel() {
 function imprimirCobranza() {
   const fecha = $('#cob-fecha').value || hoyISO();
   const { filas, totales } = hojaCobranza(creditos, fecha);
+  // Constancia de apertura y cierre (horas puestas por el servidor)
+  const hojaDia = hojaDe(fecha);
+  const horaAbierta = hojaDia ? fechaHoraDeTimestamp(hojaDia.creadaEn) : '';
+  const horaCerrada = hojaDia ? fechaHoraDeTimestamp(hojaDia.cerradaEn) : '';
+  const constanciaHtml = hojaDia
+    ? `<p class="sub">🕐 Abierta por ${escapeHtml(hojaDia.creadaPor || '—')}${horaAbierta ? ' el ' + escapeHtml(horaAbierta) : ''}
+       <br>🔒 ${hojaDia.cerrada
+          ? `Cerrada por ${escapeHtml(hojaDia.cerradaPor || '—')}${horaCerrada ? ' el ' + escapeHtml(horaCerrada) : ''}`
+          : 'Sin cerrar'}</p>`
+    : '<p class="sub">⚠️ Esta hoja no fue creada</p>';
   const filasHtml = filas.map(f => `<tr>
       <td>${escapeHtml(f.codigo || '—')}</td><td>${escapeHtml(f.cliente)}</td>
       <td>${escapeHtml(f.zona || '—')}</td><td>${escapeHtml(f.boleta)}</td>
@@ -2400,6 +2479,7 @@ function imprimirCobranza() {
     </style></head><body>
     <h1>🧾 Hoja de cobranza</h1>
     <p class="sub">Fecha: ${formatoFecha(fecha)} — ${filas.length} cobro(s)</p>
+    ${constanciaHtml}
     <table><thead><tr><th>Código</th><th>Cliente</th><th>Zona</th><th>Boleta</th>
     <th>Fecha emisión</th><th>Fecha despacho</th>
     <th style="text-align:right">Cobrado</th><th style="text-align:right">Queda debiendo</th>
