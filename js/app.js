@@ -1875,6 +1875,10 @@ function mostrarPreview(dataURL) {
 
 /* Abre la foto de la boleta a pantalla completa, con opción de descargar. */
 function mostrarImagenGrande(dataUrl, nombreArchivo) {
+  visorCreditoActual = null;
+  visorImagenActual = null;
+  $('#btn-rotar-imagen').hidden = true;
+  $('#btn-guardar-rotacion').hidden = true;
   $('#imagen-grande').src = dataUrl;
   const enlace = $('#btn-descargar-imagen');
   enlace.href = dataUrl;
@@ -1882,9 +1886,60 @@ function mostrarImagenGrande(dataUrl, nombreArchivo) {
   $('#modal-imagen').showModal();
 }
 
+/* Foto de la boleta: permite rotar (sentido antihorario) y guardar el cambio */
+let visorCreditoActual = null;   // crédito cuya foto se está viendo (null = otra imagen, ej. firma)
+let visorImagenActual = null;    // dataURL actual mostrada (con la rotación pendiente, si hay)
+
 function abrirVisorImagen(credito) {
   const nombre = String(credito.boleta || 'foto').replace(/[^\w.-]/g, '_');
   mostrarImagenGrande(credito.foto, `boleta-${nombre}.jpg`);
+  if (puede('editar')) {
+    visorCreditoActual = credito;
+    visorImagenActual = credito.foto;
+    $('#btn-rotar-imagen').hidden = false;
+    $('#btn-guardar-rotacion').hidden = false;
+    $('#btn-guardar-rotacion').disabled = true;
+  }
+}
+
+/* Rota la imagen que se está viendo 90° en sentido antihorario */
+function rotarImagenVisor() {
+  if (!visorImagenActual) return;
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.height;
+    canvas.height = img.width;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(0, canvas.height);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(img, 0, 0);
+    visorImagenActual = canvas.toDataURL('image/jpeg', 0.92);
+    $('#imagen-grande').src = visorImagenActual;
+    $('#btn-descargar-imagen').href = visorImagenActual;
+    $('#btn-guardar-rotacion').disabled = false;
+  };
+  img.src = visorImagenActual;
+}
+
+/* Guarda la foto rotada en el crédito */
+async function guardarRotacionImagen() {
+  if (!visorCreditoActual || !visorImagenActual) return;
+  const boton = $('#btn-guardar-rotacion');
+  boton.disabled = true;
+  try {
+    const actualizado = { ...visorCreditoActual, foto: visorImagenActual };
+    await guardarEnStore(actualizado);
+    const idx = creditos.findIndex(c => c.id === actualizado.id);
+    if (idx >= 0) creditos[idx] = actualizado;
+    visorCreditoActual = actualizado;
+    render();
+    toast('✅ Foto guardada');
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar la foto');
+    boton.disabled = false;
+  }
 }
 
 function comprimirImagen(img, maxLado, calidad) {
@@ -2469,6 +2524,8 @@ function inicializarEventos() {
     }
   });
   $('#btn-cerrar-imagen').addEventListener('click', () => $('#modal-imagen').close());
+  $('#btn-rotar-imagen').addEventListener('click', rotarImagenVisor);
+  $('#btn-guardar-rotacion').addEventListener('click', guardarRotacionImagen);
 
   // Hoja de cobranza
   $('#btn-cobranza').addEventListener('click', abrirCobranza);

@@ -644,6 +644,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .imagen-barra {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.6rem;
   justify-content: center;
   padding: 0.7rem 0.7rem calc(0.7rem + env(safe-area-inset-bottom));
