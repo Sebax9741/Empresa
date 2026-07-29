@@ -698,18 +698,38 @@ function renderTabla(lista) {
   }).join('');
 }
 
+/* Lista de pagos "a cuenta" con su monto y su fecha, para ver el detalle
+   sin tener que abrir el crédito */
+function abonosResumenHtml(c) {
+  const lista = abonosDe(c);
+  if (!lista.length) return '';
+  const chips = lista.map((a, i) => `
+    <span class="abono-chip" title="${escapeHtml(metodoLabel(metodoDe(a)))}">
+      <b>A${i + 1}</b>
+      <span class="chip-monto">${formatoMonto(a.monto)}</span>
+      <span class="chip-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'}</span>
+    </span>`).join('');
+  return `<div class="card-abonos"><span class="card-abonos-tit">A cuenta:</span>${chips}</div>`;
+}
+
 function renderTarjetas(lista) {
   const cont = $('#cards');
-  cont.innerHTML = lista.map(c => `
+  cont.innerHTML = lista.map(c => {
+    const debe = saldoDe(c);
+    const pagado = totalAbonado(c);
+    const lineas = debe > 0
+      ? `<p class="card-saldo">Debe: <strong>${formatoMonto(debe)}</strong></p>
+         ${pagado > 0 ? `<p class="card-pagado">Pagado: <strong>${formatoMonto(pagado)}</strong></p>` : ''}`
+      : `<p class="card-saldo card-saldo-ok">✅ Pagado completo${pagado > 0 ? ` · ${formatoMonto(pagado)}` : ''}</p>`;
+    return `
     <article class="card">
       <div class="card-main">
         <p class="card-title">${escapeHtml(c.cliente)}</p>
         <p class="card-sub">Boleta Nº ${escapeHtml(c.boleta)} · ${formatoFecha(c.fecha)}</p>
         ${c.zona ? `<span class="card-zona">📍 ${escapeHtml(c.zona)}</span>` : ''}
         <p class="card-monto">${formatoMonto(c.monto)}</p>
-        ${saldoDe(c) > 0
-          ? `<p class="card-saldo">Saldo: <strong>${formatoMonto(saldoDe(c))}</strong></p>`
-          : `<p class="card-saldo">✅ Pagado completo</p>`}
+        ${lineas}
+        ${abonosResumenHtml(c)}
         <p class="card-venc">Vence: ${textoVencimiento(c)}</p>
       </div>
       <div class="card-side">
@@ -720,8 +740,8 @@ function renderTarjetas(lista) {
         ${(puede('editar') || puede('pagos')) ? `<button class="btn btn-secondary btn-small" data-editar="${c.id}">✏️ Editar</button>` : ''}
         ${puede('borrar') ? `<button class="btn btn-danger btn-small" data-borrar="${c.id}">🗑️ Borrar</button>` : ''}
       </div>
-    </article>
-  `).join('');
+    </article>`;
+  }).join('');
 }
 
 function renderFlechas() {
@@ -1146,6 +1166,7 @@ function renderAbonos() {
   const el = $('#saldo-valor');
   el.textContent = formatoMonto(saldo);
   el.classList.toggle('saldo-cero', saldo <= 0);
+  $('#pagado-valor').textContent = formatoMonto(abonado);
 
   const tope = abonosActuales.length >= MAX_ABONOS;
   const btn = $('#btn-agregar-abono');

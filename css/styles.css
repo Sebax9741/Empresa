@@ -76,12 +76,14 @@ body {
   font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  /* Si no cabe, se recorta el título: los botones nunca se pierden */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.header-actions { display: flex; gap: 0.35rem; align-items: center; }
+/* Los botones del encabezado siempre visibles, aunque la pantalla sea angosta */
+.header-actions { display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; }
 
 /* ====== Botones ====== */
 .btn {
@@ -573,8 +575,10 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   margin-bottom: 0.6rem;
 }
 .saldo-linea .field-label { margin: 0; }
+.saldo-linea-pagado { margin-top: -0.3rem; }
 .saldo-valor { font-size: 1.25rem; font-weight: 700; color: var(--primary); }
 .saldo-valor.saldo-cero { color: var(--ok); }
+.pagado-valor { font-size: 1.05rem; font-weight: 700; color: var(--ok); }
 .abonos-list { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.6rem; }
 .abono-item {
   display: flex;
@@ -602,6 +606,33 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 .card-saldo { font-size: 0.9rem; margin: 0.2rem 0 0; color: var(--gray); }
 .card-saldo strong { color: var(--primary); }
+.card-saldo-ok { color: var(--ok); font-weight: 600; }
+.card-pagado { font-size: 0.9rem; margin: 0.1rem 0 0; color: var(--gray); }
+.card-pagado strong { color: var(--ok); }
+
+/* Detalle de los pagos "a cuenta" dentro de la tarjeta del crédito */
+.card-abonos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+}
+.card-abonos-tit { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+.abono-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  background: var(--bg-tint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.abono-chip b { color: var(--muted); font-size: 0.7rem; }
+.abono-chip .chip-monto { font-weight: 700; color: var(--ok); }
+.abono-chip .chip-fecha { color: var(--muted); font-size: 0.74rem; }
 .card-zona {
   display: inline-block;
   font-size: 0.72rem;
@@ -773,8 +804,10 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   .cards { display: flex; }
 
   .app-header h1 { font-size: 0.98rem; }
-  .header-inner { padding: 0.6rem 0.8rem; gap: 0.3rem; }
-  .header-actions { gap: 0.2rem; }
+  /* En móvil el título se acorta a "💳 Créditos" para dejar sitio a los botones */
+  .titulo-largo { display: none; }
+  .header-inner { padding: 0.6rem 0.7rem; gap: 0.3rem; }
+  .header-actions { gap: 0.15rem; }
   .btn-icon { width: 34px; height: 34px; font-size: 1.05rem; }
   /* En móvil el botón principal muestra solo "＋" para no saturar el header */
   #btn-new .btn-label { display: none; }

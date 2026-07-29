@@ -38,7 +38,7 @@
 
   <header class="app-header">
     <div class="header-inner">
-      <h1>💳 Control de Créditos</h1>
+      <h1>💳 <span class="titulo-largo">Control de </span>Créditos</h1>
       <div class="header-actions">
         <button id="btn-clientes" class="btn-icon" title="Clientes" aria-label="Clientes">🧑‍🤝‍🧑</button>
         <button id="btn-usuarios" class="btn-icon" title="Usuarios" aria-label="Usuarios" hidden>👥</button>
@@ -121,8 +121,8 @@
         <option value="zona-desc">Zona Z–A</option>
         <option value="monto-desc">Total mayor</option>
         <option value="monto-asc">Total menor</option>
-        <option value="saldo-desc">Saldo mayor</option>
-        <option value="saldo-asc">Saldo menor</option>
+        <option value="saldo-desc">Debe: mayor</option>
+        <option value="saldo-asc">Debe: menor</option>
         <option value="fecha-desc">Más recientes</option>
         <option value="fecha-asc">Más antiguos</option>
       </select>
@@ -137,7 +137,7 @@
             <th data-sort="cliente">Cliente <span class="sort-arrow"></span></th>
             <th data-sort="zona">Zona <span class="sort-arrow"></span></th>
             <th data-sort="monto" class="col-num">Total <span class="sort-arrow"></span></th>
-            <th data-sort="saldo" class="col-num">Saldo <span class="sort-arrow"></span></th>
+            <th data-sort="saldo" class="col-num">Debe <span class="sort-arrow"></span></th>
             <th data-sort="vencimiento">Vencimiento <span class="sort-arrow"></span></th>
             <th>Estado</th>
             <th>Boleta</th>
@@ -222,8 +222,12 @@
       <!-- Solo al editar: abonos "a cuenta" y saldo -->
       <div class="field abonos-box" id="abonos-box" hidden>
         <div class="saldo-linea">
-          <span class="field-label">Saldo pendiente</span>
+          <span class="field-label">Debe</span>
           <span class="saldo-valor" id="saldo-valor">—</span>
+        </div>
+        <div class="saldo-linea saldo-linea-pagado">
+          <span class="field-label">Pagado</span>
+          <span class="pagado-valor" id="pagado-valor">—</span>
         </div>
         <div id="abonos-list" class="abonos-list"></div>
         <div class="abono-nuevo" id="abono-nuevo" hidden>
