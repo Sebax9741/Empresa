@@ -2,7 +2,7 @@ import { descargarXlsx } from './xlsx-lite.js';
 
 /* ====== Estado global ====== */
 let creditos = [];
-let clientes = [];        // base de datos de clientes: { id, nombre, zona, telefono, notas, creado }
+let clientes = [];        // base de datos de clientes: { id, nombre, zona, direccion, telefono, notas, creado }
 let settings = {
   dias: 30,
   moneda: '$',
@@ -816,8 +816,11 @@ function aplicarClienteSeleccionado() {
     zonaSel.value = cli.zona || '';
     zonaSel.disabled = true;
     nota.textContent = '(automática, según el cliente)';
-    const datos = [cli.telefono ? `📞 ${cli.telefono}` : '', cli.notas || ''].filter(Boolean).join(' · ');
-    ayuda.textContent = datos;
+    ayuda.textContent = [
+      cli.direccion ? `🏠 ${cli.direccion}` : '',
+      cli.telefono ? `📞 ${cli.telefono}` : '',
+      cli.notas || '',
+    ].filter(Boolean).join(' · ');
   } else {
     zonaSel.disabled = false;
     nota.textContent = '';
@@ -850,7 +853,9 @@ function renderClientes() {
   if (!cont) return;
   const buscado = normalizarNombre($('#cli-buscar') ? $('#cli-buscar').value : '');
   const lista = buscado
-    ? clientes.filter(c => normalizarNombre(c.nombre).includes(buscado) || normalizarNombre(c.zona).includes(buscado))
+    ? clientes.filter(c => normalizarNombre(c.nombre).includes(buscado)
+        || normalizarNombre(c.zona).includes(buscado)
+        || normalizarNombre(c.direccion).includes(buscado))
     : clientes;
 
   $('#cli-contador').textContent = clientes.length ? `(${clientes.length})` : '';
@@ -868,8 +873,11 @@ function renderClientes() {
   const permitido = puede('clientes');
   cont.innerHTML = lista.map(c => {
     const nPedidos = creditosDeCliente(c.id).length;
-    const extra = [c.telefono ? `📞 ${escapeHtml(c.telefono)}` : '', c.notas ? escapeHtml(c.notas) : '']
-      .filter(Boolean).join(' · ');
+    const extra = [
+      c.direccion ? `🏠 ${escapeHtml(c.direccion)}` : '',
+      c.telefono ? `📞 ${escapeHtml(c.telefono)}` : '',
+      c.notas ? escapeHtml(c.notas) : '',
+    ].filter(Boolean).join(' · ');
     return `
       <div class="cliente-item">
         <div class="cliente-datos">
@@ -892,6 +900,7 @@ function editarClienteForm(id) {
   $('#cli-id').value = cli.id;
   $('#cli-nombre').value = cli.nombre;
   $('#cli-zona').value = cli.zona || '';
+  $('#cli-direccion').value = cli.direccion || '';
   $('#cli-telefono').value = cli.telefono || '';
   $('#cli-notas').value = cli.notas || '';
   $('#cli-form-title').textContent = `Editar cliente — ${cli.nombre}`;
@@ -921,6 +930,7 @@ async function guardarClienteForm(ev) {
     id: id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)),
     nombre,
     zona,
+    direccion: $('#cli-direccion').value.trim(),
     telefono: $('#cli-telefono').value.trim(),
     notas: $('#cli-notas').value.trim(),
     creado: anterior ? anterior.creado : Date.now(),
@@ -1015,7 +1025,7 @@ async function importarClientesDesdeCreditos() {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
         nombre: masFrecuente(g.nombres),
         zona: g.zonas.length ? masFrecuente(g.zonas) : '',
-        telefono: '', notas: '', creado: Date.now(),
+        direccion: '', telefono: '', notas: '', creado: Date.now(),
       },
       creds: g.creds,
       esNuevo: true,

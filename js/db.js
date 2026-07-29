@@ -1,6 +1,6 @@
 /* Almacenamiento local con IndexedDB.
    Cada crédito: { id, boleta, cliente, clienteId, zona, monto, fecha, vencimiento, estado, notas, foto (dataURL o null), creado }
-   Cada cliente: { id, nombre, zona, telefono, notas, creado } */
+   Cada cliente: { id, nombre, zona, direccion, telefono, notas, creado } */
 const DB = (() => {
   const DB_NAME = 'creditos-db';
   const STORE = 'creditos';
