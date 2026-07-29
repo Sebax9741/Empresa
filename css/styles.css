@@ -810,7 +810,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .usuario-perms { display: grid; grid-template-columns: 1fr 1fr; gap: 0.1rem 0.6rem; }
 
 /* ====== Hoja de cobranza ====== */
-.modal-cobranza { width: min(640px, calc(100vw - 1.5rem)); }
+.modal-cobranza { width: min(1000px, calc(100vw - 1.5rem)); }
 .cobranza-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .cobranza-head h2 { margin: 0; }
 .cob-fecha-field { margin: 0; min-width: 160px; }
@@ -1009,3 +1009,30 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 @media (max-width: 520px) {
   .info-montos { grid-template-columns: 1fr; }
 }
+
+/* Navegador de días de la hoja de cobranza */
+.cob-nav { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; }
+.cob-dias { flex: 1; min-width: 0; margin: 0; font-size: 0.86rem; }
+.cob-resumen { color: var(--muted); font-size: 0.84rem; margin: 0 0 0.6rem; font-weight: 600; }
+.cob-fila { cursor: pointer; }
+.cob-fila:hover { background: var(--bg-tint); }
+.cob-codigo {
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: var(--primary-dark);
+  background: var(--primary-light);
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+}
+
+/* Código del cliente */
+.cliente-codigo {
+  font-weight: 700;
+  font-size: 0.74rem;
+  color: #fff;
+  background: var(--primary);
+  border-radius: 6px;
+  padding: 0.1rem 0.42rem;
+  flex-shrink: 0;
+}
+.combo-codigo { color: var(--primary-dark); font-size: 0.76rem; }

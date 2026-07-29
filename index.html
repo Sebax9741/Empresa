@@ -431,19 +431,21 @@
       <h3 id="cli-form-title">Registrar cliente</h3>
       <input type="hidden" id="cli-id">
       <div class="field-row">
+        <label class="field"><span>Código <small>(se genera solo)</small></span>
+          <input type="text" id="cli-codigo" class="input" maxlength="12" autocapitalize="characters" placeholder="Ej: C001"></label>
         <label class="field"><span>Nombre del cliente *</span>
           <input type="text" id="cli-nombre" class="input" required placeholder="Ej: Almacén Doña Rosa"></label>
+      </div>
+      <div class="field-row">
         <label class="field"><span>Zona *</span>
           <select id="cli-zona" class="input" required></select></label>
+        <label class="field"><span>Teléfono <small>opcional</small></span>
+          <input type="tel" id="cli-telefono" class="input" inputmode="tel" placeholder="Ej: 987 654 321"></label>
       </div>
       <label class="field"><span>Dirección <small>opcional</small></span>
         <input type="text" id="cli-direccion" class="input" placeholder="Ej: Jr. Los Olivos 425, frente al mercado"></label>
-      <div class="field-row">
-        <label class="field"><span>Teléfono <small>opcional</small></span>
-          <input type="tel" id="cli-telefono" class="input" inputmode="tel" placeholder="Ej: 987 654 321"></label>
-        <label class="field"><span>Nota <small>opcional</small></span>
-          <input type="text" id="cli-notas" class="input" placeholder="Ej: paga los viernes"></label>
-      </div>
+      <label class="field"><span>Nota <small>opcional</small></span>
+        <input type="text" id="cli-notas" class="input" placeholder="Ej: paga los viernes"></label>
       <div class="cli-form-botones">
         <button type="submit" id="btn-cli-guardar" class="btn btn-primary">💾 Guardar cliente</button>
         <button type="button" id="btn-cli-cancelar" class="btn btn-secondary" hidden>Cancelar</button>
@@ -457,6 +459,7 @@
     <div id="clientes-list" class="clientes-list"></div>
 
     <div class="modal-buttons">
+      <button type="button" id="btn-cli-codigos" class="btn btn-secondary" hidden>🔢 Generar códigos faltantes</button>
       <button type="button" id="btn-cli-importar" class="btn btn-secondary">📥 Importar desde mis créditos</button>
       <button type="button" id="btn-clientes-cerrar" class="btn btn-secondary">Cerrar</button>
     </div>
@@ -472,12 +475,30 @@
       </label>
     </div>
 
+    <div class="cob-nav">
+      <button type="button" id="btn-cob-anterior" class="btn btn-secondary btn-small" title="Día anterior">◀</button>
+      <select id="cob-dias" class="input cob-dias" aria-label="Días con cobros"></select>
+      <button type="button" id="btn-cob-siguiente" class="btn btn-secondary btn-small" title="Día siguiente">▶</button>
+      <button type="button" id="btn-cob-hoy" class="btn btn-secondary btn-small">Hoy</button>
+    </div>
+
+    <p class="cob-resumen" id="cob-resumen"></p>
     <div class="cob-totales" id="cob-totales"></div>
 
     <div class="cob-tabla-wrap">
       <table class="cob-tabla" id="cob-tabla">
         <thead>
-          <tr><th>Boleta</th><th>Cliente</th><th>Zona</th><th class="col-num">Monto</th><th>Pago</th></tr>
+          <tr>
+            <th>Código</th>
+            <th>Cliente</th>
+            <th>Zona</th>
+            <th>Boleta</th>
+            <th class="col-num">Cobrado</th>
+            <th class="col-num">Queda debiendo</th>
+            <th>Pago</th>
+            <th>Cobró</th>
+            <th>Firma</th>
+          </tr>
         </thead>
         <tbody id="cob-body"></tbody>
       </table>

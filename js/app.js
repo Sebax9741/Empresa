@@ -155,21 +155,55 @@ function textoVencimiento(c) {
 
 /* Arma la hoja de cobranza de un día: todos los pagos "a cuenta" con esa fecha,
    de todas las boletas, con sus totales por método (efectivo / Yape / BCP). */
+/* La hoja de cobranza de un día: todos los pagos "a cuenta" hechos esa
+   fecha, sin importar de qué crédito vengan. Cada fila dice a qué crédito
+   (boleta) y a qué cliente pertenece, cómo pagó y quién lo cobró. */
 function hojaCobranza(lista, fechaISO) {
   const filas = [];
   const totales = { efectivo: 0, yape: 0, bcp: 0, total: 0 };
   for (const c of lista) {
-    for (const a of abonosDe(c)) {
-      if (a.fecha !== fechaISO) continue;
+    abonosDe(c).forEach((a, indice) => {
+      if (a.fecha !== fechaISO) return;
       const monto = Number(a.monto) || 0;
       const metodo = metodoDe(a);
-      filas.push({ boleta: c.boleta, cliente: c.cliente, zona: c.zona || '', monto, metodo });
+      filas.push({
+        creditoId: c.id,
+        indice,
+        codigo: codigoDeCredito(c),
+        boleta: c.boleta,
+        cliente: c.cliente,
+        zona: c.zona || '',
+        monto,
+        metodo,
+        totalCredito: Number(c.monto) || 0,
+        saldo: saldoDe(c),
+        cobradoPor: a.registradoPor || '',
+        firma: a.firma || '',
+        registrado: a.registrado || 0,
+      });
       totales[metodo] += monto;
       totales.total += monto;
+    });
+  }
+  // En el orden en que se fueron cobrando durante el día
+  filas.sort((x, y) => (x.registrado - y.registrado)
+    || String(x.boleta).localeCompare(String(y.boleta), undefined, { numeric: true }));
+  return { filas, totales };
+}
+
+/* Todos los días que tienen cobros, del más reciente al más antiguo */
+function diasConCobros(lista) {
+  const dias = new Map();
+  for (const c of lista) {
+    for (const a of abonosDe(c)) {
+      if (!a.fecha) continue;
+      const d = dias.get(a.fecha) || { fecha: a.fecha, pagos: 0, total: 0 };
+      d.pagos++;
+      d.total += Number(a.monto) || 0;
+      dias.set(a.fecha, d);
     }
   }
-  filas.sort((x, y) => String(x.boleta).localeCompare(String(y.boleta), undefined, { numeric: true }));
-  return { filas, totales };
+  return [...dias.values()].sort((x, y) => y.fecha.localeCompare(x.fecha));
 }
 
 let toastTimer = null;
@@ -1069,6 +1103,55 @@ function ordenarClientes() {
 
 function clientePorId(id) { return clientes.find(c => c.id === id) || null; }
 
+/* Código de cliente: se genera solo (C001, C002…) pero se puede escribir a mano */
+function siguienteCodigoCliente() {
+  let mayor = 0;
+  for (const c of clientes) {
+    const m = /^C(\d+)$/i.exec(String(c.codigo || '').trim());
+    if (m) mayor = Math.max(mayor, Number(m[1]));
+  }
+  return 'C' + String(mayor + 1).padStart(3, '0');
+}
+
+function codigoRepetido(codigo, exceptoId) {
+  const clave = String(codigo).trim().toUpperCase();
+  return clientes.find(c => String(c.codigo || '').trim().toUpperCase() === clave && c.id !== exceptoId) || null;
+}
+
+/* Devuelve el código del cliente de un crédito (por id o, si es antiguo, por nombre) */
+function codigoDeCredito(c) {
+  const cli = (c.clienteId && clientePorId(c.clienteId)) || clientePorNombre(c.cliente);
+  return cli && cli.codigo ? cli.codigo : '';
+}
+
+/* Pone código a los clientes registrados antes de que existiera esta función */
+async function generarCodigosFaltantes() {
+  if (!puede('clientes')) return;
+  const sinCodigo = clientes.filter(c => !String(c.codigo || '').trim());
+  if (!sinCodigo.length) { toast('👌 Todos tus clientes ya tienen código'); return; }
+  if (!confirm(`Se le pondrá un código automático a ${sinCodigo.length} cliente(s). ¿Continuar?`)) return;
+
+  const boton = $('#btn-cli-codigos');
+  boton.disabled = true;
+  let hechos = 0;
+  try {
+    for (const cli of sinCodigo) {
+      const actualizado = { ...cli, codigo: siguienteCodigoCliente() };
+      await guardarClienteEnStore(actualizado);
+      const i = clientes.findIndex(x => x.id === cli.id);
+      if (i >= 0) clientes[i] = actualizado;
+      hechos++;
+    }
+  } catch (e) {
+    console.error(e);
+    toast('❌ Se interrumpió. Revisa tu conexión.');
+  }
+  boton.disabled = false;
+  renderClientes();
+  llenarSelectClientes($('#f-cliente').value);
+  toast(`✅ ${hechos} cliente(s) con código nuevo`);
+}
+
 function clientePorNombre(nombre) {
   const clave = normalizarNombre(nombre);
   return clientes.find(c => normalizarNombre(c.nombre) === clave) || null;
@@ -1114,6 +1197,7 @@ function clientesQueCoinciden(texto) {
     const nombre = normalizarNombre(c.nombre);
     if (nombre.startsWith(q)) empiezan.push(c);
     else if (nombre.includes(q)
+      || normalizarNombre(c.codigo).includes(q)
       || normalizarNombre(c.zona).includes(q)
       || normalizarNombre(c.direccion).includes(q)) contienen.push(c);
   }
@@ -1144,7 +1228,7 @@ function renderSugerencias(texto) {
   } else {
     lista.innerHTML = encontrados.map(c => `
       <li class="combo-op" role="option" data-id="${escapeHtml(c.id)}">
-        <span class="combo-nombre">${resaltarCoincidencia(c.nombre, texto)}</span>
+        <span class="combo-nombre">${c.codigo ? `<b class="combo-codigo">${escapeHtml(c.codigo)}</b> ` : ''}${resaltarCoincidencia(c.nombre, texto)}</span>
         ${c.zona ? `<span class="combo-zona">${escapeHtml(c.zona)}</span>` : ''}
       </li>`).join('');
   }
@@ -1200,6 +1284,7 @@ function abrirClientes() {
   const permitido = puede('clientes');
   $('#cli-form').hidden = !permitido;
   $('#btn-cli-importar').hidden = !permitido;
+  $('#btn-cli-codigos').hidden = !permitido || !clientes.some(c => !String(c.codigo || '').trim());
   renderClientes();
   $('#modal-clientes').showModal();
 }
@@ -1207,6 +1292,7 @@ function abrirClientes() {
 function limpiarFormCliente() {
   $('#cli-form').reset();
   $('#cli-id').value = '';
+  $('#cli-codigo').value = siguienteCodigoCliente();
   $('#cli-form-title').textContent = 'Registrar cliente';
   $('#btn-cli-guardar').textContent = '💾 Guardar cliente';
   $('#btn-cli-cancelar').hidden = true;
@@ -1218,6 +1304,7 @@ function renderClientes() {
   const buscado = normalizarNombre($('#cli-buscar') ? $('#cli-buscar').value : '');
   const lista = buscado
     ? clientes.filter(c => normalizarNombre(c.nombre).includes(buscado)
+        || normalizarNombre(c.codigo).includes(buscado)
         || normalizarNombre(c.zona).includes(buscado)
         || normalizarNombre(c.direccion).includes(buscado))
     : clientes;
@@ -1245,6 +1332,7 @@ function renderClientes() {
     return `
       <div class="cliente-item">
         <div class="cliente-datos">
+          ${c.codigo ? `<span class="cliente-codigo">${escapeHtml(c.codigo)}</span>` : ''}
           <strong>${escapeHtml(c.nombre)}</strong>
           <span class="cliente-zona">${c.zona ? escapeHtml(c.zona) : 'sin zona'}</span>
           <span class="cliente-meta">${nPedidos} crédito${nPedidos === 1 ? '' : 's'}${extra ? ' · ' + extra : ''}</span>
@@ -1262,6 +1350,7 @@ function editarClienteForm(id) {
   const cli = clientePorId(id);
   if (!cli) return;
   $('#cli-id').value = cli.id;
+  $('#cli-codigo').value = cli.codigo || '';
   $('#cli-nombre').value = cli.nombre;
   $('#cli-zona').value = cli.zona || '';
   $('#cli-direccion').value = cli.direccion || '';
@@ -1290,8 +1379,16 @@ async function guardarClienteForm(ev) {
   }
 
   const anterior = id ? clientePorId(id) : null;
+
+  // Código: el escrito a mano, o uno automático si se deja en blanco
+  let codigo = $('#cli-codigo').value.trim().toUpperCase();
+  if (!codigo) codigo = (anterior && anterior.codigo) || siguienteCodigoCliente();
+  const conEseCodigo = codigoRepetido(codigo, id);
+  if (conEseCodigo) { toast(`⚠️ El código ${codigo} ya es de "${conEseCodigo.nombre}"`); return; }
+
   const cliente = {
     id: id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)),
+    codigo,
     nombre,
     zona,
     direccion: $('#cli-direccion').value.trim(),
@@ -1384,10 +1481,14 @@ async function importarClientesDesdeCreditos() {
       g.creds.forEach(c => { if (!c.clienteId) nuevos.push({ cliente: existente, creds: [c] }); });
       continue;
     }
+    const cliNuevo = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      nombre: masFrecuente(g.nombres),
+      codigo: '',
+    };
     nuevos.push({
       cliente: {
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-        nombre: masFrecuente(g.nombres),
+        ...cliNuevo,
         zona: g.zonas.length ? masFrecuente(g.zonas) : '',
         direccion: '', telefono: '', notas: '', creado: Date.now(),
       },
@@ -1409,6 +1510,8 @@ async function importarClientesDesdeCreditos() {
   try {
     for (const n of nuevos) {
       if (n.esNuevo) {
+        // El código se calcula aquí, ya con los anteriores dentro de la lista
+        n.cliente.codigo = siguienteCodigoCliente();
         await guardarClienteEnStore(n.cliente);
         if (!clientePorId(n.cliente.id)) clientes.push(n.cliente);
         creados++;
@@ -1835,16 +1938,51 @@ function renderCobranza() {
     <div class="cob-total-card total"><span class="et">Total del día</span><span class="val">${formatoMonto(totales.total)}</span></div>`;
 
   $('#cob-body').innerHTML = filas.map(f => `
-    <tr>
-      <td><strong>${escapeHtml(f.boleta)}</strong></td>
+    <tr class="cob-fila" data-info="${escapeHtml(f.creditoId)}" title="Ver el crédito completo">
+      <td><span class="cob-codigo">${f.codigo ? escapeHtml(f.codigo) : '—'}</span></td>
       <td>${escapeHtml(f.cliente)}</td>
       <td>${f.zona ? escapeHtml(f.zona) : '—'}</td>
-      <td class="col-num">${formatoMonto(f.monto)}</td>
+      <td><strong>${escapeHtml(f.boleta)}</strong></td>
+      <td class="col-num"><strong>${formatoMonto(f.monto)}</strong></td>
+      <td class="col-num ${f.saldo > 0 ? 'saldo-pend' : 'saldo-ok'}">${f.saldo > 0 ? formatoMonto(f.saldo) : '✓ saldado'}</td>
       <td><span class="pago-tag pago-${f.metodo}">${metodoLabel(f.metodo)}</span></td>
+      <td>${f.cobradoPor ? escapeHtml(f.cobradoPor) : '—'}</td>
+      <td>${f.firma
+        ? `<img src="${f.firma}" class="firma-mini" alt="Firma" data-ver-firma-cob="${escapeHtml(f.creditoId)}|${f.indice}" title="Ver la firma">`
+        : '<span class="sin-firma">—</span>'}</td>
     </tr>`).join('');
 
   $('#cob-vacio').hidden = filas.length > 0;
   $('#cob-tabla').hidden = filas.length === 0;
+
+  // Resumen del día y navegador de días con cobros
+  const clientesDistintos = new Set(filas.map(f => f.cliente)).size;
+  $('#cob-resumen').textContent = filas.length
+    ? `Hoja del ${formatoFecha(fecha)} — ${filas.length} pago(s) de ${clientesDistintos} cliente(s)`
+    : `Hoja del ${formatoFecha(fecha)} — sin movimientos`;
+
+  const dias = diasConCobros(creditos);
+  const hayFecha = dias.some(d => d.fecha === fecha);
+  const opciones = dias.map(d =>
+    `<option value="${d.fecha}">${formatoFecha(d.fecha)} — ${d.pagos} pago(s) · ${formatoMonto(d.total)}</option>`).join('');
+  $('#cob-dias').innerHTML =
+    (hayFecha ? '' : `<option value="${fecha}">${formatoFecha(fecha)} — sin movimientos</option>`) + opciones;
+  $('#cob-dias').value = fecha;
+}
+
+/* Salta al día anterior o siguiente que tenga cobros */
+function saltarDiaCobranza(direccion) {
+  const fecha = $('#cob-fecha').value || hoyISO();
+  const dias = diasConCobros(creditos).map(d => d.fecha);   // del más nuevo al más viejo
+  if (!dias.length) { toast('Todavía no hay cobros registrados'); return; }
+  const anteriores = dias.filter(d => d < fecha);
+  const siguientes = dias.filter(d => d > fecha);
+  const destino = direccion < 0
+    ? (anteriores[0] || null)                       // el más cercano hacia atrás
+    : (siguientes[siguientes.length - 1] || null);  // el más cercano hacia adelante
+  if (!destino) { toast(direccion < 0 ? 'No hay días anteriores con cobros' : 'No hay días siguientes con cobros'); return; }
+  $('#cob-fecha').value = destino;
+  renderCobranza();
 }
 
 function exportarCobranzaExcel() {
@@ -1886,8 +2024,9 @@ function exportarCobranzaExcel() {
     [],
     // Encabezado de la tabla
     [
-      { v: 'Boleta', s: th }, { v: 'Cliente', s: thIzq }, { v: 'Zona', s: thIzq },
-      { v: 'Monto', s: th }, { v: 'Pago', s: th },
+      { v: 'Código', s: th }, { v: 'Cliente', s: thIzq }, { v: 'Zona', s: thIzq },
+      { v: 'Boleta', s: th }, { v: 'Cobrado', s: th }, { v: 'Queda debiendo', s: th },
+      { v: 'Pago', s: th }, { v: 'Cobró', s: thIzq },
     ],
   ];
 
@@ -1895,11 +2034,14 @@ function exportarCobranzaExcel() {
     const z = i % 2 === 1; // cebra
     const m = MET[f.metodo] ? f.metodo : 'efectivo';
     filasXlsx.push([
-      { v: f.boleta, s: { align: 'center', border: true, bg: z ? CEBRA : undefined } },
+      { v: f.codigo || '—', s: { align: 'center', border: true, bold: true, bg: z ? CEBRA : undefined } },
       { v: f.cliente, s: tdTxt(z) },
       { v: f.zona || '—', s: tdTxt(z) },
+      { v: f.boleta, s: { align: 'center', border: true, bg: z ? CEBRA : undefined } },
       { v: Number(f.monto) || 0, s: tdNum(z) },
+      { v: Number(f.saldo) || 0, s: tdNum(z) },
       { v: `${MET[m].emoji} ${MET[m].nombre}`, s: tdMet(m) },
+      { v: f.cobradoPor || '—', s: tdTxt(z) },
     ]);
   });
 
@@ -1911,12 +2053,13 @@ function exportarCobranzaExcel() {
   filasXlsx.push([
     { v: '', s: { border: true } }, { v: '', s: { border: true } }, { v: '', s: { border: true } },
     { v: 'TOTAL', s: totEt }, { v: Number(totales.total) || 0, s: totVal },
+    { v: '', s: { border: true } }, { v: '', s: { border: true } }, { v: '', s: { border: true } },
   ]);
 
   descargarXlsx(`cobranza-${fecha}.xlsx`, {
     nombre: 'Cobranza',
-    cols: [12, 26, 16, 14, 16],
-    merges: ['A1:E1', 'A2:E2'],
+    cols: [10, 26, 15, 11, 13, 16, 14, 14],
+    merges: ['A1:H1', 'A2:H2'],
     filas: filasXlsx,
   });
   toast('⬇️ Hoja de cobranza exportada (.xlsx)');
@@ -1926,9 +2069,12 @@ function imprimirCobranza() {
   const fecha = $('#cob-fecha').value || hoyISO();
   const { filas, totales } = hojaCobranza(creditos, fecha);
   const filasHtml = filas.map(f => `<tr>
-      <td>${escapeHtml(f.boleta)}</td><td>${escapeHtml(f.cliente)}</td>
-      <td>${escapeHtml(f.zona || '—')}</td><td style="text-align:right">${formatoMonto(f.monto)}</td>
-      <td>${metodoLabel(f.metodo)}</td></tr>`).join('');
+      <td>${escapeHtml(f.codigo || '—')}</td><td>${escapeHtml(f.cliente)}</td>
+      <td>${escapeHtml(f.zona || '—')}</td><td>${escapeHtml(f.boleta)}</td>
+      <td style="text-align:right">${formatoMonto(f.monto)}</td>
+      <td style="text-align:right">${f.saldo > 0 ? formatoMonto(f.saldo) : 'saldado'}</td>
+      <td>${metodoLabel(f.metodo)}</td><td>${escapeHtml(f.cobradoPor || '—')}</td>
+      <td>${f.firma ? `<img src="${f.firma}" style="height:34px">` : '—'}</td></tr>`).join('');
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Cobranza ${formatoFecha(fecha)}</title>
     <style>
       body{font-family:system-ui,sans-serif;padding:20px;color:#111}
@@ -1941,8 +2087,10 @@ function imprimirCobranza() {
     </style></head><body>
     <h1>🧾 Hoja de cobranza</h1>
     <p class="sub">Fecha: ${formatoFecha(fecha)} — ${filas.length} cobro(s)</p>
-    <table><thead><tr><th>Boleta</th><th>Cliente</th><th>Zona</th><th style="text-align:right">Monto</th><th>Pago</th></tr></thead>
-    <tbody>${filasHtml || '<tr><td colspan="5" style="text-align:center">Sin cobros este día</td></tr>'}</tbody></table>
+    <table><thead><tr><th>Código</th><th>Cliente</th><th>Zona</th><th>Boleta</th>
+    <th style="text-align:right">Cobrado</th><th style="text-align:right">Queda debiendo</th>
+    <th>Pago</th><th>Cobró</th><th>Firma</th></tr></thead>
+    <tbody>${filasHtml || '<tr><td colspan="9" style="text-align:center">Sin cobros este día</td></tr>'}</tbody></table>
     <div class="tot">
       <div><strong>💵 Efectivo:</strong> ${formatoMonto(totales.efectivo)}</div>
       <div><strong>📱 Yape:</strong> ${formatoMonto(totales.yape)}</div>
@@ -2267,6 +2415,12 @@ function inicializarEventos() {
       const c = creditos.find(x => x.id === infoCreditoId);
       const a = c && abonosDe(c)[Number(verFirma.dataset.verFirma)];
       if (a && a.firma) mostrarImagenGrande(a.firma, `firma-${c.boleta}-${Number(verFirma.dataset.verFirma) + 1}.png`);
+    } else if (ev.target.closest('[data-ver-firma-cob]')) {
+      ev.stopPropagation();
+      const [cid, idx] = ev.target.closest('[data-ver-firma-cob]').dataset.verFirmaCob.split('|');
+      const c = creditos.find(x => x.id === cid);
+      const a = c && abonosDe(c)[Number(idx)];
+      if (a && a.firma) mostrarImagenGrande(a.firma, `firma-${c.boleta}-${Number(idx) + 1}.png`);
     } else if (ev.target.closest('[data-ver-firma-form]')) {
       const idx = Number(ev.target.closest('[data-ver-firma-form]').dataset.verFirmaForm);
       const a = abonosActuales[idx];
@@ -2291,6 +2445,14 @@ function inicializarEventos() {
   // Hoja de cobranza
   $('#btn-cobranza').addEventListener('click', abrirCobranza);
   $('#cob-fecha').addEventListener('change', renderCobranza);
+  $('#cob-dias').addEventListener('change', () => {
+    $('#cob-fecha').value = $('#cob-dias').value;
+    renderCobranza();
+  });
+  $('#btn-cob-anterior').addEventListener('click', () => saltarDiaCobranza(-1));
+  $('#btn-cob-siguiente').addEventListener('click', () => saltarDiaCobranza(1));
+  $('#btn-cob-hoy').addEventListener('click', () => { $('#cob-fecha').value = hoyISO(); renderCobranza(); });
+  $('#btn-cli-codigos').addEventListener('click', generarCodigosFaltantes);
   $('#btn-cob-cerrar').addEventListener('click', () => $('#modal-cobranza').close());
   $('#btn-cob-excel').addEventListener('click', exportarCobranzaExcel);
   $('#btn-cob-imprimir').addEventListener('click', imprimirCobranza);
