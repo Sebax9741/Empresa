@@ -1719,23 +1719,23 @@ function renderInfo() {
     $('#cobro-fecha').value = hoyISO();      // siempre hoy y bloqueada
     $('#btn-cobro-todo').textContent = `Saldar todo lo que debe (${formatoMonto(debe)})`;
 
-    // La hoja de cobranza de hoy tiene que existir (y no estar cerrada) para poder cobrar
+    // La hoja de cobranza de hoy tiene que existir (y no estar cerrada) para
+    // que un empleado pueda cobrar. El administrador nunca queda bloqueado
+    // por falta de hoja; solo si ya está cerrada le piden su código.
     const hoy = hoyISO();
     const bloqueo = $('#info-cobro-bloqueo');
     const btnCrearHoja = $('#btn-info-crear-hoja');
+    const existeHoy = hojaExiste(hoy);
     let bloqueado = false;
-    if (!hojaExiste(hoy)) {
+    btnCrearHoja.hidden = existeHoy || !puede('hojaCrear');
+    if (!existeHoy && !esAdmin()) {
       bloqueado = true;
       bloqueo.textContent = puede('hojaCrear')
         ? '📋 Todavía no se ha creado la hoja de cobranza de hoy.'
         : '📋 Todavía no se ha creado la hoja de cobranza de hoy. Pide que la creen.';
-      btnCrearHoja.hidden = !puede('hojaCrear');
-    } else if (hojaCerrada(hoy) && !esAdmin()) {
+    } else if (existeHoy && hojaCerrada(hoy) && !esAdmin()) {
       bloqueado = true;
       bloqueo.textContent = '🔒 La hoja de cobranza de hoy ya está cerrada.';
-      btnCrearHoja.hidden = true;
-    } else {
-      btnCrearHoja.hidden = true;
     }
     bloqueo.hidden = !bloqueado;
     $('#info-cobro-form').hidden = bloqueado;
@@ -1756,8 +1756,10 @@ async function registrarCobro() {
   if (!c) return;
   if (!puede('pagos')) { toast('🔒 No tienes permiso para registrar pagos'); return; }
 
+  // El administrador siempre puede registrar (aunque la hoja de hoy no
+  // exista todavía); a los empleados se les exige que ya esté creada.
   const hoy = hoyISO();
-  if (!hojaExiste(hoy)) {
+  if (!esAdmin() && !hojaExiste(hoy)) {
     toast(puede('hojaCrear')
       ? '📋 Primero crea la hoja de cobranza de hoy'
       : '📋 La hoja de cobranza de hoy aún no existe. Pide que la creen.');
@@ -1840,6 +1842,7 @@ function abrirFormulario(credito = null) {
   $('#credit-form').reset();
   fotoActual = null;
   abonosActuales = [];
+  abonoFechaEditando = null;
   vencimientoEditadoManual = false;
   actualizarAtajosVenc();
   $('#btn-atajo-1').disabled = false;
@@ -1934,6 +1937,46 @@ async function quitarAbonoConCodigo(indice) {
   renderAbonos();
 }
 
+/* Editar la fecha de un pago "a cuenta" ya registrado: solo el administrador
+   (en modo local, el único dueño, siempre puede). Si la hoja de origen o la
+   de destino ya está cerrada, se pide el código de seguridad. */
+let abonoFechaEditando = null;   // índice del abono cuya fecha se está editando ahora
+
+function puedeEditarFechaAbono() {
+  return !modoNube || esAdmin();
+}
+
+function iniciarEdicionFechaAbono(indice) {
+  if (!puedeEditarFechaAbono()) { toast('🔒 Solo el administrador puede editar la fecha'); return; }
+  abonoFechaEditando = indice;
+  renderAbonos();
+}
+
+function cancelarEdicionFechaAbono() {
+  abonoFechaEditando = null;
+  renderAbonos();
+}
+
+async function confirmarEdicionFechaAbono(indice) {
+  const a = abonosActuales[indice];
+  const nuevaFecha = $(`#abono-fecha-edit-${indice}`).value;
+  if (!a || !nuevaFecha) { cancelarEdicionFechaAbono(); return; }
+  if (nuevaFecha === a.fecha) { cancelarEdicionFechaAbono(); return; }
+
+  const fechaVieja = a.fecha;
+  // Si la hoja de origen o la de destino ya está cerrada, hace falta el código
+  if ((fechaVieja && hojaCerrada(fechaVieja)) || hojaCerrada(nuevaFecha)) {
+    const autorizado = await pedirPin(
+      `Vas a cambiar la fecha de la ACUENTA ${indice + 1} del ${fechaVieja ? formatoFecha(fechaVieja) : 'sin fecha'} al ${formatoFecha(nuevaFecha)}. Una de esas hojas ya está cerrada.`);
+    if (!autorizado) { toast('🔒 Cambio cancelado'); cancelarEdicionFechaAbono(); return; }
+  }
+
+  abonosActuales[indice] = { ...a, fecha: nuevaFecha };
+  abonoFechaEditando = null;
+  renderAbonos();
+  toast('✅ Fecha actualizada');
+}
+
 /* Dibuja la lista de abonos "a cuenta" y el saldo pendiente en el formulario. */
 function renderAbonos() {
   const cont = $('#abonos-list');
@@ -1947,10 +1990,20 @@ function renderAbonos() {
              el ${formatoFecha(a.registradoFecha)}</span>`
         : '';
       const puedeQuitar = puedeQuitarAbono(a);
+      const fechaHtml = abonoFechaEditando === i
+        ? `<span class="abono-fecha-edit">
+             <input type="date" id="abono-fecha-edit-${i}" class="input input-mini" value="${a.fecha || ''}">
+             <button type="button" data-confirmar-fecha="${i}" title="Guardar fecha">✓</button>
+             <button type="button" data-cancelar-fecha="${i}" title="Cancelar">✕</button>
+           </span>`
+        : `<span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}${
+            puedeEditarFechaAbono()
+              ? ` <button type="button" class="btn-fecha-editar" data-editar-fecha="${i}" title="Editar la fecha">✏️</button>`
+              : ''}</span>`;
       return `
       <div class="abono-item">
         <span class="abono-datos">ACUENTA ${i + 1}: <strong>${formatoMonto(a.monto)}</strong>
-          <span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}</span>
+          ${fechaHtml}
           ${constancia}</span>
         ${a.firma ? `<img src="${a.firma}" class="firma-mini" alt="Firma" data-ver-firma-form="${i}" title="Ver la firma del cliente">` : ''}
         ${puedeQuitar
@@ -1974,6 +2027,7 @@ function renderAbonos() {
 }
 
 function abrirNuevoAbono() {
+  abonoFechaEditando = null;
   const monto = Number($('#f-monto').value) || 0;
   const abonado = abonosActuales.reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const saldo = Math.max(0, monto - abonado);
@@ -1990,7 +2044,7 @@ async function confirmarNuevoAbono() {
   if (!monto || monto <= 0) { toast('⚠️ Escribe un monto válido para el pago'); return; }
   const fecha = $('#abono-fecha').value || hoyISO();
 
-  if (!hojaExiste(fecha)) {
+  if (!esAdmin() && !hojaExiste(fecha)) {
     toast(puede('hojaCrear')
       ? `📋 Primero crea la hoja de cobranza del ${formatoFecha(fecha)}`
       : `📋 La hoja de cobranza del ${formatoFecha(fecha)} aún no existe`);
@@ -2669,6 +2723,9 @@ function inicializarEventos() {
     const verFirma = ev.target.closest('[data-ver-firma]');
     const verFotoInfo = ev.target.closest('[data-ver-foto-info]');
     const quitarAbono = ev.target.closest('[data-quitar-abono]');
+    const editarFecha = ev.target.closest('[data-editar-fecha]');
+    const confirmarFecha = ev.target.closest('[data-confirmar-fecha]');
+    const cancelarFecha = ev.target.closest('[data-cancelar-fecha]');
     if (info) {
       const c = creditos.find(x => x.id === info.dataset.info);
       if (c) abrirInfo(c);
@@ -2696,6 +2753,12 @@ function inicializarEventos() {
       borrarCredito(borrar.dataset.borrar);
     } else if (quitarAbono) {
       quitarAbonoConCodigo(Number(quitarAbono.dataset.quitarAbono));
+    } else if (editarFecha) {
+      iniciarEdicionFechaAbono(Number(editarFecha.dataset.editarFecha));
+    } else if (confirmarFecha) {
+      confirmarEdicionFechaAbono(Number(confirmarFecha.dataset.confirmarFecha));
+    } else if (cancelarFecha) {
+      cancelarEdicionFechaAbono();
     } else if (verFoto) {
       const c = creditos.find(x => x.id === verFoto.dataset.verFoto);
       if (c && c.foto) abrirVisorImagen(c);

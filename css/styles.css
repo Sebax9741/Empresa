@@ -691,6 +691,11 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-size: 1rem;
   padding: 0 0.2rem;
 }
+.abono-item .btn-fecha-editar { color: var(--primary); font-size: 0.85rem; }
+.abono-fecha-edit { display: inline-flex; align-items: center; gap: 0.3rem; }
+.abono-fecha-edit .input-mini { width: auto; margin: 0; padding: 0.15rem 0.35rem; font-size: 0.82rem; }
+.abono-fecha-edit button[data-confirmar-fecha] { color: var(--ok); }
+.abono-fecha-edit button[data-cancelar-fecha] { color: var(--gray); }
 .abonos-vacio { color: var(--gray); font-size: 0.88rem; margin: 0 0 0.6rem; }
 .abono-nuevo { border-top: 1px dashed var(--border); padding-top: 0.6rem; margin-bottom: 0.6rem; }
 .abono-nuevo-btns { display: flex; justify-content: flex-end; gap: 0.5rem; }
