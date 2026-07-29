@@ -17,6 +17,8 @@ let modoNube = false;
 let fb = null;            // SDK y referencias de Firebase
 let unsubSnapshot = null; // cancela la suscripción en tiempo real
 let unsubClientes = null; // suscripción en tiempo real de la lista de clientes
+let unsubAjustes = null;  // suscripción a la configuración del negocio
+let unsubSeguridad = null; // suscripción al código de seguridad
 let migracionRevisada = false;
 let ownerUid = null;      // dónde viven los datos del negocio (dueño)
 let yo = null;            // membresía del usuario actual: { usuario, nombre, rol, permisos }
@@ -185,7 +187,14 @@ function banner(msg) {
   else { el.hidden = true; }
 }
 
-/* ====== Configuración ====== */
+/* ====== Configuración ======
+   Los ajustes del negocio (días de crédito, moneda y atajos) viven en la
+   nube: los pone el administrador y valen para todos los dispositivos y
+   todos los usuarios. Además quedan copiados en este dispositivo, para
+   que la app funcione igual sin internet.
+   El aviso de vencimiento es de cada dispositivo, así que no se sube. */
+const CLAVES_NEGOCIO = ['dias', 'moneda', 'atajo1', 'atajo2'];
+
 function cargarSettings() {
   try {
     const guardado = JSON.parse(localStorage.getItem('creditos-settings'));
@@ -193,8 +202,28 @@ function cargarSettings() {
   } catch (e) { /* usar valores por defecto */ }
 }
 
-function guardarSettings() {
+/* Guarda en el dispositivo y, si eres administrador, también en la nube */
+async function guardarSettings() {
   localStorage.setItem('creditos-settings', JSON.stringify(settings));
+  if (modoNube && esAdmin()) {
+    const datos = {};
+    for (const k of CLAVES_NEGOCIO) datos[k] = settings[k];
+    datos.actualizado = Date.now();
+    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'ajustes'), datos);
+  }
+}
+
+/* Aplica los ajustes que llegan de la nube */
+function aplicarAjustesNube(datos) {
+  if (!datos) return;
+  let cambio = false;
+  for (const k of CLAVES_NEGOCIO) {
+    if (datos[k] !== undefined && datos[k] !== settings[k]) { settings[k] = datos[k]; cambio = true; }
+  }
+  if (!cambio) return;
+  localStorage.setItem('creditos-settings', JSON.stringify(settings));
+  actualizarAtajosVenc();
+  render();
 }
 
 /* ====== Almacenamiento: nube o local ====== */
@@ -326,13 +355,16 @@ async function sesionIniciada(usuario) {
   $('#cuenta-email').textContent = `${yo.usuario}${esAdmin() ? ' (administrador)' : ''}`;
   banner(null);
   aplicarPermisos();
-  await cargarSeguridad();
+  cargarSeguridad();        // copia local mientras llega la de la nube
+  suscribirConfigNube();
   suscribirNube();
 }
 
 function sesionCerrada() {
   if (unsubSnapshot) { unsubSnapshot(); unsubSnapshot = null; }
   if (unsubClientes) { unsubClientes(); unsubClientes = null; }
+  if (unsubAjustes) { unsubAjustes(); unsubAjustes = null; }
+  if (unsubSeguridad) { unsubSeguridad(); unsubSeguridad = null; }
   creditos = [];
   clientes = [];
   ownerUid = null;
@@ -803,25 +835,50 @@ async function huellaPin(pin, sal) {
   return 'simple' + (h >>> 0).toString(16);
 }
 
-async function cargarSeguridad() {
-  if (modoNube) {
-    try {
-      const snap = await fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'seguridad'));
-      seguridad = snap.exists() ? snap.data() : { pinHash: '', sal: '' };
-    } catch (e) { seguridad = { pinHash: '', sal: '' }; }
-  } else {
-    try { seguridad = JSON.parse(localStorage.getItem('creditos-seguridad')) || { pinHash: '', sal: '' }; }
-    catch (e) { seguridad = { pinHash: '', sal: '' }; }
-  }
+/* Lee la copia guardada en este dispositivo. En modo nube, la suscripción
+   la reemplaza enseguida por la de la nube; si la nube no responde, esta
+   copia evita quedarse sin código. */
+function cargarSeguridad() {
+  try { seguridad = JSON.parse(localStorage.getItem('creditos-seguridad')) || { pinHash: '', sal: '' }; }
+  catch (e) { seguridad = { pinHash: '', sal: '' }; }
   actualizarEstadoPin();
 }
 
 async function guardarSeguridad() {
+  // Primero la copia local: así el código nunca se pierde en este dispositivo
+  localStorage.setItem('creditos-seguridad', JSON.stringify(seguridad));
   if (modoNube) {
     await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'seguridad'), seguridad);
-  } else {
-    localStorage.setItem('creditos-seguridad', JSON.stringify(seguridad));
   }
+}
+
+/* Escucha la configuración de la nube (ajustes y código) en tiempo real */
+function suscribirConfigNube() {
+  if (unsubAjustes) unsubAjustes();
+  unsubAjustes = fb.onSnapshot(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'ajustes'), snap => {
+    if (snap.exists()) aplicarAjustesNube(snap.data());
+    else if (esAdmin()) guardarSettings().catch(() => {});   // primera vez: sube los de este equipo
+  }, err => {
+    console.error('No se pudo leer la configuración:', err);
+    avisarConfigSinNube();
+  });
+
+  if (unsubSeguridad) unsubSeguridad();
+  unsubSeguridad = fb.onSnapshot(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'seguridad'), snap => {
+    seguridad = snap.exists() ? snap.data() : { pinHash: '', sal: '' };
+    localStorage.setItem('creditos-seguridad', JSON.stringify(seguridad));
+    actualizarEstadoPin();
+  }, err => {
+    console.error('No se pudo leer el código de seguridad:', err);
+    cargarSeguridad();          // se usa la copia de este dispositivo
+    avisarConfigSinNube();
+  });
+}
+
+/* Aviso claro cuando faltan las reglas de Firestore por publicar */
+function avisarConfigSinNube() {
+  banner('⚠️ La configuración y el código de seguridad no se están guardando en la nube. ' +
+         'Publica las reglas de Firestore (archivo firestore.rules del repositorio) en Firebase → Firestore → Reglas.');
 }
 
 /* Pide el código y devuelve true solo si es correcto.
@@ -897,13 +954,14 @@ async function guardarPin() {
   seguridad = { pinHash: await huellaPin(nuevo, sal), sal, actualizado: Date.now() };
   try {
     await guardarSeguridad();
+    toast('🔒 Código de seguridad guardado');
   } catch (e) {
+    // El código ya quedó guardado en este dispositivo; solo falló la nube
     console.error(e);
-    toast('❌ No se pudo guardar el código. Revisa tu conexión.');
-    return;
+    avisarConfigSinNube();
+    toast('⚠️ Código guardado solo en este dispositivo');
   }
   actualizarEstadoPin();
-  toast('🔒 Código de seguridad guardado');
 }
 
 async function quitarPin() {
@@ -912,7 +970,7 @@ async function quitarPin() {
   if (huella !== seguridad.pinHash) { toast('⚠️ Escribe el código actual para quitarlo'); return; }
   if (!confirm('¿Quitar el código? Se podrá borrar sin pedirlo.')) return;
   seguridad = { pinHash: '', sal: '' };
-  try { await guardarSeguridad(); } catch (e) { toast('❌ No se pudo guardar. Revisa tu conexión.'); return; }
+  try { await guardarSeguridad(); } catch (e) { console.error(e); avisarConfigSinNube(); }
   actualizarEstadoPin();
   toast('🔓 Código quitado');
 }
@@ -1808,7 +1866,7 @@ async function importarRespaldo(file) {
       renderClientes();
       llenarSelectClientes();
     }
-    if (datos.settings) { settings = { ...settings, ...datos.settings }; guardarSettings(); }
+    if (datos.settings) { settings = { ...settings, ...datos.settings }; await guardarSettings().catch(() => {}); }
     render();
     toast('⬆️ Respaldo importado correctamente');
   } catch (e) {
@@ -2010,21 +2068,31 @@ function inicializarEventos() {
     $('#s-atajo1').value = settings.atajo1;
     $('#s-atajo2').value = settings.atajo2;
     actualizarEstadoPin();
+    // Los ajustes del negocio los define el administrador para todos
+    const soloAdmin = modoNube && !esAdmin();
+    ['s-dias', 's-moneda', 's-atajo1', 's-atajo2'].forEach(id => { $('#' + id).disabled = soloAdmin; });
+    $('#settings-nota-admin').hidden = !soloAdmin;
     $('#modal-settings').showModal();
   });
   $('#btn-settings-cerrar').addEventListener('click', () => $('#modal-settings').close());
-  $('#settings-form').addEventListener('submit', ev => {
+  $('#settings-form').addEventListener('submit', async ev => {
     ev.preventDefault();
     settings.dias = Math.max(1, Number($('#s-dias').value) || 30);
     settings.moneda = $('#s-moneda').value.trim() || '$';
     settings.avisos = $('#s-avisos').checked;
     settings.atajo1 = Math.min(365, Math.max(1, Number($('#s-atajo1').value) || 15));
     settings.atajo2 = Math.min(365, Math.max(1, Number($('#s-atajo2').value) || 45));
-    guardarSettings();
     actualizarAtajosVenc();
     $('#modal-settings').close();
     render();
-    toast('✅ Configuración guardada');
+    try {
+      await guardarSettings();
+      toast('✅ Configuración guardada');
+    } catch (e) {
+      console.error(e);
+      avisarConfigSinNube();
+      toast('⚠️ Guardada solo en este dispositivo');
+    }
   });
 
   // Código de seguridad
@@ -2070,7 +2138,7 @@ async function iniciarLocal() {
     creditos = [];
     clientes = [];
   }
-  await cargarSeguridad();
+  cargarSeguridad();
   llenarSelectClientes();
   renderClientes();
   render();
