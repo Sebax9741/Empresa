@@ -337,6 +337,7 @@
         <label class="u-perm"><input type="checkbox" id="u-perm-borrar"> Borrar créditos</label>
         <label class="u-perm"><input type="checkbox" id="u-perm-cobranza" checked> Ver/exportar cobranza</label>
         <label class="u-perm"><input type="checkbox" id="u-perm-clientes" checked> Registrar/editar clientes</label>
+        <label class="u-perm"><input type="checkbox" id="u-perm-hojaCrear"> Crear la hoja de cobranza del día</label>
       </div>
       <button type="submit" id="btn-u-crear" class="btn btn-primary btn-block">➕ Crear usuario</button>
     </form>
@@ -378,6 +379,11 @@
     <!-- Solo para quien tenga permiso de registrar pagos -->
     <div class="info-cobro" id="info-cobro" hidden>
       <h3 class="info-titulo">🧾 Registrar cobro</h3>
+
+      <p class="info-cobro-bloqueo" id="info-cobro-bloqueo" hidden></p>
+      <button type="button" id="btn-info-crear-hoja" class="btn btn-primary btn-small" hidden>➕ Crear hoja de cobranza de hoy</button>
+
+      <div id="info-cobro-form">
       <div class="field-row">
         <label class="field">
           <span>Monto cobrado *</span>
@@ -407,6 +413,7 @@
       </div>
 
       <button type="button" id="btn-registrar-cobro" class="btn btn-primary btn-block">✅ Registrar cobro</button>
+      </div>
     </div>
 
     <div class="modal-buttons">
@@ -499,6 +506,12 @@
       <select id="cob-dias" class="input cob-dias" aria-label="Días con cobros"></select>
       <button type="button" id="btn-cob-siguiente" class="btn btn-secondary btn-small" title="Día siguiente">▶</button>
       <button type="button" id="btn-cob-hoy" class="btn btn-secondary btn-small">Hoy</button>
+    </div>
+
+    <div class="cob-estado" id="cob-estado" hidden>
+      <span class="cob-estado-badge" id="cob-estado-badge"></span>
+      <button type="button" id="btn-hoja-crear" class="btn btn-primary btn-small" hidden>➕ Crear hoja de este día</button>
+      <button type="button" id="btn-hoja-cerrar" class="btn btn-danger btn-small" hidden>🔒 Cerrar hoja del día</button>
     </div>
 
     <p class="cob-resumen" id="cob-resumen"></p>

@@ -1036,6 +1036,35 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .cob-nav { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; }
 .cob-dias { flex: 1; min-width: 0; margin: 0; font-size: 0.86rem; }
 .cob-resumen { color: var(--muted); font-size: 0.84rem; margin: 0 0 0.6rem; font-weight: 600; }
+
+/* Estado de la hoja: sin crear / abierta / cerrada */
+.cob-estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.cob-estado-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+}
+.cob-estado-sin-crear { background: #fef3c7; color: #92400e; }
+.cob-estado-abierta { background: #dcfce7; color: #166534; }
+.cob-estado-cerrada { background: #fee2e2; color: #991b1b; }
+
+/* Bloqueo del cobro en la ficha de información (hoja no creada / cerrada) */
+.info-cobro-bloqueo {
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: var(--radius);
+  padding: 0.6rem 0.8rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  margin: 0 0 0.6rem;
+}
 .cob-fila { cursor: pointer; }
 .cob-fila:hover { background: var(--bg-tint); }
 .cob-codigo {

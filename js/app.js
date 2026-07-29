@@ -3,6 +3,7 @@ import { descargarXlsx } from './xlsx-lite.js';
 /* ====== Estado global ====== */
 let creditos = [];
 let clientes = [];        // base de datos de clientes: { id, nombre, zona, direccion, telefono, notas, creado }
+let hojas = [];           // hojas de cobranza creadas: { fecha, creada, creadaPor, creadaEn, cerrada, cerradaPor, cerradaEn }
 let settings = {
   dias: 30,
   moneda: '$',
@@ -19,6 +20,7 @@ let unsubSnapshot = null; // cancela la suscripción en tiempo real
 let unsubClientes = null; // suscripción en tiempo real de la lista de clientes
 let unsubAjustes = null;  // suscripción a la configuración del negocio
 let unsubSeguridad = null; // suscripción al código de seguridad
+let unsubHojas = null;    // suscripción a las hojas de cobranza creadas
 let migracionRevisada = false;
 let ownerUid = null;      // dónde viven los datos del negocio (dueño)
 let yo = null;            // membresía del usuario actual: { usuario, nombre, rol, permisos }
@@ -31,7 +33,7 @@ function usuarioAEmail(entrada) {
 }
 
 /* Permisos del usuario actual */
-const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true, clientes: true };
+const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true, clientes: true, hojaCrear: true };
 function esAdmin() { return modoNube && !!(yo && yo.rol === 'admin'); }
 function puede(nombre) {
   if (!modoNube) return true;         // modo local: un solo dueño, todo permitido
@@ -94,10 +96,13 @@ function abonosDe(c) { return Array.isArray(c.abonos) ? c.abonos : []; }
 function quienSoy() { return (modoNube && yo && yo.usuario) ? yo.usuario : 'dueño'; }
 
 /* Un empleado solo puede quitar una "a cuenta" que él mismo registró HOY.
-   Las de días anteriores quedan bloqueadas: solo el administrador las toca. */
+   Las de días anteriores quedan bloqueadas: solo el administrador las toca.
+   Si la hoja de cobranza de ese día ya está cerrada, ni el empleado puede
+   tocarla: solo el administrador, y usando su código de seguridad. */
 function puedeQuitarAbono(a) {
   if (!modoNube) return true;              // modo local: un solo dueño
   if (esAdmin()) return true;
+  if (a && a.fecha && hojaCerrada(a.fecha)) return false;
   if (!a || !a.registradoFecha) return false;   // "a cuenta" antigua: solo el admin
   return a.registradoFecha === hoyISO() && a.registradoPor === quienSoy();
 }
@@ -153,6 +158,73 @@ function textoVencimiento(c) {
   return fecha;
 }
 
+/* ====== Hojas de cobranza: crear / cerrar ======
+   La hoja de un día no existe sola: alguien con permiso tiene que crearla
+   (normalmente el empleado, al empezar su día). Al terminar el día, el
+   administrador la cierra: desde ahí ya no se puede agregar ni quitar
+   ningún cobro de esa fecha sin su código de seguridad.
+   En modo local (un solo dueño) esto no aplica: todo está permitido siempre. */
+function hojaDe(fechaISO) {
+  return hojas.find(h => h.fecha === fechaISO) || null;
+}
+function hojaExiste(fechaISO) {
+  if (!modoNube) return true;
+  return !!hojaDe(fechaISO);
+}
+function hojaCerrada(fechaISO) {
+  if (!modoNube) return false;
+  const h = hojaDe(fechaISO);
+  return !!(h && h.cerrada);
+}
+function fechaDeTimestamp(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function crearHojaCobranza(fechaISO) {
+  if (!puede('hojaCrear')) { toast('🔒 No tienes permiso para crear la hoja de cobranza'); return; }
+  if (hojaDe(fechaISO)) { toast('Esa hoja ya existe'); return; }
+  const hoja = {
+    fecha: fechaISO,
+    creada: true,
+    creadaPor: quienSoy(),
+    creadaEn: Date.now(),
+    cerrada: false,
+    cerradaPor: null,
+    cerradaEn: null,
+  };
+  try {
+    await guardarHojaEnStore(hoja);
+    const i = hojas.findIndex(h => h.fecha === fechaISO);
+    if (i >= 0) hojas[i] = hoja; else hojas.push(hoja);
+    renderCobranza();
+    toast(`✅ Hoja de cobranza del ${formatoFecha(fechaISO)} creada`);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo crear la hoja de cobranza');
+  }
+}
+
+async function cerrarHojaCobranza(fechaISO) {
+  if (!esAdmin()) { toast('🔒 Solo el administrador puede cerrar la hoja de cobranza'); return; }
+  const h = hojaDe(fechaISO);
+  if (!h) { toast('Esta hoja todavía no se ha creado'); return; }
+  if (h.cerrada) { toast('Esta hoja ya está cerrada'); return; }
+  if (!confirm(`¿Cerrar la hoja de cobranza del ${formatoFecha(fechaISO)}?\nYa no se podrá agregar ni quitar cobros de ese día sin tu código de seguridad.`)) return;
+  const actualizado = { ...h, cerrada: true, cerradaPor: quienSoy(), cerradaEn: Date.now() };
+  try {
+    await guardarHojaEnStore(actualizado);
+    const i = hojas.findIndex(x => x.fecha === fechaISO);
+    if (i >= 0) hojas[i] = actualizado;
+    renderCobranza();
+    toast(`🔒 Hoja de cobranza del ${formatoFecha(fechaISO)} cerrada`);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo cerrar la hoja de cobranza');
+  }
+}
+
 /* Arma la hoja de cobranza de un día: todos los pagos "a cuenta" con esa fecha,
    de todas las boletas, con sus totales por método (efectivo / Yape / BCP). */
 /* La hoja de cobranza de un día: todos los pagos "a cuenta" hechos esa
@@ -193,7 +265,8 @@ function hojaCobranza(lista, fechaISO, codigoHoja = '') {
   return { filas, totales, codigoHoja };
 }
 
-/* Todos los días que tienen cobros, del más reciente al más antiguo */
+/* Todos los días que tienen cobros, del más reciente al más antiguo.
+   Incluye también las hojas ya creadas aunque todavía no tengan cobros. */
 function diasConCobros(lista) {
   const dias = new Map();
   for (const c of lista) {
@@ -204,6 +277,9 @@ function diasConCobros(lista) {
       d.total += Number(a.monto) || 0;
       dias.set(a.fecha, d);
     }
+  }
+  for (const h of hojas) {
+    if (!dias.has(h.fecha)) dias.set(h.fecha, { fecha: h.fecha, pagos: 0, total: 0 });
   }
   const resultado = [...dias.values()].sort((x, y) => y.fecha.localeCompare(x.fecha));
   // Asignar código HC a cada día (HC001, HC002, etc.)
@@ -294,6 +370,14 @@ async function guardarClienteEnStore(cliente) {
     await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'clientes', cliente.id), cliente);
   } else {
     await DB.putCliente(cliente);
+  }
+}
+
+/* Las hojas de cobranza (creada/cerrada) solo existen como concepto en modo
+   nube: en modo local hay un solo dueño y todo está permitido siempre. */
+async function guardarHojaEnStore(hoja) {
+  if (modoNube) {
+    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'hojas', hoja.fecha), hoja);
   }
 }
 
@@ -406,8 +490,10 @@ function sesionCerrada() {
   if (unsubClientes) { unsubClientes(); unsubClientes = null; }
   if (unsubAjustes) { unsubAjustes(); unsubAjustes = null; }
   if (unsubSeguridad) { unsubSeguridad(); unsubSeguridad = null; }
+  if (unsubHojas) { unsubHojas(); unsubHojas = null; }
   creditos = [];
   clientes = [];
+  hojas = [];
   ownerUid = null;
   yo = null;
   migracionRevisada = false;
@@ -445,6 +531,14 @@ function suscribirNube() {
     llenarSelectClientes($('#f-cliente').value);
   }, err => {
     console.error('Error al sincronizar clientes:', err);
+  });
+
+  if (unsubHojas) unsubHojas();
+  unsubHojas = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'hojas'), snap => {
+    hojas = snap.docs.map(d => d.data());
+    if ($('#modal-cobranza').open) renderCobranza();
+  }, err => {
+    console.error('Error al sincronizar las hojas de cobranza:', err);
   });
 }
 
@@ -522,6 +616,7 @@ const PERMISOS_LISTA = [
   ['borrar', 'Borrar créditos'],
   ['cobranza', 'Ver/exportar cobranza'],
   ['clientes', 'Registrar/editar clientes'],
+  ['hojaCrear', 'Crear la hoja de cobranza del día'],
 ];
 
 async function abrirUsuarios() {
@@ -1623,6 +1718,27 @@ function renderInfo() {
   if (puedeCobrar) {
     $('#cobro-fecha').value = hoyISO();      // siempre hoy y bloqueada
     $('#btn-cobro-todo').textContent = `Saldar todo lo que debe (${formatoMonto(debe)})`;
+
+    // La hoja de cobranza de hoy tiene que existir (y no estar cerrada) para poder cobrar
+    const hoy = hoyISO();
+    const bloqueo = $('#info-cobro-bloqueo');
+    const btnCrearHoja = $('#btn-info-crear-hoja');
+    let bloqueado = false;
+    if (!hojaExiste(hoy)) {
+      bloqueado = true;
+      bloqueo.textContent = puede('hojaCrear')
+        ? '📋 Todavía no se ha creado la hoja de cobranza de hoy.'
+        : '📋 Todavía no se ha creado la hoja de cobranza de hoy. Pide que la creen.';
+      btnCrearHoja.hidden = !puede('hojaCrear');
+    } else if (hojaCerrada(hoy) && !esAdmin()) {
+      bloqueado = true;
+      bloqueo.textContent = '🔒 La hoja de cobranza de hoy ya está cerrada.';
+      btnCrearHoja.hidden = true;
+    } else {
+      btnCrearHoja.hidden = true;
+    }
+    bloqueo.hidden = !bloqueado;
+    $('#info-cobro-form').hidden = bloqueado;
   }
 }
 
@@ -1639,6 +1755,19 @@ async function registrarCobro() {
   const c = creditos.find(x => x.id === infoCreditoId);
   if (!c) return;
   if (!puede('pagos')) { toast('🔒 No tienes permiso para registrar pagos'); return; }
+
+  const hoy = hoyISO();
+  if (!hojaExiste(hoy)) {
+    toast(puede('hojaCrear')
+      ? '📋 Primero crea la hoja de cobranza de hoy'
+      : '📋 La hoja de cobranza de hoy aún no existe. Pide que la creen.');
+    return;
+  }
+  if (hojaCerrada(hoy)) {
+    if (!esAdmin()) { toast('🔒 La hoja de cobranza de hoy ya está cerrada'); return; }
+    const autorizado = await pedirPin('La hoja de cobranza de hoy ya está cerrada. Escribe tu código para registrar este cobro de todos modos.');
+    if (!autorizado) { toast('🔒 Cobro cancelado'); return; }
+  }
 
   const monto = Number($('#cobro-monto').value);
   const debe = saldoDe(c);
@@ -1790,11 +1919,16 @@ async function quitarAbonoConCodigo(indice) {
   const a = abonosActuales[indice];
   if (!a) return;
   if (!puedeQuitarAbono(a)) {
-    toast('🔒 Solo el administrador puede quitar pagos de otros días');
+    toast(a.fecha && hojaCerrada(a.fecha)
+      ? '🔒 La hoja de cobranza de ese día ya está cerrada'
+      : '🔒 Solo el administrador puede quitar pagos de otros días');
     return;
   }
-  const autorizado = await pedirPin(
-    `Vas a borrar la ACUENTA ${indice + 1} de ${formatoMonto(a.monto)} (${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'}).`);
+  const cerrada = a.fecha && hojaCerrada(a.fecha);
+  const motivo = cerrada
+    ? `Vas a borrar la ACUENTA ${indice + 1} de ${formatoMonto(a.monto)} (${formatoFecha(a.fecha)}). La hoja de ese día ya está cerrada.`
+    : `Vas a borrar la ACUENTA ${indice + 1} de ${formatoMonto(a.monto)} (${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'}).`;
+  const autorizado = await pedirPin(motivo);
   if (!autorizado) { toast('🔒 Borrado cancelado'); return; }
   abonosActuales.splice(indice, 1);
   renderAbonos();
@@ -1851,12 +1985,26 @@ function abrirNuevoAbono() {
   $('#abono-monto').focus();
 }
 
-function confirmarNuevoAbono() {
+async function confirmarNuevoAbono() {
   const monto = Number($('#abono-monto').value);
   if (!monto || monto <= 0) { toast('⚠️ Escribe un monto válido para el pago'); return; }
+  const fecha = $('#abono-fecha').value || hoyISO();
+
+  if (!hojaExiste(fecha)) {
+    toast(puede('hojaCrear')
+      ? `📋 Primero crea la hoja de cobranza del ${formatoFecha(fecha)}`
+      : `📋 La hoja de cobranza del ${formatoFecha(fecha)} aún no existe`);
+    return;
+  }
+  if (hojaCerrada(fecha)) {
+    if (!esAdmin()) { toast('🔒 Esa hoja de cobranza ya está cerrada'); return; }
+    const autorizado = await pedirPin(`La hoja de cobranza del ${formatoFecha(fecha)} ya está cerrada. Escribe tu código para agregar este pago de todos modos.`);
+    if (!autorizado) { toast('🔒 Cancelado'); return; }
+  }
+
   abonosActuales.push({
     monto,
-    fecha: $('#abono-fecha').value || hoyISO(),
+    fecha,
     metodo: $('#abono-metodo').value,
     // Constancia automática: quién lo registró y en qué día/hora real
     registradoPor: quienSoy(),
@@ -1999,11 +2147,41 @@ function abrirCobranza() {
   $('#modal-cobranza').showModal();
 }
 
+/* Muestra si la hoja del día está creada, abierta o cerrada, y los
+   botones para crearla (según permiso) o cerrarla (solo administrador). */
+function renderEstadoHoja(fecha) {
+  const cont = $('#cob-estado');
+  if (!modoNube) { cont.hidden = true; return; }
+  cont.hidden = false;
+
+  const badge = $('#cob-estado-badge');
+  const btnCrear = $('#btn-hoja-crear');
+  const btnCerrar = $('#btn-hoja-cerrar');
+  btnCrear.hidden = true;
+  btnCerrar.hidden = true;
+
+  const h = hojaDe(fecha);
+  if (!h) {
+    badge.textContent = '⚠️ Esta hoja aún no se ha creado';
+    badge.className = 'cob-estado-badge cob-estado-sin-crear';
+    btnCrear.hidden = !puede('hojaCrear');
+  } else if (h.cerrada) {
+    const cuando = h.cerradaEn ? formatoFecha(fechaDeTimestamp(h.cerradaEn)) : '';
+    badge.textContent = `🔒 Cerrada por ${h.cerradaPor || '—'}${cuando ? ' el ' + cuando : ''}`;
+    badge.className = 'cob-estado-badge cob-estado-cerrada';
+  } else {
+    badge.textContent = `🟢 Abierta — creada por ${h.creadaPor || '—'}`;
+    badge.className = 'cob-estado-badge cob-estado-abierta';
+    btnCerrar.hidden = !esAdmin();
+  }
+}
+
 function renderCobranza() {
   const fecha = $('#cob-fecha').value || hoyISO();
   const dias = diasConCobros(creditos);
   const diaInfo = dias.find(d => d.fecha === fecha) || { codigo: 'HC—' };
   const { filas, totales } = hojaCobranza(creditos, fecha, diaInfo.codigo);
+  renderEstadoHoja(fecha);
 
   $('#cob-totales').innerHTML = `
     <div class="cob-total-card"><span class="et">💵 Efectivo</span><span class="val">${formatoMonto(totales.efectivo)}</span></div>
@@ -2541,6 +2719,8 @@ function inicializarEventos() {
   $('#btn-cob-cerrar').addEventListener('click', () => $('#modal-cobranza').close());
   $('#btn-cob-excel').addEventListener('click', exportarCobranzaExcel);
   $('#btn-cob-imprimir').addEventListener('click', imprimirCobranza);
+  $('#btn-hoja-crear').addEventListener('click', () => crearHojaCobranza($('#cob-fecha').value || hoyISO()));
+  $('#btn-hoja-cerrar').addEventListener('click', () => cerrarHojaCobranza($('#cob-fecha').value || hoyISO()));
 
   // Configuración
   $('#btn-settings').addEventListener('click', () => {
@@ -2584,6 +2764,10 @@ function inicializarEventos() {
   $('#btn-cobro-todo').addEventListener('click', () => {
     const c = creditos.find(x => x.id === infoCreditoId);
     if (c) $('#cobro-monto').value = saldoDe(c);
+  });
+  $('#btn-info-crear-hoja').addEventListener('click', async () => {
+    await crearHojaCobranza(hoyISO());
+    renderInfo();
   });
 
   // Lienzo de la firma: lápiz táctil, dedo o mouse
