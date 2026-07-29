@@ -426,6 +426,55 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
 .field-row .field { margin-bottom: 0.85rem; }
 
+/* Selector de cliente en el formulario de crédito */
+.cliente-picker { display: flex; gap: 0.4rem; align-items: center; }
+.cliente-picker .input { flex: 1; min-width: 0; }
+.cliente-picker .btn { white-space: nowrap; flex-shrink: 0; }
+.cliente-ayuda { display: block; margin-top: 0.25rem; color: var(--muted); font-size: 0.78rem; }
+
+/* Modal de clientes */
+.modal-clientes { max-width: 640px; }
+.cli-nuevo {
+  background: var(--bg-tint);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem;
+  margin-bottom: 1rem;
+}
+.cli-nuevo h3 { margin: 0 0 0.6rem; font-size: 0.95rem; }
+.cli-form-botones { display: flex; gap: 0.5rem; }
+.cli-lista-cab { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.cli-lista-cab h3 { margin: 0; font-size: 0.95rem; flex: 1; }
+.cli-contador { color: var(--muted); font-weight: 400; }
+.cli-buscar { width: auto; min-width: 190px; margin: 0; padding: 0.4rem 0.7rem; font-size: 0.86rem; }
+
+.clientes-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 45vh; overflow-y: auto; }
+.cliente-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.cliente-datos { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; }
+.cliente-datos strong { font-size: 0.94rem; }
+.cliente-zona {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  padding: 0.08rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+.cliente-meta { flex-basis: 100%; color: var(--muted); font-size: 0.78rem; }
+.cliente-acciones { display: flex; gap: 0.3rem; flex-shrink: 0; }
+
+@media (max-width: 520px) {
+  .cli-buscar { width: 100%; }
+}
+
 /* Atajos rápidos de vencimiento */
 .atajos-venc { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; }
 .atajos-label { flex-basis: 100%; font-size: 0.78rem; color: var(--muted); font-weight: 600; margin-bottom: 0.1rem; }

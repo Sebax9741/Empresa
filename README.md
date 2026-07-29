@@ -5,16 +5,17 @@ Aplicación para controlar los créditos que le das a tus clientes de distribuci
 ## ¿Qué hace?
 
 - 📋 Lista de créditos con: **Nro de boleta, cliente, zona, monto total, saldo, vencimiento y estado**
-- 📍 **Zona** al crear (MODELO, 3 DE MAYO, CIUDAD, MILAGROS, CARRETERA, PADRE ALDAMIZ, ALAMEDA)
+- 🧑‍🤝‍🧑 **Base de datos de clientes** (botón 🧑‍🤝‍🧑): registra cada cliente **una sola vez** con su zona (y teléfono/nota opcionales). Al crear un crédito **eliges el cliente de la lista y su zona se pone sola**, así el mismo cliente nunca queda escrito de dos formas distintas. Si cambias su nombre o zona, **sus créditos se actualizan solos**. El botón **"📥 Importar desde mis créditos"** crea la lista a partir de los créditos que ya tienes y **une las variantes** del mismo nombre (mayúsculas, tildes, espacios de más)
+- 📍 **Zona** del cliente (MODELO, 3 DE MAYO, CIUDAD, MILAGROS, CARRETERA, PADRE ALDAMIZ, ALAMEDA)
 - 💵 **Pago inicial** al crear y **"Agregar a cuenta"** al editar: registra los adelantos (hasta 8), cada uno con su **fecha** y **método** (💵 Efectivo / 📱 Yape / 🏦 BCP); el **saldo** y el estado (pendiente/parcial/pagado) se calculan solos
 - 🧾 **Hoja de cobranza** (botón 🧾): elige un día y ves todo lo cobrado esa fecha con los **totales de Efectivo, Yape y BCP** y el total general; se puede **imprimir** o **exportar a Excel**
-- 📅 **Vencimiento automático** (emisión + días configurables en ⚙️), pero **editable**
+- 📅 **Vencimiento automático** (emisión + días configurables en ⚙️), pero **editable**, con **2 botones de atajo** (+X días) que configuras en ⚙️
 - 🧮 **Panel "Filtrar"** con casillas combinables: por **estado**, por **zona**, por **mes** (Ene–Dic) y por **rango de fechas**, todo junto
 - 🔀 **Ordena** por vencimiento, boleta, cliente, zona, total, saldo o fecha
 - 🏷️ Estados: Pendiente, Pago parcial, Pagado — y marca **Vencido automáticamente** al pasar la fecha
 - 📷 **Foto de la boleta física** (cámara o galería) en alta calidad; se ve **a pantalla completa** y se puede **descargar**
 - ☁️ **Nube en tiempo real**: entra con tu usuario y contraseña en todos tus dispositivos a la vez (varias sesiones activas) y todos ven los mismos datos
-- 👥 **Usuarios y permisos**: solo el administrador crea usuarios (con contraseña, sin correo); a cada uno le das o le quitas permisos (crear, editar, registrar pagos, **borrar**, ver/exportar cobranza). El acceso a los datos y el borrado quedan blindados en la base de datos
+- 👥 **Usuarios y permisos**: solo el administrador crea usuarios (con contraseña, sin correo); a cada uno le das o le quitas permisos (crear, editar, registrar pagos, **borrar**, ver/exportar cobranza, registrar/editar clientes). El acceso a los datos y el borrado quedan blindados en la base de datos
 - 📶 Funciona **sin internet**: los cambios se guardan y se sincronizan solos al volver la conexión
 - 🔔 **Avisos de vencimiento**: en Android te llega una notificación el día que vence un crédito, aunque la app esté cerrada. En iPhone/PC, al abrir la app te avisa cuántos vencen hoy o están vencidos. Se puede activar/desactivar en ⚙️.
 - 📊 Resumen: por cobrar, cobrado, activos y vencidos

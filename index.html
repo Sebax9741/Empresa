@@ -40,6 +40,7 @@
     <div class="header-inner">
       <h1>💳 Control de Créditos</h1>
       <div class="header-actions">
+        <button id="btn-clientes" class="btn-icon" title="Clientes" aria-label="Clientes">🧑‍🤝‍🧑</button>
         <button id="btn-usuarios" class="btn-icon" title="Usuarios" aria-label="Usuarios" hidden>👥</button>
         <button id="btn-cobranza" class="btn-icon" title="Hoja de cobranza" aria-label="Hoja de cobranza">🧾</button>
         <button id="btn-settings" class="btn-icon" title="Configuración" aria-label="Configuración">⚙️</button>
@@ -167,14 +168,17 @@
         <input type="text" id="f-boleta" class="input" required inputmode="numeric" placeholder="Ej: 001234">
       </label>
 
-      <label class="field">
-        <span>Nombre del cliente *</span>
-        <input type="text" id="f-cliente" class="input" required placeholder="Ej: Almacén Doña Rosa" list="clientes-list">
-        <datalist id="clientes-list"></datalist>
-      </label>
+      <div class="field">
+        <span class="field-label">Cliente *</span>
+        <div class="cliente-picker">
+          <select id="f-cliente" class="input" required></select>
+          <button type="button" id="btn-cliente-nuevo" class="btn btn-secondary btn-small" title="Registrar un cliente nuevo">➕ Nuevo</button>
+        </div>
+        <small id="f-cliente-ayuda" class="cliente-ayuda"></small>
+      </div>
 
       <label class="field">
-        <span>Zona</span>
+        <span>Zona <small id="f-zona-nota"></small></span>
         <select id="f-zona" class="input"></select>
       </label>
 
@@ -302,6 +306,7 @@
         <label class="u-perm"><input type="checkbox" id="u-perm-pagos" checked> Registrar pagos</label>
         <label class="u-perm"><input type="checkbox" id="u-perm-borrar"> Borrar créditos</label>
         <label class="u-perm"><input type="checkbox" id="u-perm-cobranza" checked> Ver/exportar cobranza</label>
+        <label class="u-perm"><input type="checkbox" id="u-perm-clientes" checked> Registrar/editar clientes</label>
       </div>
       <button type="submit" id="btn-u-crear" class="btn btn-primary btn-block">➕ Crear usuario</button>
     </form>
@@ -311,6 +316,43 @@
 
     <div class="modal-buttons">
       <button type="button" id="btn-usuarios-cerrar" class="btn btn-secondary">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Modal: Clientes (base de datos de clientes con su zona) -->
+  <dialog id="modal-clientes" class="modal modal-clientes">
+    <h2>🧑‍🤝‍🧑 Clientes</h2>
+
+    <form id="cli-form" class="cli-nuevo">
+      <h3 id="cli-form-title">Registrar cliente</h3>
+      <input type="hidden" id="cli-id">
+      <div class="field-row">
+        <label class="field"><span>Nombre del cliente *</span>
+          <input type="text" id="cli-nombre" class="input" required placeholder="Ej: Almacén Doña Rosa"></label>
+        <label class="field"><span>Zona *</span>
+          <select id="cli-zona" class="input" required></select></label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Teléfono <small>opcional</small></span>
+          <input type="tel" id="cli-telefono" class="input" inputmode="tel" placeholder="Ej: 987 654 321"></label>
+        <label class="field"><span>Nota <small>opcional</small></span>
+          <input type="text" id="cli-notas" class="input" placeholder="Ej: paga los viernes"></label>
+      </div>
+      <div class="cli-form-botones">
+        <button type="submit" id="btn-cli-guardar" class="btn btn-primary">💾 Guardar cliente</button>
+        <button type="button" id="btn-cli-cancelar" class="btn btn-secondary" hidden>Cancelar</button>
+      </div>
+    </form>
+
+    <div class="cli-lista-cab">
+      <h3>Clientes registrados <span id="cli-contador" class="cli-contador"></span></h3>
+      <input type="search" id="cli-buscar" class="input cli-buscar" placeholder="🔍 Buscar cliente…">
+    </div>
+    <div id="clientes-list" class="clientes-list"></div>
+
+    <div class="modal-buttons">
+      <button type="button" id="btn-cli-importar" class="btn btn-secondary">📥 Importar desde mis créditos</button>
+      <button type="button" id="btn-clientes-cerrar" class="btn btn-secondary">Cerrar</button>
     </div>
   </dialog>
 

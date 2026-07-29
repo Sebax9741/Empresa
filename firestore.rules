@@ -24,8 +24,10 @@ service cloud.firestore {
       function esAdmin() {
         return esMiembro() && miMembresia().rol == 'admin';
       }
+      // .get(nombre, false) evita errores con usuarios creados antes de que
+      // existiera un permiso nuevo (la clave simplemente no está en su ficha).
       function permiso(nombre) {
-        return esAdmin() || (esMiembro() && miMembresia().permisos[nombre] == true);
+        return esAdmin() || (esMiembro() && miMembresia().permisos.get(nombre, false) == true);
       }
 
       // Créditos del negocio (datos compartidos por el equipo)
@@ -34,6 +36,13 @@ service cloud.firestore {
         allow create: if permiso('crear');
         allow update: if permiso('editar') || permiso('pagos');
         allow delete: if permiso('borrar');
+      }
+
+      // Clientes del negocio (nombre + zona). Todos los miembros los pueden ver
+      // para elegirlos al crear un crédito; solo quien tenga el permiso los edita.
+      match /clientes/{docId} {
+        allow read: if esMiembro();
+        allow create, update, delete: if permiso('clientes') || permiso('crear');
       }
 
       // Miembros y sus permisos

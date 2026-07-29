@@ -2,6 +2,7 @@ import { descargarXlsx } from './xlsx-lite.js';
 
 /* ====== Estado global ====== */
 let creditos = [];
+let clientes = [];        // base de datos de clientes: { id, nombre, zona, telefono, notas, creado }
 let settings = {
   dias: 30,
   moneda: '$',
@@ -15,6 +16,7 @@ let vencimientoEditadoManual = false;
 let modoNube = false;
 let fb = null;            // SDK y referencias de Firebase
 let unsubSnapshot = null; // cancela la suscripción en tiempo real
+let unsubClientes = null; // suscripción en tiempo real de la lista de clientes
 let migracionRevisada = false;
 let ownerUid = null;      // dónde viven los datos del negocio (dueño)
 let yo = null;            // membresía del usuario actual: { usuario, nombre, rol, permisos }
@@ -27,12 +29,16 @@ function usuarioAEmail(entrada) {
 }
 
 /* Permisos del usuario actual */
-const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true };
+const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true, clientes: true };
 function esAdmin() { return modoNube && !!(yo && yo.rol === 'admin'); }
 function puede(nombre) {
   if (!modoNube) return true;         // modo local: un solo dueño, todo permitido
   if (yo && yo.rol === 'admin') return true;
-  return !!(yo && yo.permisos && yo.permisos[nombre]);
+  if (!yo || !yo.permisos) return false;
+  const valor = yo.permisos[nombre];
+  // Usuarios creados antes de que existiera el permiso "clientes": se rigen por "crear"
+  if (valor === undefined && nombre === 'clientes') return !!yo.permisos.crear;
+  return !!valor;
 }
 
 const EMULADOR = new URLSearchParams(location.search).has('emulador');
@@ -195,6 +201,22 @@ async function eliminarDeStore(id) {
   }
 }
 
+async function guardarClienteEnStore(cliente) {
+  if (modoNube) {
+    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'clientes', cliente.id), cliente);
+  } else {
+    await DB.putCliente(cliente);
+  }
+}
+
+async function eliminarClienteDeStore(id) {
+  if (modoNube) {
+    await fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'clientes', id));
+  } else {
+    await DB.deleteCliente(id);
+  }
+}
+
 /* ====== Firebase (modo nube) ====== */
 async function iniciarNube() {
   /* SDK empaquetado dentro de la app: funciona sin CDN y sin internet al arrancar */
@@ -291,7 +313,9 @@ async function sesionIniciada(usuario) {
 
 function sesionCerrada() {
   if (unsubSnapshot) { unsubSnapshot(); unsubSnapshot = null; }
+  if (unsubClientes) { unsubClientes(); unsubClientes = null; }
   creditos = [];
+  clientes = [];
   ownerUid = null;
   yo = null;
   migracionRevisada = false;
@@ -320,6 +344,16 @@ function suscribirNube() {
     console.error('Error de sincronización:', err);
     banner('⚠️ Error de sincronización con la nube. Revisa tu conexión o las reglas de Firestore.');
   });
+
+  if (unsubClientes) unsubClientes();
+  unsubClientes = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'clientes'), snap => {
+    clientes = snap.docs.map(d => d.data());
+    ordenarClientes();
+    renderClientes();
+    llenarSelectClientes($('#f-cliente').value);
+  }, err => {
+    console.error('Error al sincronizar clientes:', err);
+  });
 }
 
 /* Muestra/oculta botones según los permisos del usuario actual */
@@ -327,6 +361,7 @@ function aplicarPermisos() {
   $('#btn-new').hidden = !puede('crear');
   $('#btn-cobranza').hidden = !puede('cobranza');
   $('#btn-usuarios').hidden = !esAdmin();
+  $('#btn-cliente-nuevo').hidden = !puede('clientes');
   $('#btn-logout-header').hidden = false;
   render(); // redibuja la tabla para aplicar permisos de editar/borrar
 }
@@ -394,6 +429,7 @@ const PERMISOS_LISTA = [
   ['pagos', 'Registrar pagos'],
   ['borrar', 'Borrar créditos'],
   ['cobranza', 'Ver/exportar cobranza'],
+  ['clientes', 'Registrar/editar clientes'],
 ];
 
 async function abrirUsuarios() {
@@ -577,7 +613,6 @@ function render() {
   renderTabla(lista);
   renderTarjetas(lista);
   renderFlechas();
-  actualizarDatalist();
   actualizarContadorFiltro();
   $('#empty-state').hidden = creditos.length > 0;
   sincronizarAvisos();
@@ -697,15 +732,313 @@ function renderFlechas() {
   });
 }
 
-function actualizarDatalist() {
-  const nombres = [...new Set(creditos.map(c => c.cliente))].sort();
-  $('#clientes-list').innerHTML = nombres.map(n => `<option value="${escapeHtml(n)}">`).join('');
-}
-
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
+}
+
+/* ====== Base de datos de clientes ======
+   Cada cliente se registra UNA sola vez con su zona. Al crear un crédito se
+   elige de la lista, así el mismo cliente siempre queda escrito igual y su
+   zona se pone sola. */
+
+/* Compara nombres ignorando mayúsculas, tildes y espacios de más */
+function normalizarNombre(txt) {
+  return String(txt || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function ordenarClientes() {
+  clientes.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+}
+
+function clientePorId(id) { return clientes.find(c => c.id === id) || null; }
+
+function clientePorNombre(nombre) {
+  const clave = normalizarNombre(nombre);
+  return clientes.find(c => normalizarNombre(c.nombre) === clave) || null;
+}
+
+function creditosDeCliente(id) { return creditos.filter(c => c.clienteId === id); }
+
+/* Llena el selector de clientes del formulario de créditos */
+function llenarSelectClientes(valorSeleccionado = '') {
+  const sel = $('#f-cliente');
+  if (!sel) return;
+  const opciones = clientes.map(c =>
+    `<option value="${escapeHtml(c.id)}">${escapeHtml(c.nombre)}${c.zona ? ` — ${escapeHtml(c.zona)}` : ''}</option>`
+  ).join('');
+  const vacio = clientes.length
+    ? '<option value="">— Selecciona un cliente —</option>'
+    : '<option value="">— Aún no hay clientes registrados —</option>';
+  sel.innerHTML = vacio + opciones;
+
+  // Créditos antiguos: el cliente no está registrado, se conserva su nombre
+  if (valorSeleccionado && String(valorSeleccionado).startsWith('libre:')) {
+    const nombre = String(valorSeleccionado).slice(6);
+    sel.insertAdjacentHTML('beforeend',
+      `<option value="${escapeHtml(valorSeleccionado)}">${escapeHtml(nombre)} (sin registrar)</option>`);
+  }
+  if (valorSeleccionado) sel.value = valorSeleccionado;
+}
+
+/* Al elegir un cliente: pone su zona automáticamente y la bloquea */
+function aplicarClienteSeleccionado() {
+  const valor = $('#f-cliente').value;
+  const zonaSel = $('#f-zona');
+  const nota = $('#f-zona-nota');
+  const ayuda = $('#f-cliente-ayuda');
+  const cli = valor.startsWith('libre:') ? null : clientePorId(valor);
+
+  if (cli) {
+    zonaSel.value = cli.zona || '';
+    zonaSel.disabled = true;
+    nota.textContent = '(automática, según el cliente)';
+    const datos = [cli.telefono ? `📞 ${cli.telefono}` : '', cli.notas || ''].filter(Boolean).join(' · ');
+    ayuda.textContent = datos;
+  } else {
+    zonaSel.disabled = false;
+    nota.textContent = '';
+    ayuda.textContent = valor.startsWith('libre:')
+      ? 'Este cliente aún no está registrado. Regístralo para que su zona se ponga sola.'
+      : '';
+  }
+}
+
+function abrirClientes() {
+  limpiarFormCliente();
+  $('#cli-buscar').value = '';
+  const permitido = puede('clientes');
+  $('#cli-form').hidden = !permitido;
+  $('#btn-cli-importar').hidden = !permitido;
+  renderClientes();
+  $('#modal-clientes').showModal();
+}
+
+function limpiarFormCliente() {
+  $('#cli-form').reset();
+  $('#cli-id').value = '';
+  $('#cli-form-title').textContent = 'Registrar cliente';
+  $('#btn-cli-guardar').textContent = '💾 Guardar cliente';
+  $('#btn-cli-cancelar').hidden = true;
+}
+
+function renderClientes() {
+  const cont = $('#clientes-list');
+  if (!cont) return;
+  const buscado = normalizarNombre($('#cli-buscar') ? $('#cli-buscar').value : '');
+  const lista = buscado
+    ? clientes.filter(c => normalizarNombre(c.nombre).includes(buscado) || normalizarNombre(c.zona).includes(buscado))
+    : clientes;
+
+  $('#cli-contador').textContent = clientes.length ? `(${clientes.length})` : '';
+
+  if (!clientes.length) {
+    cont.innerHTML = `<p class="abonos-vacio">Todavía no tienes clientes registrados.
+      Regístralos arriba, o usa “📥 Importar desde mis créditos” para crearlos automáticamente.</p>`;
+    return;
+  }
+  if (!lista.length) {
+    cont.innerHTML = '<p class="abonos-vacio">Ningún cliente coincide con la búsqueda.</p>';
+    return;
+  }
+
+  const permitido = puede('clientes');
+  cont.innerHTML = lista.map(c => {
+    const nPedidos = creditosDeCliente(c.id).length;
+    const extra = [c.telefono ? `📞 ${escapeHtml(c.telefono)}` : '', c.notas ? escapeHtml(c.notas) : '']
+      .filter(Boolean).join(' · ');
+    return `
+      <div class="cliente-item">
+        <div class="cliente-datos">
+          <strong>${escapeHtml(c.nombre)}</strong>
+          <span class="cliente-zona">${c.zona ? escapeHtml(c.zona) : 'sin zona'}</span>
+          <span class="cliente-meta">${nPedidos} crédito${nPedidos === 1 ? '' : 's'}${extra ? ' · ' + extra : ''}</span>
+        </div>
+        ${permitido ? `
+        <div class="cliente-acciones">
+          <button type="button" class="btn btn-secondary btn-small" data-editar-cliente="${escapeHtml(c.id)}">✏️</button>
+          <button type="button" class="btn btn-danger btn-small" data-borrar-cliente="${escapeHtml(c.id)}">🗑️</button>
+        </div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function editarClienteForm(id) {
+  const cli = clientePorId(id);
+  if (!cli) return;
+  $('#cli-id').value = cli.id;
+  $('#cli-nombre').value = cli.nombre;
+  $('#cli-zona').value = cli.zona || '';
+  $('#cli-telefono').value = cli.telefono || '';
+  $('#cli-notas').value = cli.notas || '';
+  $('#cli-form-title').textContent = `Editar cliente — ${cli.nombre}`;
+  $('#btn-cli-guardar').textContent = '💾 Guardar cambios';
+  $('#btn-cli-cancelar').hidden = false;
+  $('#cli-nombre').focus();
+}
+
+async function guardarClienteForm(ev) {
+  ev.preventDefault();
+  if (!puede('clientes')) { toast('⚠️ No tienes permiso para registrar clientes'); return; }
+
+  const id = $('#cli-id').value;
+  const nombre = $('#cli-nombre').value.trim();
+  const zona = $('#cli-zona').value;
+  if (!nombre) { toast('⚠️ Escribe el nombre del cliente'); return; }
+
+  // Evita registrar dos veces al mismo cliente (aunque esté escrito distinto)
+  const repetido = clientes.find(c => normalizarNombre(c.nombre) === normalizarNombre(nombre) && c.id !== id);
+  if (repetido) {
+    toast(`⚠️ "${repetido.nombre}" ya está registrado${repetido.zona ? ` en ${repetido.zona}` : ''}`);
+    return;
+  }
+
+  const anterior = id ? clientePorId(id) : null;
+  const cliente = {
+    id: id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)),
+    nombre,
+    zona,
+    telefono: $('#cli-telefono').value.trim(),
+    notas: $('#cli-notas').value.trim(),
+    creado: anterior ? anterior.creado : Date.now(),
+  };
+
+  try {
+    await guardarClienteEnStore(cliente);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar el cliente. Revisa tu conexión.');
+    return;
+  }
+
+  const idx = clientes.findIndex(c => c.id === cliente.id);
+  if (idx >= 0) clientes[idx] = cliente; else clientes.push(cliente);
+  ordenarClientes();
+
+  // Si cambió el nombre o la zona, se actualizan sus créditos para que todo quede igual
+  let actualizados = 0;
+  if (anterior && (anterior.nombre !== cliente.nombre || anterior.zona !== cliente.zona)) {
+    for (const c of creditosDeCliente(cliente.id)) {
+      c.cliente = cliente.nombre;
+      c.zona = cliente.zona;
+      try { await guardarEnStore(c); actualizados++; } catch (e) { console.error(e); }
+    }
+  }
+
+  limpiarFormCliente();
+  renderClientes();
+  llenarSelectClientes($('#f-cliente').value);
+  render();
+  toast(anterior
+    ? `✅ Cliente actualizado${actualizados ? ` (${actualizados} crédito(s) al día)` : ''}`
+    : `✅ Cliente "${nombre}" registrado`);
+}
+
+async function borrarCliente(id) {
+  if (!puede('clientes')) return;
+  const cli = clientePorId(id);
+  if (!cli) return;
+  const usados = creditosDeCliente(id).length;
+  if (usados) {
+    alert(`No se puede borrar a "${cli.nombre}" porque tiene ${usados} crédito(s) registrados.\n\n` +
+          'Si ya no le vendes, puedes dejarlo en la lista: no molesta.');
+    return;
+  }
+  if (!confirm(`¿Borrar al cliente "${cli.nombre}"?`)) return;
+  try {
+    await eliminarClienteDeStore(id);
+  } catch (e) {
+    toast('❌ No se pudo borrar. Revisa tu conexión.');
+    return;
+  }
+  clientes = clientes.filter(c => c.id !== id);
+  renderClientes();
+  llenarSelectClientes();
+  toast('🗑️ Cliente borrado');
+}
+
+/* Crea la lista de clientes a partir de los créditos que ya tienes.
+   Une las variantes del mismo nombre (mayúsculas, tildes, espacios). */
+async function importarClientesDesdeCreditos() {
+  if (!puede('clientes')) return;
+
+  const grupos = new Map();
+  for (const c of creditos) {
+    const clave = normalizarNombre(c.cliente);
+    if (!clave) continue;
+    if (!grupos.has(clave)) grupos.set(clave, { nombres: [], zonas: [], creds: [] });
+    const g = grupos.get(clave);
+    g.nombres.push(c.cliente);
+    if (c.zona) g.zonas.push(c.zona);
+    g.creds.push(c);
+  }
+
+  const masFrecuente = arr => {
+    const cuenta = new Map();
+    for (const v of arr) cuenta.set(v, (cuenta.get(v) || 0) + 1);
+    return [...cuenta.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  };
+
+  const nuevos = [];
+  for (const [clave, g] of grupos) {
+    const existente = clientePorNombre(clave);
+    if (existente) {
+      // Ya está registrado: solo enlaza sus créditos sueltos
+      g.creds.forEach(c => { if (!c.clienteId) nuevos.push({ cliente: existente, creds: [c] }); });
+      continue;
+    }
+    nuevos.push({
+      cliente: {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+        nombre: masFrecuente(g.nombres),
+        zona: g.zonas.length ? masFrecuente(g.zonas) : '',
+        telefono: '', notas: '', creado: Date.now(),
+      },
+      creds: g.creds,
+      esNuevo: true,
+    });
+  }
+
+  const aCrear = nuevos.filter(n => n.esNuevo);
+  const aEnlazar = nuevos.reduce((s, n) => s + n.creds.length, 0);
+  if (!aCrear.length && !aEnlazar) { toast('👌 No hay clientes nuevos que importar'); return; }
+
+  if (!confirm(`Se registrarán ${aCrear.length} cliente(s) a partir de tus créditos y se enlazarán ${aEnlazar} crédito(s).\n\n` +
+               'Los nombres escritos distinto (mayúsculas o tildes) se unifican en uno solo. ¿Continuar?')) return;
+
+  const boton = $('#btn-cli-importar');
+  boton.disabled = true;
+  let creados = 0, enlazados = 0;
+  try {
+    for (const n of nuevos) {
+      if (n.esNuevo) {
+        await guardarClienteEnStore(n.cliente);
+        if (!clientePorId(n.cliente.id)) clientes.push(n.cliente);
+        creados++;
+      }
+      for (const c of n.creds) {
+        c.clienteId = n.cliente.id;
+        c.cliente = n.cliente.nombre;
+        if (n.cliente.zona) c.zona = n.cliente.zona;
+        await guardarEnStore(c);
+        enlazados++;
+      }
+    }
+  } catch (e) {
+    console.error(e);
+    toast('❌ Se interrumpió la importación. Revisa tu conexión.');
+  } finally {
+    boton.disabled = false;
+  }
+
+  ordenarClientes();
+  renderClientes();
+  llenarSelectClientes();
+  render();
+  toast(`✅ ${creados} cliente(s) registrados, ${enlazados} crédito(s) enlazados`);
 }
 
 /* ====== Formulario ====== */
@@ -740,13 +1073,23 @@ function abrirFormulario(credito = null) {
   // Reactiva todos los campos (por si venían bloqueados de una edición anterior)
   ['f-boleta', 'f-cliente', 'f-zona', 'f-monto', 'f-fecha', 'f-vencimiento', 'f-notas'].forEach(id => { $('#' + id).disabled = false; });
   $('#foto-acciones-wrap').style.display = '';
+  $('#btn-cliente-nuevo').hidden = !puede('clientes');
+  $('#btn-cliente-nuevo').disabled = false;
+
+  // Selector de clientes: al elegir uno, su zona se pone sola
+  let valorCliente = '';
+  if (credito) {
+    const cli = (credito.clienteId && clientePorId(credito.clienteId)) || clientePorNombre(credito.cliente);
+    valorCliente = cli ? cli.id : `libre:${credito.cliente}`;
+  }
+  llenarSelectClientes(valorCliente);
   $('#f-zona').value = credito ? (credito.zona || '') : '';
+  aplicarClienteSeleccionado();
 
   if (credito) {
     $('#form-title').textContent = `Editar crédito — Boleta ${credito.boleta}`;
     $('#f-id').value = credito.id;
     $('#f-boleta').value = credito.boleta;
-    $('#f-cliente').value = credito.cliente;
     $('#f-monto').value = credito.monto;
     $('#f-fecha').value = credito.fecha;
     $('#f-vencimiento').value = credito.vencimiento;
@@ -768,7 +1111,10 @@ function abrirFormulario(credito = null) {
     });
     $('#btn-atajo-1').disabled = !soloEditarCampos;
     $('#btn-atajo-2').disabled = !soloEditarCampos;
+    $('#btn-cliente-nuevo').disabled = !soloEditarCampos;
     $('#foto-acciones-wrap').style.display = soloEditarCampos ? '' : 'none';
+    // Vuelve a bloquear la zona si el cliente elegido ya la define
+    if (soloEditarCampos) aplicarClienteSeleccionado();
   } else {
     $('#form-title').textContent = 'Nuevo crédito';
     $('#f-id').value = '';
@@ -1044,6 +1390,19 @@ async function guardarCredito(ev) {
     return;
   }
 
+  // Cliente: viene de la lista registrada (o, en créditos antiguos, del nombre suelto)
+  const valorCliente = $('#f-cliente').value;
+  let clienteNombre = '', clienteId = '', zona = $('#f-zona').value;
+  if (valorCliente.startsWith('libre:')) {
+    clienteNombre = valorCliente.slice(6);
+  } else {
+    const cli = clientePorId(valorCliente);
+    if (!cli) { toast('⚠️ Elige un cliente de la lista (o registra uno nuevo)'); return; }
+    clienteNombre = cli.nombre;
+    clienteId = cli.id;
+    zona = cli.zona || '';
+  }
+
   const existente = creditos.find(c => c.id === id);
   const fecha = $('#f-fecha').value;
 
@@ -1059,8 +1418,9 @@ async function guardarCredito(ev) {
   const credito = {
     id,
     boleta,
-    cliente: $('#f-cliente').value.trim(),
-    zona: $('#f-zona').value,
+    cliente: clienteNombre,
+    clienteId,
+    zona,
     monto: Number($('#f-monto').value),
     fecha,
     vencimiento: $('#f-vencimiento').value,
@@ -1105,7 +1465,7 @@ async function borrarCredito(id) {
 
 /* ====== Respaldo ====== */
 function exportarRespaldo() {
-  const datos = { version: 1, exportado: new Date().toISOString(), settings, creditos };
+  const datos = { version: 2, exportado: new Date().toISOString(), settings, creditos, clientes };
   const blob = new Blob([JSON.stringify(datos)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1130,6 +1490,18 @@ async function importarRespaldo(file) {
         else creditos.push(c);
       }
     }
+    if (Array.isArray(datos.clientes)) {
+      for (const cli of datos.clientes) {
+        await guardarClienteEnStore(cli);
+        if (!modoNube) {
+          const i = clientes.findIndex(x => x.id === cli.id);
+          if (i >= 0) clientes[i] = cli; else clientes.push(cli);
+        }
+      }
+      ordenarClientes();
+      renderClientes();
+      llenarSelectClientes();
+    }
     if (datos.settings) { settings = { ...settings, ...datos.settings }; guardarSettings(); }
     render();
     toast('⬆️ Respaldo importado correctamente');
@@ -1142,6 +1514,8 @@ async function importarRespaldo(file) {
 /* Llena el selector de zona del formulario y las casillas de zonas/meses del filtro. */
 function poblarSelectores() {
   $('#f-zona').innerHTML = '<option value="">— Sin zona —</option>' +
+    ZONAS.map(z => `<option value="${z}">${z}</option>`).join('');
+  $('#cli-zona').innerHTML = '<option value="">— Sin zona —</option>' +
     ZONAS.map(z => `<option value="${z}">${z}</option>`).join('');
   $('#filtro-zonas').innerHTML = ZONAS.map(z =>
     `<label><input type="checkbox" class="fil-zona" value="${escapeHtml(z)}"> ${escapeHtml(z)}</label>`).join('');
@@ -1177,6 +1551,25 @@ function inicializarEventos() {
   // Atajos rápidos de vencimiento (X días después de la emisión)
   $('#btn-atajo-1').addEventListener('click', () => aplicarAtajoVenc(settings.atajo1));
   $('#btn-atajo-2').addEventListener('click', () => aplicarAtajoVenc(settings.atajo2));
+
+  // Clientes: al elegir uno se pone su zona automáticamente
+  $('#f-cliente').addEventListener('change', aplicarClienteSeleccionado);
+  $('#btn-cliente-nuevo').addEventListener('click', () => {
+    abrirClientes();
+    $('#cli-nombre').focus();
+  });
+  $('#btn-clientes').addEventListener('click', abrirClientes);
+  $('#btn-clientes-cerrar').addEventListener('click', () => $('#modal-clientes').close());
+  $('#cli-form').addEventListener('submit', guardarClienteForm);
+  $('#btn-cli-cancelar').addEventListener('click', limpiarFormCliente);
+  $('#cli-buscar').addEventListener('input', renderClientes);
+  $('#btn-cli-importar').addEventListener('click', importarClientesDesdeCreditos);
+  $('#clientes-list').addEventListener('click', ev => {
+    const editar = ev.target.closest('[data-editar-cliente]');
+    if (editar) { editarClienteForm(editar.dataset.editarCliente); return; }
+    const borrar = ev.target.closest('[data-borrar-cliente]');
+    if (borrar) borrarCliente(borrar.dataset.borrarCliente);
+  });
 
   $('#f-foto-camara').addEventListener('change', ev => manejarFoto(ev.target));
   $('#f-foto-archivo').addEventListener('change', ev => manejarFoto(ev.target));
@@ -1304,10 +1697,15 @@ function inicializarEventos() {
 async function iniciarLocal() {
   try {
     creditos = await DB.getAll();
+    clientes = await DB.getAllClientes();
+    ordenarClientes();
   } catch (e) {
     toast('❌ No se pudo abrir la base de datos local');
     creditos = [];
+    clientes = [];
   }
+  llenarSelectClientes();
+  renderClientes();
   render();
   avisoAlAbrir();
 }
