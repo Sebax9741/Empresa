@@ -1,9 +1,10 @@
 /* Service worker: permite instalar la app y usarla sin internet */
-const CACHE = 'creditos-v30';
+const CACHE = 'creditos-v31';
 const ARCHIVOS = [
   './',
   './index.html',
   './css/styles.css',
+  './css/fonts/PlusJakartaSans-Variable.woff2',
   './js/app.js',
   './js/db.js',
   './js/firebase-config.js',

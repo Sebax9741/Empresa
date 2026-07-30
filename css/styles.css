@@ -1,29 +1,38 @@
+/* Tipografía propia (autoalojada, funciona sin internet): variable de peso 200-800 */
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("fonts/PlusJakartaSans-Variable.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ====== Base ====== */
 :root {
-  /* Tema claro con acentos: verde oliva + gris + carbón */
-  --primary: #6d7350;        /* oliva: único acento (oscurecido para leer sobre blanco) */
-  --primary-dark: #565b3e;
-  --primary-light: #eceedd;  /* oliva muy claro para fondos de badge */
-  --accent: #6d7350;
-  --ink: #6d7350;            /* botón principal = oliva */
-  --danger: #c1493d;
-  --danger-light: #f7e5e2;
-  --warning: #a9741c;
-  --warning-light: #f6ecd6;
-  --ok: #47875a;
-  --ok-light: #e2efe5;
-  --gray: #8a8a80;
-  --muted: #77776e;
-  --bg: #f4f4f0;            /* fondo claro cálido */
-  --bg-tint: #ececE7;
+  /* Tema claro: acento teal (verde azulado), neutros fríos, más redondeado */
+  --primary: #0f766e;        /* teal profesional: único acento */
+  --primary-dark: #0b5450;
+  --primary-light: #e2f3f1;  /* teal muy claro para fondos de badge */
+  --accent: #0f766e;
+  --ink: #0f766e;            /* botón principal = teal */
+  --danger: #c0392b;
+  --danger-light: #f8e6e3;
+  --warning: #a3690f;
+  --warning-light: #f7ecd8;
+  --ok: #16a34a;
+  --ok-light: #e0f5e7;
+  --gray: #8b96a1;
+  --muted: #5b6b74;
+  --bg: #f1f5f5;            /* fondo claro, neutro y fresco */
+  --bg-tint: #e6edec;
   --card: #ffffff;          /* tarjetas blancas */
-  --text: #2b2b2d;          /* carbón (texto) */
-  --border: #e2e2da;
-  --radius: 16px;
-  --radius-sm: 10px;
-  --shadow: 0 1px 2px rgba(30, 30, 25, 0.05), 0 8px 24px rgba(30, 30, 25, 0.07);
-  --shadow-lg: 0 14px 50px rgba(30, 30, 25, 0.16);
-  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text: #1e2a2e;          /* grafito con tinte frío (texto) */
+  --border: #dde6e5;
+  --radius: 20px;
+  --radius-sm: 13px;
+  --shadow: 0 1px 2px rgba(15, 30, 28, 0.05), 0 8px 24px rgba(15, 30, 28, 0.07);
+  --shadow-lg: 0 14px 50px rgba(15, 30, 28, 0.16);
+  --font: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -157,18 +166,10 @@ body {
   gap: 0.3rem;
   overflow: hidden;
 }
-.summary-card::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--primary);
-}
-.summary-card.summary-danger::before { background: var(--danger); }
-.summary-card.summary-ok::before { background: var(--ok); }
-
 .summary-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
-.summary-value { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+.summary-value { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; color: var(--primary); }
+.summary-card.summary-danger .summary-value { color: var(--danger); }
+.summary-card.summary-ok .summary-value { color: var(--ok); }
 
 /* ====== Resumen de lo filtrado ====== */
 .filtro-resumen {
