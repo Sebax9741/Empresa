@@ -336,6 +336,31 @@ function banner(msg) {
   else { el.hidden = true; }
 }
 
+/* ====== Aviso de conexión ======
+   La app funciona igual sin internet: Firestore guarda todo en el dispositivo
+   y lo sube solo al reconectar. Este aviso es para que el empleado sepa en
+   qué estado está y no piense que se perdió su trabajo. */
+let cambiosPendientes = false;
+
+function actualizarAvisoConexion() {
+  const el = $('#banner-conexion');
+  if (!modoNube) { el.hidden = true; return; }
+  const sinInternet = navigator.onLine === false;
+  if (sinInternet) {
+    el.textContent = cambiosPendientes
+      ? '📴 Sin internet — puedes seguir trabajando; hay cambios guardados aquí que se subirán solos al volver la conexión'
+      : '📴 Sin internet — puedes seguir trabajando normalmente; todo se guarda en este dispositivo';
+    el.className = 'banner banner-conexion banner-sin-internet';
+    el.hidden = false;
+  } else if (cambiosPendientes) {
+    el.textContent = '🔄 Subiendo a la nube los cambios hechos sin internet…';
+    el.className = 'banner banner-conexion banner-subiendo';
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
 /* ====== Configuración ======
    Los ajustes del negocio (días de crédito, moneda y atajos) viven en la
    nube: los pone el administrador y valen para todos los dispositivos y
@@ -358,7 +383,8 @@ async function guardarSettings() {
     const datos = {};
     for (const k of CLAVES_NEGOCIO) datos[k] = settings[k];
     datos.actualizado = Date.now();
-    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'ajustes'), datos);
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'ajustes'), datos), 'la configuración');
   }
 }
 
@@ -381,9 +407,42 @@ function configNubeValida() {
   return EMULADOR || (cfg && cfg.apiKey && !String(cfg.apiKey).startsWith('PEGA'));
 }
 
+/* ====== Escribir en la nube sin depender del internet ======
+   Firestore guarda cada cambio en el dispositivo AL INSTANTE y lo sube solo
+   cuando vuelve la conexión. Su promesa, en cambio, únicamente se cumple
+   cuando el servidor confirma: si esperáramos siempre a eso, sin internet la
+   app se quedaría colgada aunque el dato ya esté a salvo.
+   Por eso esperamos la confirmación solo un momento; si no llega, seguimos
+   adelante. Si más tarde el servidor rechaza el cambio (por ejemplo por
+   permisos), se avisa en ese momento. */
+const ESPERA_NUBE = 1500;   // ms que esperamos la confirmación del servidor
+
+function escrituraNube(promesa, queEs) {
+  let seguimosSinEsperar = false;
+  const vigilada = promesa.then(() => null, e => e);
+
+  // Aviso para el error que llega tarde (ya habíamos seguido adelante)
+  vigilada.then(err => {
+    if (!err) return;
+    console.error(`No se pudo sincronizar ${queEs}:`, err);
+    if (seguimosSinEsperar) toast(`⚠️ Un cambio no se pudo subir a la nube (${queEs})`);
+  });
+
+  return new Promise((resolve, reject) => {
+    const reloj = setTimeout(() => { seguimosSinEsperar = true; resolve(); }, ESPERA_NUBE);
+    vigilada.then(err => {
+      if (seguimosSinEsperar) return;   // ya seguimos: del aviso se encarga el handler de arriba
+      clearTimeout(reloj);
+      if (err) reject(err); else resolve();
+    });
+  });
+}
+
 async function guardarEnStore(credito) {
   if (modoNube) {
-    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', credito.id), credito);
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', credito.id), credito),
+      `crédito ${credito.boleta}`);
   } else {
     await DB.put(credito);
   }
@@ -391,7 +450,8 @@ async function guardarEnStore(credito) {
 
 async function eliminarDeStore(id) {
   if (modoNube) {
-    await fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', id));
+    await escrituraNube(
+      fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', id)), 'borrado de un crédito');
   } else {
     await DB.delete(id);
   }
@@ -399,7 +459,9 @@ async function eliminarDeStore(id) {
 
 async function guardarClienteEnStore(cliente) {
   if (modoNube) {
-    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'clientes', cliente.id), cliente);
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'clientes', cliente.id), cliente),
+      `cliente ${cliente.nombre}`);
   } else {
     await DB.putCliente(cliente);
   }
@@ -409,7 +471,9 @@ async function guardarClienteEnStore(cliente) {
    nube: en modo local hay un solo dueño y todo está permitido siempre. */
 async function guardarHojaEnStore(hoja) {
   if (modoNube) {
-    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'hojas', hoja.fecha), hoja);
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'hojas', hoja.fecha), hoja),
+      `hoja del ${formatoFecha(hoja.fecha)}`);
   }
 }
 
@@ -417,13 +481,16 @@ async function guardarHojaEnStore(hoja) {
    ya puso el servidor (que este dispositivo puede no tener todavía). */
 async function actualizarHojaEnStore(fechaISO, cambios) {
   if (modoNube) {
-    await fb.updateDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'hojas', fechaISO), cambios);
+    await escrituraNube(
+      fb.updateDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'hojas', fechaISO), cambios),
+      `hoja del ${formatoFecha(fechaISO)}`);
   }
 }
 
 async function eliminarClienteDeStore(id) {
   if (modoNube) {
-    await fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'clientes', id));
+    await escrituraNube(
+      fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'clientes', id)), 'borrado de un cliente');
   } else {
     await DB.deleteCliente(id);
   }
@@ -480,14 +547,36 @@ async function iniciarNube() {
   });
 }
 
+/* Copia del acceso en este dispositivo, para poder entrar sin internet.
+   Solo guarda quién es el dueño y qué permisos tiene este usuario: son los
+   mismos datos que la nube ya le había entregado a este equipo. */
+function guardarAccesoLocal(uid, datos) {
+  try { localStorage.setItem(`creditos-acceso-${uid}`, JSON.stringify(datos)); }
+  catch (e) { /* sin espacio: se seguirá pidiendo a la nube */ }
+}
+function leerAccesoLocal(uid) {
+  try { return JSON.parse(localStorage.getItem(`creditos-acceso-${uid}`)) || null; }
+  catch (e) { return null; }
+}
+
 /* Al iniciar sesión: averigua el dueño (o lo crea la 1ª vez), lee la membresía
-   del usuario y aplica sus permisos. Si no es miembro, deniega el acceso. */
+   del usuario y aplica sus permisos. Si no es miembro, deniega el acceso.
+   Sin internet se usa la copia guardada en este dispositivo. */
 async function sesionIniciada(usuario) {
   try {
     const cfgRef = fb.doc(fb.db, 'config', 'app');
     let cfgSnap = await fb.getDoc(cfgRef);
 
     if (!cfgSnap.exists()) {
+      // Ojo: sin internet, "no existe" puede significar solo que este equipo
+      // todavía no lo tiene. Dar de alta a un dueño aquí convertiría en
+      // administrador a cualquiera que abra la app sin conexión, así que el
+      // alta inicial solo se hace con una respuesta confirmada del servidor.
+      if (cfgSnap.metadata.fromCache) {
+        if (entrarConAccesoGuardado(usuario)) return;
+        banner('📴 Sin internet y sin datos guardados en este dispositivo. Conéctate una vez para poder usar la app aquí.');
+        return;
+      }
       // Primer usuario que entra = dueño/administrador (bootstrap)
       await fb.setDoc(cfgRef, { ownerUid: usuario.uid, creado: Date.now() });
       await fb.setDoc(fb.doc(fb.db, 'usuarios', usuario.uid, 'miembros', usuario.uid), {
@@ -503,6 +592,13 @@ async function sesionIniciada(usuario) {
     ownerUid = cfgSnap.data().ownerUid;
     const miDoc = await fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', usuario.uid));
     if (!miDoc.exists()) {
+      // Sin internet y sin la ficha en este equipo: no se puede afirmar que
+      // haya perdido el acceso, así que no se le cierra la sesión.
+      if (miDoc.metadata.fromCache) {
+        if (entrarConAccesoGuardado(usuario)) return;
+        banner('📴 Sin internet y sin datos guardados en este dispositivo. Conéctate una vez para poder usar la app aquí.');
+        return;
+      }
       // Autenticado pero sin permiso: no es miembro del negocio
       await fb.salir(fb.auth);
       $('#auth-error').textContent = 'Tu usuario no tiene acceso. Pídele al administrador que te dé de alta.';
@@ -510,12 +606,31 @@ async function sesionIniciada(usuario) {
       return;
     }
     yo = miDoc.data();
+    guardarAccesoLocal(usuario.uid, { ownerUid, yo });   // para poder entrar sin internet
   } catch (e) {
     console.error('Error al iniciar sesión:', e);
+    // Sin internet, la copia de este dispositivo permite seguir trabajando
+    if (entrarConAccesoGuardado(usuario)) return;
     banner('⚠️ No se pudo verificar tu acceso. Revisa las reglas de Firestore o tu conexión.');
     return;
   }
 
+  abrirSesionEnPantalla();
+}
+
+/* Entra con la copia guardada en el dispositivo (modo sin internet).
+   Devuelve false si este equipo todavía no tiene esa copia. */
+function entrarConAccesoGuardado(usuario) {
+  const guardado = leerAccesoLocal(usuario.uid);
+  if (!guardado || !guardado.ownerUid || !guardado.yo) return false;
+  ownerUid = guardado.ownerUid;
+  yo = guardado.yo;
+  abrirSesionEnPantalla();
+  toast('📴 Sin internet: trabajando con los datos de este dispositivo');
+  return true;
+}
+
+function abrirSesionEnPantalla() {
   $('#auth-screen').hidden = true;
   $('#settings-cuenta').hidden = false;
   $('#cuenta-email').textContent = `${yo.usuario}${esAdmin() ? ' (administrador)' : ''}`;
@@ -538,6 +653,8 @@ function sesionCerrada() {
   ownerUid = null;
   yo = null;
   migracionRevisada = false;
+  cambiosPendientes = false;
+  actualizarAvisoConexion();
   render();
   $('#settings-cuenta').hidden = true;
   $('#btn-logout-header').hidden = true;
@@ -556,11 +673,16 @@ function suscribirNube() {
   const coleccion = fb.collection(fb.db, 'usuarios', ownerUid, 'creditos');
   unsubSnapshot = fb.onSnapshot(coleccion, snap => {
     creditos = snap.docs.map(d => d.data());
+    // hasPendingWrites: hay cambios guardados aquí que aún no llegaron al servidor
+    cambiosPendientes = snap.metadata.hasPendingWrites;
+    actualizarAvisoConexion();
     render();
     avisoAlAbrir();
     if (esAdmin()) ofrecerMigracionLocal(ownerUid);
   }, err => {
     console.error('Error de sincronización:', err);
+    // Sin internet esto es normal: no hay que asustar con un error
+    if (navigator.onLine === false) { actualizarAvisoConexion(); return; }
     banner('⚠️ Error de sincronización con la nube. Revisa tu conexión o las reglas de Firestore.');
   });
 
@@ -1110,7 +1232,9 @@ async function guardarSeguridad() {
   // Primero la copia local: así el código nunca se pierde en este dispositivo
   localStorage.setItem('creditos-seguridad', JSON.stringify(seguridad));
   if (modoNube) {
-    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'seguridad'), seguridad);
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'seguridad'), seguridad),
+      'el código de seguridad');
   }
 }
 
@@ -2992,6 +3116,10 @@ async function iniciar() {
   inicializarEventos();
   render();
 
+  // Avisa cuando se va y cuando vuelve el internet (la app sigue funcionando igual)
+  window.addEventListener('online', actualizarAvisoConexion);
+  window.addEventListener('offline', actualizarAvisoConexion);
+
   if (configNubeValida()) {
     try {
       await iniciarNube();
@@ -3004,6 +3132,8 @@ async function iniciar() {
     banner('📱 Modo local: los datos solo se guardan en este dispositivo. Configura Firebase (ver README) para sincronizar con la nube.');
     await iniciarLocal();
   }
+
+  actualizarAvisoConexion();
 
   // Pide almacenamiento persistente para que el navegador no borre los datos
   if (navigator.storage && navigator.storage.persist) {

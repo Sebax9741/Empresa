@@ -812,6 +812,11 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-size: 0.85rem;
 }
 
+/* Aviso de conexión: sin internet la app sigue funcionando igual */
+.banner-conexion { font-weight: 600; }
+.banner-sin-internet { background: #e5e7eb; color: #374151; }
+.banner-subiendo { background: #dbeafe; color: #1e40af; }
+
 /* ====== Cuenta en configuración ====== */
 .settings-cuenta {
   margin-bottom: 0.85rem;
