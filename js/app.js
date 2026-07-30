@@ -347,7 +347,16 @@ let avisarConexionServidor = null;  // se llama en cuanto llegan datos del servi
 /* Los datos llegan del servidor (no de la copia local): hay conexión de verdad */
 function marcarOrigenDatos(snap) {
   datosDesdeCache = snap.metadata.fromCache;
-  if (!datosDesdeCache && avisarConexionServidor) avisarConexionServidor();
+  if (!datosDesdeCache) {
+    // Queda constancia de la última vez que este equipo se puso al día
+    try { localStorage.setItem('creditos-ultima-sync', String(Date.now())); } catch (e) { /* sin espacio */ }
+    if (avisarConexionServidor) avisarConexionServidor();
+  }
+}
+
+function ultimaSincronizacion() {
+  const v = Number(localStorage.getItem('creditos-ultima-sync'));
+  return v > 0 ? v : null;
 }
 
 function actualizarAvisoConexion() {
@@ -384,6 +393,72 @@ function esperarConexionServidor(limite) {
     const reloj = setTimeout(() => { avisarConexionServidor = null; resolve(false); }, limite);
     avisarConexionServidor = () => { clearTimeout(reloj); avisarConexionServidor = null; resolve(true); };
   });
+}
+
+/* ====== ¿Está la tablet lista para trabajar sin internet? ======
+   Sirve para comprobarlo ANTES de salir a la calle, sin tener que adivinar.
+   Cada punto es una de las cosas que la app necesita tener guardadas aquí. */
+function renderEstadoOffline() {
+  const caja = $('#settings-offline');
+  if (!modoNube) { caja.hidden = true; return; }
+  caja.hidden = false;
+
+  const hayAcceso = !!(fb && fb.auth && fb.auth.currentUser && leerAccesoLocal(fb.auth.currentUser.uid));
+  const sync = ultimaSincronizacion();
+  const puntos = [
+    {
+      ok: hayAcceso,
+      si: 'Puedes entrar a la app sin internet',
+      no: 'Falta entrar una vez CON internet para poder entrar luego sin señal',
+    },
+    {
+      ok: creditos.length > 0,
+      si: `${creditos.length} crédito(s) guardados en esta tablet`,
+      no: 'No hay créditos guardados en esta tablet',
+    },
+    {
+      ok: clientes.length > 0,
+      si: `${clientes.length} cliente(s) guardados en esta tablet`,
+      no: 'No hay clientes guardados en esta tablet',
+    },
+    {
+      ok: !!sync,
+      si: `Última vez al día con la nube: ${sync ? fechaHoraDeTimestamp(sync) : ''}`,
+      no: 'Todavía no se ha puesto al día con la nube',
+    },
+  ];
+
+  $('#offline-lista').innerHTML = puntos.map(p =>
+    `<li class="${p.ok ? 'offline-ok' : 'offline-falta'}">${p.ok ? '✅' : '⚠️'} ${escapeHtml(p.ok ? p.si : p.no)}</li>`).join('');
+}
+
+/* Fuerza ponerse al día y vuelve a comprobar el estado */
+async function prepararOffline() {
+  const boton = $('#btn-preparar-offline');
+  boton.disabled = true;
+  boton.textContent = '⏳ Comprobando…';
+  try {
+    if (navigator.onLine === false) {
+      toast('📴 Necesitas internet para preparar la tablet. Conéctate y vuelve a intentarlo.');
+      return;
+    }
+    await fb.disableNetwork(fb.db);
+    datosDesdeCache = true;
+    await fb.enableNetwork(fb.db);
+    const conectado = await esperarConexionServidor(LIMITE_SINCRONIZAR);
+    // Deja también guardado el acceso, por si se inició sesión con una versión anterior
+    if (fb.auth.currentUser && ownerUid && yo) guardarAccesoLocal(fb.auth.currentUser.uid, { ownerUid, yo });
+    renderEstadoOffline();
+    toast(conectado
+      ? '✅ Tablet lista para trabajar sin internet'
+      : '⚠️ No se pudo hablar con la nube. Revisa tu conexión y vuelve a intentarlo.');
+  } catch (e) {
+    console.error('No se pudo preparar el uso sin internet:', e);
+    toast('⚠️ No se pudo comprobar. Revisa tu conexión.');
+  } finally {
+    boton.disabled = false;
+    boton.textContent = '🔄 Comprobar y preparar para usar sin internet';
+  }
 }
 
 async function sincronizarAhora() {
@@ -3074,12 +3149,14 @@ function inicializarEventos() {
     $('#s-atajo1').value = settings.atajo1;
     $('#s-atajo2').value = settings.atajo2;
     actualizarEstadoPin();
+    renderEstadoOffline();
     // Los ajustes del negocio los define el administrador para todos
     const soloAdmin = modoNube && !esAdmin();
     ['s-dias', 's-moneda', 's-atajo1', 's-atajo2'].forEach(id => { $('#' + id).disabled = soloAdmin; });
     $('#settings-nota-admin').hidden = !soloAdmin;
     $('#modal-settings').showModal();
   });
+  $('#btn-preparar-offline').addEventListener('click', prepararOffline);
   $('#btn-settings-cerrar').addEventListener('click', () => $('#modal-settings').close());
   $('#settings-form').addEventListener('submit', async ev => {
     ev.preventDefault();

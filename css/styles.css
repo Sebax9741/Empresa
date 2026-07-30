@@ -812,6 +812,20 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-size: 0.85rem;
 }
 
+/* Comprobación de uso sin internet (en ⚙️) */
+.settings-offline {
+  background: var(--bg-tint);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.85rem;
+}
+.offline-lista { list-style: none; padding: 0; margin: 0.4rem 0 0.6rem; }
+.offline-lista li { font-size: 0.82rem; margin: 0.2rem 0; line-height: 1.35; }
+.offline-lista .offline-ok { color: var(--ok); font-weight: 600; }
+.offline-lista .offline-falta { color: #92400e; font-weight: 700; }
+.offline-ayuda { display: block; margin-top: 0.45rem; color: var(--muted); font-size: 0.76rem; line-height: 1.35; }
+
 /* Aviso de conexión: sin internet la app sigue funcionando igual */
 .banner-conexion {
   font-weight: 600;

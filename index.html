@@ -576,6 +576,16 @@
           <button type="button" id="btn-logout" class="btn btn-secondary btn-small">🚪 Cerrar sesión</button>
         </div>
       </div>
+      <!-- Comprobación de que el equipo puede trabajar sin internet -->
+      <div class="settings-offline" id="settings-offline" hidden>
+        <span class="field-label">📴 Uso sin internet</span>
+        <ul class="offline-lista" id="offline-lista"></ul>
+        <button type="button" id="btn-preparar-offline" class="btn btn-secondary btn-small btn-block">
+          🔄 Comprobar y preparar para usar sin internet
+        </button>
+        <small class="offline-ayuda">Hazlo <strong>con internet</strong>. Si tu tablet tiene una app de limpieza o ahorro de batería, dale permiso para que no borre los datos de esta app.</small>
+      </div>
+
       <p class="settings-nota-admin" id="settings-nota-admin" hidden>
         🔒 Estos ajustes los define el administrador y valen para todo el equipo.
       </p>
