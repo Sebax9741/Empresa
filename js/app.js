@@ -33,7 +33,7 @@ function usuarioAEmail(entrada) {
 }
 
 /* Permisos del usuario actual */
-const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true, clientes: true, hojaCrear: true };
+const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true, clientes: true, hojaCrear: true, vencimiento: true };
 function esAdmin() { return modoNube && !!(yo && yo.rol === 'admin'); }
 function puede(nombre) {
   if (!modoNube) return true;         // modo local: un solo dueño, todo permitido
@@ -932,6 +932,7 @@ const PERMISOS_LISTA = [
   ['cobranza', 'Ver/exportar cobranza'],
   ['clientes', 'Registrar/editar clientes'],
   ['hojaCrear', 'Crear la hoja de cobranza del día'],
+  ['vencimiento', 'Cambiar la fecha de vencimiento'],
 ];
 
 async function abrirUsuarios() {
@@ -1972,16 +1973,78 @@ async function importarClientesDesdeCreditos() {
    pueden cambiar nada de lo ya registrado. */
 let infoCreditoId = null;
 let firmaPendiente = null;
+let editandoVencimiento = false;
 
 function abrirInfo(credito) {
   infoCreditoId = credito.id;
   firmaPendiente = null;
+  editandoVencimiento = false;
   $('#cobro-monto').value = '';
   $('#cobro-metodo').value = 'efectivo';
   $('#firma-preview-wrap').hidden = true;
   $('#btn-firma').textContent = '✍️ Agregar firma';
   renderInfo();
   $('#modal-info').showModal();
+}
+
+/* Fila "Vence" de la ficha: con permiso, se puede cambiar la fecha ahí
+   mismo (sin entrar al formulario completo de edición). Queda constancia
+   de quién y cuándo la cambió por última vez. */
+function filaVencimiento(c) {
+  const puedeCambiar = puede('vencimiento') || puede('editar');
+  const constancia = c.vencimientoCambiadoPor
+    ? `<span class="venc-constancia">🖊️ ${escapeHtml(c.vencimientoCambiadoPor)}${
+        fechaHoraDeTimestamp(c.vencimientoCambiadoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(c.vencimientoCambiadoEn)) : ''}</span>`
+    : '';
+
+  if (editandoVencimiento) {
+    return `<span class="venc-edit">
+      <input type="date" id="venc-edit-input" class="input input-mini" value="${c.vencimiento || ''}">
+      <button type="button" data-confirmar-venc title="Guardar">✓</button>
+      <button type="button" data-cancelar-venc title="Cancelar">✕</button>
+    </span>`;
+  }
+  return `${textoVencimiento(c)}${puedeCambiar
+    ? ` <button type="button" class="btn-fecha-editar" data-editar-venc title="Cambiar la fecha de vencimiento">✏️</button>`
+    : ''}${constancia}`;
+}
+
+function iniciarEdicionVencimiento() {
+  if (!puede('vencimiento') && !puede('editar')) { toast('🔒 No tienes permiso para cambiar el vencimiento'); return; }
+  editandoVencimiento = true;
+  renderInfo();
+}
+
+function cancelarEdicionVencimiento() {
+  editandoVencimiento = false;
+  renderInfo();
+}
+
+async function confirmarEdicionVencimiento() {
+  const c = creditos.find(x => x.id === infoCreditoId);
+  const nuevaFecha = $('#venc-edit-input').value;
+  if (!c || !nuevaFecha) { cancelarEdicionVencimiento(); return; }
+  if (nuevaFecha === c.vencimiento) { cancelarEdicionVencimiento(); return; }
+
+  const actualizado = {
+    ...c,
+    vencimiento: nuevaFecha,
+    vencimientoCambiadoPor: quienSoy(),
+    vencimientoCambiadoEn: marcaDeTiempo(),
+  };
+  try {
+    await guardarEnStore(actualizado);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar el vencimiento');
+    return;
+  }
+  const i = creditos.findIndex(x => x.id === c.id);
+  if (i >= 0) creditos[i] = actualizado;
+  editandoVencimiento = false;
+  render();
+  renderInfo();
+  toast('✅ Vencimiento actualizado');
 }
 
 function renderInfo() {
@@ -2001,7 +2064,7 @@ function renderInfo() {
 
   const filas = [
     ['Zona', c.zona || '—'],
-    ['Vence', textoVencimiento(c)],
+    ['Vence', filaVencimiento(c)],
     cli && cli.direccion ? ['Dirección', escapeHtml(cli.direccion)] : null,
     cli && cli.telefono ? ['Teléfono', escapeHtml(cli.telefono)] : null,
     c.notas ? ['Notas', escapeHtml(c.notas)] : null,
@@ -3082,6 +3145,9 @@ function inicializarEventos() {
     const editarFecha = ev.target.closest('[data-editar-fecha]');
     const confirmarFecha = ev.target.closest('[data-confirmar-fecha]');
     const cancelarFecha = ev.target.closest('[data-cancelar-fecha]');
+    const editarVenc = ev.target.closest('[data-editar-venc]');
+    const confirmarVenc = ev.target.closest('[data-confirmar-venc]');
+    const cancelarVenc = ev.target.closest('[data-cancelar-venc]');
     if (info) {
       const c = creditos.find(x => x.id === info.dataset.info);
       if (c) abrirInfo(c);
@@ -3115,6 +3181,12 @@ function inicializarEventos() {
       confirmarEdicionFechaAbono(Number(confirmarFecha.dataset.confirmarFecha));
     } else if (cancelarFecha) {
       cancelarEdicionFechaAbono();
+    } else if (editarVenc) {
+      iniciarEdicionVencimiento();
+    } else if (confirmarVenc) {
+      confirmarEdicionVencimiento();
+    } else if (cancelarVenc) {
+      cancelarEdicionVencimiento();
     } else if (verFoto) {
       const c = creditos.find(x => x.id === verFoto.dataset.verFoto);
       if (c && c.foto) abrirVisorImagen(c);

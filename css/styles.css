@@ -993,6 +993,22 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .info-fila dt { margin: 0; color: var(--muted); min-width: 95px; flex-shrink: 0; font-weight: 600; }
 .info-fila dd { margin: 0; min-width: 0; word-break: break-word; }
 
+/* Cambiar el vencimiento directo desde la ficha */
+.btn-fecha-editar {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--primary);
+  padding: 0 0.2rem;
+}
+.venc-edit { display: inline-flex; align-items: center; gap: 0.3rem; }
+.venc-edit .input-mini { width: auto; margin: 0; padding: 0.15rem 0.35rem; font-size: 0.82rem; }
+.venc-edit button { background: none; border: none; cursor: pointer; font-size: 1rem; padding: 0 0.2rem; }
+.venc-edit button[data-confirmar-venc] { color: var(--ok); }
+.venc-edit button[data-cancelar-venc] { color: var(--gray); }
+.venc-constancia { display: block; font-size: 0.74rem; color: var(--muted); margin-top: 0.1rem; }
+
 .info-abonos { display: flex; flex-direction: column; gap: 0.4rem; }
 .info-abono {
   display: flex;
