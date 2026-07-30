@@ -567,9 +567,18 @@ async function iniciarNube() {
 
   const app = appMod.initializeApp(cfg);
   const auth = authMod.getAuth(app);
-  /* Caché local persistente: la app funciona sin internet y sincroniza al volver la conexión */
+  /* Caché local persistente: la app funciona sin internet y sincroniza al volver la conexión.
+     Se usa "una sola pestaña" (no "múltiples pestañas"): esta app es una única
+     instancia (el APK, o una pestaña de navegador), nunca varias pestañas
+     compartiendo el mismo caché. Con "múltiples pestañas", si Android mata la
+     app de golpe (común al quitar el internet o pasar a segundo plano) el
+     caché puede quedar con el "turno" de otra pestaña que ya no existe, y al
+     reabrir no logra servir los datos guardados. forceOwnership resuelve
+     justamente eso: esta instancia siempre toma el control del caché. */
   const db = fsMod.initializeFirestore(app, {
-    localCache: fsMod.persistentLocalCache({ tabManager: fsMod.persistentMultipleTabManager() }),
+    localCache: fsMod.persistentLocalCache({
+      tabManager: fsMod.persistentSingleTabManager({ forceOwnership: true }),
+    }),
   });
 
   if (EMULADOR) {
