@@ -340,24 +340,83 @@ function banner(msg) {
    La app funciona igual sin internet: Firestore guarda todo en el dispositivo
    y lo sube solo al reconectar. Este aviso es para que el empleado sepa en
    qué estado está y no piense que se perdió su trabajo. */
-let cambiosPendientes = false;
+let cambiosPendientes = false;   // hay cambios guardados aquí que aún no subieron
+let datosDesdeCache = true;      // true = todavía no hay conexión viva con el servidor
+let avisarConexionServidor = null;  // se llama en cuanto llegan datos del servidor
+
+/* Los datos llegan del servidor (no de la copia local): hay conexión de verdad */
+function marcarOrigenDatos(snap) {
+  datosDesdeCache = snap.metadata.fromCache;
+  if (!datosDesdeCache && avisarConexionServidor) avisarConexionServidor();
+}
 
 function actualizarAvisoConexion() {
   const el = $('#banner-conexion');
   if (!modoNube) { el.hidden = true; return; }
+  const texto = $('#banner-conexion-texto');
   const sinInternet = navigator.onLine === false;
   if (sinInternet) {
-    el.textContent = cambiosPendientes
+    texto.textContent = cambiosPendientes
       ? '📴 Sin internet — puedes seguir trabajando; hay cambios guardados aquí que se subirán solos al volver la conexión'
       : '📴 Sin internet — puedes seguir trabajando normalmente; todo se guarda en este dispositivo';
     el.className = 'banner banner-conexion banner-sin-internet';
     el.hidden = false;
   } else if (cambiosPendientes) {
-    el.textContent = '🔄 Subiendo a la nube los cambios hechos sin internet…';
+    texto.textContent = '🔄 Subiendo a la nube los cambios hechos sin internet…';
     el.className = 'banner banner-conexion banner-subiendo';
     el.hidden = false;
   } else {
     el.hidden = true;
+  }
+}
+
+/* ====== Sincronizar ahora ======
+   No "refresca" datos (los cambios ya llegan solos y al instante): lo que hace
+   es cortar y rehacer la conexión con la nube. Sirve para el caso real de la
+   calle en que la tablet cree que tiene internet pero la conexión quedó
+   muerta, y los cambios se quedan esperando sin motivo. */
+const LIMITE_SINCRONIZAR = 8000;   // ms que damos para que reaccione
+
+/* Espera a que lleguen datos del servidor (no de la copia local) */
+function esperarConexionServidor(limite) {
+  if (!datosDesdeCache) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const reloj = setTimeout(() => { avisarConexionServidor = null; resolve(false); }, limite);
+    avisarConexionServidor = () => { clearTimeout(reloj); avisarConexionServidor = null; resolve(true); };
+  });
+}
+
+async function sincronizarAhora() {
+  if (!modoNube) return;
+  const boton = $('#btn-sincronizar');
+  boton.disabled = true;
+  boton.textContent = '⏳ Sincronizando…';
+  try {
+    // Cortar y rehacer la conexión: despierta una conexión que quedó colgada
+    await fb.disableNetwork(fb.db);
+    datosDesdeCache = true;
+    await fb.enableNetwork(fb.db);
+
+    const conectado = await esperarConexionServidor(LIMITE_SINCRONIZAR);
+    if (!conectado) {
+      toast('⏳ Aún sin conexión: tus cambios están guardados y se subirán solos');
+      return;
+    }
+    // Ya hay conexión: esperar a que terminen de subir los cambios pendientes
+    const subidos = await Promise.race([
+      fb.waitForPendingWrites(fb.db).then(() => true),
+      new Promise(r => setTimeout(() => r(false), LIMITE_SINCRONIZAR)),
+    ]);
+    toast(subidos
+      ? '✅ Todo sincronizado'
+      : '⏳ Conectado, pero aún faltan cambios por subir: se subirán solos');
+  } catch (e) {
+    console.error('No se pudo sincronizar:', e);
+    toast('⏳ No se pudo sincronizar ahora: tus cambios están guardados aquí');
+  } finally {
+    boton.disabled = false;
+    boton.textContent = '🔄 Sincronizar ahora';
+    actualizarAvisoConexion();
   }
 }
 
@@ -531,6 +590,9 @@ async function iniciarNube() {
     deleteDoc: fsMod.deleteDoc,
     onSnapshot: fsMod.onSnapshot,
     serverTimestamp: fsMod.serverTimestamp,
+    disableNetwork: fsMod.disableNetwork,
+    enableNetwork: fsMod.enableNetwork,
+    waitForPendingWrites: fsMod.waitForPendingWrites,
     getAuth: authMod.getAuth,
     signIn: authMod.signInWithEmailAndPassword,
     registrar: authMod.createUserWithEmailAndPassword,
@@ -654,6 +716,8 @@ function sesionCerrada() {
   yo = null;
   migracionRevisada = false;
   cambiosPendientes = false;
+  datosDesdeCache = true;
+  avisarConexionServidor = null;
   actualizarAvisoConexion();
   render();
   $('#settings-cuenta').hidden = true;
@@ -671,10 +735,14 @@ async function cerrarSesion() {
 function suscribirNube() {
   if (unsubSnapshot) unsubSnapshot();
   const coleccion = fb.collection(fb.db, 'usuarios', ownerUid, 'creditos');
-  unsubSnapshot = fb.onSnapshot(coleccion, snap => {
+  // includeMetadataChanges: sin esto Firestore solo avisa cuando cambian los
+  // datos, y nunca sabríamos que un cambio ya terminó de subir ni que se
+  // recuperó la conexión (el aviso de "subiendo…" se quedaría pegado).
+  unsubSnapshot = fb.onSnapshot(coleccion, { includeMetadataChanges: true }, snap => {
     creditos = snap.docs.map(d => d.data());
     // hasPendingWrites: hay cambios guardados aquí que aún no llegaron al servidor
     cambiosPendientes = snap.metadata.hasPendingWrites;
+    marcarOrigenDatos(snap);
     actualizarAvisoConexion();
     render();
     avisoAlAbrir();
@@ -3119,6 +3187,7 @@ async function iniciar() {
   // Avisa cuando se va y cuando vuelve el internet (la app sigue funcionando igual)
   window.addEventListener('online', actualizarAvisoConexion);
   window.addEventListener('offline', actualizarAvisoConexion);
+  $('#btn-sincronizar').addEventListener('click', sincronizarAhora);
 
   if (configNubeValida()) {
     try {

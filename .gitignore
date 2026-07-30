@@ -3,3 +3,6 @@ www/
 android/
 assets/
 *.apk
+# Registros que deja el emulador de Firebase al probar en local
+*-debug.log
+.firebase/

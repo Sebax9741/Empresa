@@ -813,9 +813,29 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 
 /* Aviso de conexión: sin internet la app sigue funcionando igual */
-.banner-conexion { font-weight: 600; }
+.banner-conexion {
+  font-weight: 600;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
 .banner-sin-internet { background: #e5e7eb; color: #374151; }
 .banner-subiendo { background: #dbeafe; color: #1e40af; }
+.btn-sincronizar {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn-sincronizar:disabled { opacity: 0.6; cursor: default; }
 
 /* ====== Cuenta en configuración ====== */
 .settings-cuenta {
