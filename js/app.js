@@ -208,6 +208,12 @@ function fechaHoraDeTimestamp(ts) {
   return `${formatoFecha(fechaDeTimestamp(ts))} a las ${hh}:${mm}`;
 }
 
+/* Fecha y hora en que se registró una "a cuenta". Si es un pago antiguo
+   que no guardó la hora, se muestra solo la fecha. */
+function textoRegistrado(a) {
+  return a.registrado ? fechaHoraDeTimestamp(a.registrado) : formatoFecha(a.registradoFecha);
+}
+
 async function crearHojaCobranza(fechaISO) {
   if (!puede('hojaCrear')) { toast('🔒 No tienes permiso para crear la hoja de cobranza'); return; }
   if (hojaDe(fechaISO)) { toast('Esa hoja ya existe'); return; }
@@ -1219,7 +1225,7 @@ function abonosResumenHtml(c) {
   if (!lista.length) return '';
   const chips = lista.map((a, i) => {
     const quien = a.registradoPor
-      ? ` — registrado por ${a.registradoPor} el ${formatoFecha(a.registradoFecha)}`
+      ? ` — registrado por ${a.registradoPor} el ${textoRegistrado(a)}`
       : '';
     const ojo = abonoConFechaCambiada(a) ? '<span class="chip-ojo" >⚠️</span>' : '';
     return `
@@ -2081,7 +2087,7 @@ function renderInfo() {
           <strong>ACUENTA ${i + 1}: ${formatoMonto(a.monto)}</strong>
           <span class="info-abono-meta">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}</span>
           ${a.registradoPor ? `<span class="info-abono-meta${abonoConFechaCambiada(a) ? ' abono-ojo' : ''}">
-            ${abonoConFechaCambiada(a) ? '⚠️' : '🖊️'} ${escapeHtml(a.registradoPor)} · ${formatoFecha(a.registradoFecha)}</span>` : ''}
+            ${abonoConFechaCambiada(a) ? '⚠️' : '🖊️'} ${escapeHtml(a.registradoPor)} · ${textoRegistrado(a)}</span>` : ''}
         </div>
         ${a.firma
           ? `<img src="${a.firma}" class="firma-mini" alt="Firma" data-ver-firma="${i}" title="Ver la firma">`
@@ -2367,7 +2373,7 @@ function renderAbonos() {
       const constancia = a.registradoPor
         ? `<span class="abono-constancia${abonoConFechaCambiada(a) ? ' abono-ojo' : ''}">
              ${abonoConFechaCambiada(a) ? '⚠️ ' : '🖊️ '}Registrado por ${escapeHtml(a.registradoPor)}
-             el ${formatoFecha(a.registradoFecha)}</span>`
+             el ${textoRegistrado(a)}</span>`
         : '';
       const puedeQuitar = puedeQuitarAbono(a);
       const fechaHtml = abonoFechaEditando === i
