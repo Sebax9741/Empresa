@@ -1,0 +1,45 @@
+name: Publicar Cloud Functions (restablecer contraseña)
+
+# Manual a propósito: recién sirve cuando el proyecto de Firebase tiene el
+# plan Blaze activado (ver README, sección "Restablecer la contraseña de
+# un empleado"). No se dispara solo en cada push para no dejar la casilla
+# en rojo mientras tanto.
+on:
+  workflow_dispatch:
+
+jobs:
+  functions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verificar que existe el secreto de Firebase
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" ]; then
+            echo "::error::Falta el secreto FIREBASE_SERVICE_ACCOUNT."
+            exit 1
+          fi
+
+      - name: Instalar dependencias de la función
+        run: npm install
+        working-directory: functions
+
+      - name: Instalar Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Publicar la función
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/firebase-service-account.json
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
+          firebase deploy --only functions --project empresa-ab --non-interactive
+
+      - name: Borrar la credencial temporal
+        if: always()
+        run: rm -f "${{ github.workspace }}/firebase-service-account.json"

@@ -67,7 +67,17 @@ Al guardar, **el APK se recompila solo** con tu configuración (tarda ~5-10 minu
   - **Das o quitas permisos** a cada uno con casillas: crear créditos, editar, registrar pagos, **borrar créditos**, ver/exportar cobranza. O lo marcas como **administrador** (todos los permisos).
   - **Quitas el acceso** a un usuario cuando quieras.
 - Nadie puede registrarse solo: **solo tú creas usuarios**.
-- Si un empleado **olvida su contraseña**, puede cambiarla él mismo desde ⚙️ (estando dentro), o le creas un usuario nuevo.
+- Si un empleado **olvida su contraseña**, puede cambiarla él mismo desde ⚙️ (estando dentro), o **tú le pones una nueva** con el botón **🔑 Restablecer clave** en 👥 Usuarios (no hace falta saber la anterior; ver siguiente sección para activarlo).
+
+### Restablecer la contraseña de un empleado (🔑)
+
+Nadie, ni tú ni el código de la app, puede **ver** la contraseña de un empleado (se guarda como huella, no en texto). Pero como administrador puedes **ponerle una nueva** sin saber la anterior, con el botón 🔑 en 👥 Usuarios. Esto funciona mediante una función en la nube (Cloud Function) que hay que activar **una sola vez**:
+
+1. En la [consola de Firebase](https://console.firebase.google.com) → tu proyecto → ⚙️ **Configuración del proyecto** → **Uso y facturación** → cambia al plan **Blaze** (pago por uso). Necesita una tarjeta, pero esta función entra sobradamente en la cuota gratis mensual (2 millones de llamadas): en el uso normal de esta app no debería generar cobro.
+2. En GitHub, entra a este repositorio → pestaña **Actions** → en la lista de la izquierda elige **"Publicar Cloud Functions (restablecer contraseña)"** → botón **Run workflow** → **Run workflow** de nuevo para confirmar.
+3. Espera a que termine en verde (1-2 minutos). Listo, el botón 🔑 ya funciona.
+
+Este paso es manual a propósito (no se dispara solo en cada cambio de código) para no intentar publicar antes de que actives Blaze. Si en el futuro pido que se modifique esta función, hay que repetir el paso 2 para que el cambio quede publicado.
 
 ## PASO 3 — Instalar el APK en celular y tablet
 

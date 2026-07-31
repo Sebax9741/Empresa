@@ -690,6 +690,9 @@ async function iniciarNube() {
     salir: authMod.signOut,
     connectAuthEmulator: authMod.connectAuthEmulator,
     connectFirestoreEmulator: fsMod.connectFirestoreEmulator,
+    getFunctions: sdk.getFunctions,
+    httpsCallable: sdk.httpsCallable,
+    connectFunctionsEmulator: sdk.connectFunctionsEmulator,
   };
   modoNube = true;
 
@@ -969,7 +972,8 @@ async function renderUsuarios() {
         <div class="usuario-cab">
           <strong>${escapeHtml(m.usuario || '(sin nombre)')}</strong>
           <span class="usuario-rol">${m.rol === 'admin' ? '👑 Administrador' : '👤 Empleado'}</span>
-          ${esDueno ? '' : `<button type="button" class="btn btn-danger btn-small" data-borrar-usuario="${m.uid}">Quitar</button>`}
+          ${esDueno ? '' : `<button type="button" class="btn btn-secondary btn-small" data-resetear-clave="${m.uid}" data-usuario-nombre="${escapeHtml(m.usuario || '')}" title="Poner una contraseña nueva sin necesitar la anterior">🔑 Restablecer clave</button>
+          <button type="button" class="btn btn-danger btn-small" data-borrar-usuario="${m.uid}">Quitar</button>`}
         </div>
         <div class="usuario-perms">${permisosHtml}</div>
       </div>`;
@@ -1024,6 +1028,33 @@ async function cambiarPermiso(uid, perm, valor) {
   } catch (e) {
     toast('❌ No se pudo actualizar el permiso');
     renderUsuarios();
+  }
+}
+
+/* Restablece la contraseña de un empleado sin necesitar la anterior.
+   Solo el SDK de administrador de Firebase puede tocar la contraseña de
+   otra cuenta, así que esto pasa por una Cloud Function (requiere plan
+   Blaze activado y la función desplegada; ver README). */
+async function restablecerContrasenaEmpleado(uid, nombreUsuario) {
+  if (!esAdmin()) return;
+  const nueva = prompt(`Nueva contraseña para "${nombreUsuario}" (mínimo 6 caracteres):`);
+  if (nueva === null) return;
+  if (nueva.length < 6) { toast('⚠️ Debe tener al menos 6 caracteres'); return; }
+  try {
+    const funciones = fb.getFunctions(fb.app);
+    if (EMULADOR) fb.connectFunctionsEmulator(funciones, '127.0.0.1', 5001);
+    const llamar = fb.httpsCallable(funciones, 'restablecerContrasenaEmpleado');
+    await llamar({ ownerUid, memberUid: uid, nuevaContrasena: nueva });
+    toast(`✅ Contraseña de "${nombreUsuario}" actualizada`);
+  } catch (e) {
+    console.error(e);
+    if (e.code === 'functions/not-found' || e.code === 'functions/internal') {
+      toast('❌ La función en la nube todavía no está lista (ver README: activar Blaze y desplegar)');
+    } else if (e.code === 'functions/permission-denied') {
+      toast('🔒 No tienes permiso para hacer esto');
+    } else {
+      toast('❌ No se pudo cambiar la contraseña');
+    }
   }
 }
 
@@ -3320,8 +3351,10 @@ function inicializarEventos() {
     if (cb) cambiarPermiso(cb.dataset.uid, cb.dataset.perm, cb.checked);
   });
   $('#usuarios-list').addEventListener('click', ev => {
-    const btn = ev.target.closest('[data-borrar-usuario]');
-    if (btn) borrarUsuario(btn.dataset.borrarUsuario);
+    const btnBorrar = ev.target.closest('[data-borrar-usuario]');
+    if (btnBorrar) { borrarUsuario(btnBorrar.dataset.borrarUsuario); return; }
+    const btnClave = ev.target.closest('[data-resetear-clave]');
+    if (btnClave) restablecerContrasenaEmpleado(btnClave.dataset.resetearClave, btnClave.dataset.usuarioNombre);
   });
 }
 
