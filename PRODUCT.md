@@ -31,7 +31,8 @@ Herramienta interna, no un producto que se vende a terceros. Su ventaja frente a
 ## Capabilities and Constraints
 
 - Multi-dispositivo con base de datos en la nube (Firebase/Firestore) en tiempo real; también funciona completamente offline (clientes, créditos, cobros, firmas y fotos guardados en el dispositivo) con sincronización automática al recuperar señal.
-- Permisos granulares por empleado, definidos por el administrador: crear, editar, registrar pagos, borrar, ver/exportar cobranza, registrar/editar clientes, crear la hoja de cobranza del día, cambiar la fecha de vencimiento.
+- Permisos granulares por empleado, definidos por el administrador: crear, editar, registrar pagos, borrar, ver/exportar cobranza, registrar/editar clientes, crear la hoja de cobranza del día, cambiar la fecha de vencimiento, armar despachos de reparto.
+- Despachos de reparto: cada salida es un viaje (repartidor de una lista de solo nombres + carguero + fecha) con sus pedidos (cliente, N° de comprobante, monto, zona) y un estado por pedido; el pedido que vuelve firmado abre el formulario de crédito prellenado y queda enlazado al crédito creado.
 - Código de seguridad (PIN de 4 dígitos, hash SHA-256 con sal) del administrador, requerido para acciones destructivas o para tocar una hoja de cobranza ya cerrada.
 - Hora de apertura/cierre de cada hoja de cobranza tomada del servidor de Firebase, nunca del dispositivo, para que un empleado no pueda adelantar/atrasar el reloj de su tablet.
 - Exportación e impresión de hojas de cobranza (con fecha de emisión y fecha de despacho de cada crédito) y respaldo/restauración de toda la base con fotos incluidas.

@@ -4,6 +4,8 @@ import { descargarXlsx } from './xlsx-lite.js';
 let creditos = [];
 let clientes = [];        // base de datos de clientes: { id, nombre, zona, direccion, telefono, notas, creado }
 let hojas = [];           // hojas de cobranza creadas: { fecha, creada, creadaPor, creadaEn, cerrada, cerradaPor, cerradaEn }
+let despachos = [];       // despachos (viajes de reparto): { id, fecha, repartidor, carguero, notas, cerrado, creado, creadoPor, pedidos: [...] }
+let repartidores = [];    // lista de repartidores (solo nombres): { id, nombre, activo, creado }
 let settings = {
   dias: 30,
   moneda: '$',
@@ -21,6 +23,8 @@ let unsubClientes = null; // suscripción en tiempo real de la lista de clientes
 let unsubAjustes = null;  // suscripción a la configuración del negocio
 let unsubSeguridad = null; // suscripción al código de seguridad
 let unsubHojas = null;    // suscripción a las hojas de cobranza creadas
+let unsubDespachos = null; // suscripción a los despachos (viajes de reparto)
+let unsubRepartidores = null; // suscripción a la lista de repartidores
 let migracionRevisada = false;
 let ownerUid = null;      // dónde viven los datos del negocio (dueño)
 let yo = null;            // membresía del usuario actual: { usuario, nombre, rol, permisos }
@@ -94,6 +98,47 @@ function abonosDe(c) { return Array.isArray(c.abonos) ? c.abonos : []; }
 
 /* Quién está usando la app ahora (para dejar constancia en cada "a cuenta") */
 function quienSoy() { return (modoNube && yo && yo.usuario) ? yo.usuario : 'dueño'; }
+
+/* ====== Despachos (viajes de reparto) ======
+   Un despacho es una SALIDA: un repartidor + su carguero + la fecha, y adentro
+   la lista de pedidos que lleva. Cada pedido guarda datos básicos (cliente,
+   Nº de comprobante, monto, zona) y un estado. Cuando un pedido vuelve firmado,
+   desde ahí se abre el formulario de crédito ya prellenado. */
+const TIPOS_COMPROBANTE = { boleta: 'Boleta', factura: 'Factura', nota: 'Nota de venta' };
+const ESTADOS_PEDIDO = {
+  pendiente: { etiqueta: '🕐 En reparto', clase: 'pedido-pendiente' },
+  credito:   { etiqueta: '📄 A crédito', clase: 'pedido-credito' },
+  contado:   { etiqueta: '💵 Al contado', clase: 'pedido-contado' },
+  devuelto:  { etiqueta: '↩️ Devuelto', clase: 'pedido-devuelto' },
+};
+function estadoPedidoInfo(estado) { return ESTADOS_PEDIDO[estado] || ESTADOS_PEDIDO.pendiente; }
+function tipoComprobanteLabel(t) { return TIPOS_COMPROBANTE[t] || TIPOS_COMPROBANTE.boleta; }
+
+function pedidosDe(d) { return Array.isArray(d && d.pedidos) ? d.pedidos : []; }
+function despachoPorId(id) { return despachos.find(d => d.id === id) || null; }
+function repartidoresActivos() {
+  return repartidores.filter(r => r.activo !== false)
+    .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+}
+
+/* Ordena los despachos del más reciente al más antiguo (por fecha y creación) */
+function despachosOrdenados() {
+  return despachos.slice().sort((a, b) =>
+    (b.fecha || '').localeCompare(a.fecha || '') || (b.creado || 0) - (a.creado || 0));
+}
+
+/* Resumen de un despacho: cuántos pedidos hay en cada estado y el monto total */
+function resumenDespacho(d) {
+  const ped = pedidosDe(d);
+  const r = { total: ped.length, pendiente: 0, credito: 0, contado: 0, devuelto: 0, monto: 0 };
+  for (const p of ped) {
+    r[p.estado] = (r[p.estado] || 0) + 1;
+    r.monto += Number(p.monto) || 0;
+  }
+  return r;
+}
+
+function nuevoId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 /* Un empleado solo puede quitar una "a cuenta" que él mismo registró HOY.
    Las de días anteriores quedan bloqueadas: solo el administrador las toca.
@@ -645,6 +690,44 @@ async function eliminarClienteDeStore(id) {
   }
 }
 
+async function guardarDespachoEnStore(d) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'despachos', d.id), d),
+      `despacho del ${formatoFecha(d.fecha)}`);
+  } else {
+    await DB.putDespacho(d);
+  }
+}
+
+async function eliminarDespachoDeStore(id) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'despachos', id)), 'borrado de un despacho');
+  } else {
+    await DB.deleteDespacho(id);
+  }
+}
+
+async function guardarRepartidorEnStore(r) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'repartidores', r.id), r),
+      `repartidor ${r.nombre}`);
+  } else {
+    await DB.putRepartidor(r);
+  }
+}
+
+async function eliminarRepartidorDeStore(id) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'repartidores', id)), 'borrado de un repartidor');
+  } else {
+    await DB.deleteRepartidor(id);
+  }
+}
+
 /* ====== Firebase (modo nube) ====== */
 async function iniciarNube() {
   /* SDK empaquetado dentro de la app: funciona sin CDN y sin internet al arrancar */
@@ -811,9 +894,13 @@ function sesionCerrada() {
   if (unsubAjustes) { unsubAjustes(); unsubAjustes = null; }
   if (unsubSeguridad) { unsubSeguridad(); unsubSeguridad = null; }
   if (unsubHojas) { unsubHojas(); unsubHojas = null; }
+  if (unsubDespachos) { unsubDespachos(); unsubDespachos = null; }
+  if (unsubRepartidores) { unsubRepartidores(); unsubRepartidores = null; }
   creditos = [];
   clientes = [];
   hojas = [];
+  despachos = [];
+  repartidores = [];
   ownerUid = null;
   yo = null;
   migracionRevisada = false;
@@ -873,16 +960,48 @@ function suscribirNube() {
   }, err => {
     console.error('Error al sincronizar las hojas de cobranza:', err);
   });
+
+  if (unsubDespachos) unsubDespachos();
+  unsubDespachos = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'despachos'), snap => {
+    despachos = snap.docs.map(d => d.data());
+    if ($('#modal-despachos').open) renderDespachos();
+  }, err => {
+    console.error('Error al sincronizar los despachos:', err);
+  });
+
+  if (unsubRepartidores) unsubRepartidores();
+  unsubRepartidores = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'repartidores'), snap => {
+    repartidores = snap.docs.map(d => d.data());
+    if ($('#modal-despachos').open) renderDespachos();
+  }, err => {
+    console.error('Error al sincronizar los repartidores:', err);
+  });
 }
 
 /* Muestra/oculta botones según los permisos del usuario actual */
 function aplicarPermisos() {
   $('#btn-new').hidden = !puede('crear');
   $('#btn-cobranza').hidden = !puede('cobranza');
+  $('#btn-despachos').hidden = !puede('despachos');
   $('#btn-usuarios').hidden = !esAdmin();
   $('#btn-cliente-nuevo').hidden = !puede('clientes');
   $('#btn-logout-header').hidden = false;
+  sincronizarNavLateral();
   render(); // redibuja la tabla para aplicar permisos de editar/borrar
+}
+
+/* El panel lateral (escritorio) refleja los mismos permisos que la cabecera */
+function sincronizarNavLateral() {
+  const items = {
+    'nav-despachos': puede('despachos'),
+    'nav-clientes': true,
+    'nav-cobranza': puede('cobranza'),
+    'nav-usuarios': esAdmin(),
+  };
+  for (const [id, visible] of Object.entries(items)) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !visible;
+  }
 }
 
 /* Si el dispositivo tenía créditos guardados en modo local, ofrece subirlos a la cuenta */
@@ -951,6 +1070,7 @@ const PERMISOS_LISTA = [
   ['clientes', 'Registrar/editar clientes'],
   ['hojaCrear', 'Crear la hoja de cobranza del día'],
   ['vencimiento', 'Cambiar la fecha de vencimiento'],
+  ['despachos', 'Armar despachos de reparto'],
 ];
 
 async function abrirUsuarios() {
@@ -2261,10 +2381,11 @@ function aplicarAtajoVenc(dias) {
   vencimientoEditadoManual = true; // respeta la elección del atajo
 }
 
-function abrirFormulario(credito = null) {
+function abrirFormulario(credito = null, prefill = null) {
   // Editar créditos es solo del administrador: los demás ven la ficha
   if (credito && !puede('editar')) { abrirInfo(credito); return; }
   if (!credito && !puede('crear')) { toast('🔒 No tienes permiso para crear créditos'); return; }
+  if (credito) prefill = null;   // el prellenado solo aplica a créditos nuevos
   $('#credit-form').reset();
   fotoActual = null;
   abonosActuales = [];
@@ -2282,13 +2403,18 @@ function abrirFormulario(credito = null) {
   $('#btn-cliente-nuevo').disabled = false;
 
   // Selector de clientes: al elegir uno, su zona se pone sola
-  let valorCliente = '';
+  let valorCliente = '', zonaInicial = '';
   if (credito) {
     const cli = (credito.clienteId && clientePorId(credito.clienteId)) || clientePorNombre(credito.cliente);
     valorCliente = cli ? cli.id : `libre:${credito.cliente}`;
+    zonaInicial = credito.zona || '';
+  } else if (prefill) {
+    if (prefill.clienteId && clientePorId(prefill.clienteId)) valorCliente = prefill.clienteId;
+    else if (prefill.clienteNombre) valorCliente = `libre:${prefill.clienteNombre}`;
+    zonaInicial = prefill.zona || '';
   }
   llenarSelectClientes(valorCliente);
-  $('#f-zona').value = credito ? (credito.zona || '') : '';
+  $('#f-zona').value = zonaInicial;
   aplicarClienteSeleccionado();
 
   if (credito) {
@@ -2332,13 +2458,18 @@ function abrirFormulario(credito = null) {
     // Vuelve a bloquear la zona si el cliente elegido ya la define
     if (soloEditarCampos) aplicarClienteSeleccionado();
   } else {
-    $('#form-title').textContent = 'Nuevo crédito';
+    $('#form-title').textContent = prefill ? 'Nuevo crédito (desde despacho)' : 'Nuevo crédito';
     $('#f-id').value = '';
     $('#f-fecha').value = hoyISO();
     $('#f-vencimiento').value = sumarDias(hoyISO(), settings.dias);
     // Al crear: mostrar "pago inicial" y ocultar abonos
     $('#field-pago-inicial').hidden = false;
     $('#abonos-box').hidden = true;
+    if (prefill) {
+      $('#f-boleta').value = prefill.boleta || '';
+      if (prefill.monto) $('#f-monto').value = prefill.monto;
+      $('#f-fecha-despacho').value = prefill.fechaDespacho || '';
+    }
   }
   modalForm.showModal();
 }
@@ -2887,6 +3018,389 @@ function imprimirCobranza() {
   w.document.close();
 }
 
+/* ====== Despachos (viajes de reparto) ====== */
+let despachoActivoId = null;   // despacho abierto en la vista de detalle
+let pedidoOrigen = null;       // { despachoId, pedidoId } del pedido que se está pasando a crédito
+
+const VISTAS_DESPACHO = ['lista', 'form', 'detalle', 'repartidores'];
+function mostrarVistaDespacho(nombre) {
+  VISTAS_DESPACHO.forEach(v => {
+    const el = $('#desp-vista-' + v);
+    if (el) el.hidden = (v !== nombre);
+  });
+}
+
+function abrirDespachos() {
+  if (!puede('despachos')) { toast('🔒 No tienes permiso para armar despachos'); return; }
+  mostrarVistaDespacho('lista');
+  renderListaDespachos();
+  $('#modal-despachos').showModal();
+}
+
+/* Vuelve a dibujar la vista de despachos que esté abierta (al llegar datos de la nube) */
+function renderDespachos() {
+  if (!$('#desp-vista-lista').hidden) renderListaDespachos();
+  else if (!$('#desp-vista-detalle').hidden) renderDetalleDespacho();
+  else if (!$('#desp-vista-repartidores').hidden) renderRepartidores();
+}
+
+function chipPedidos(res) {
+  const partes = [];
+  if (res.pendiente) partes.push(`<span class="ped-chip pedido-pendiente">${res.pendiente} en reparto</span>`);
+  if (res.credito) partes.push(`<span class="ped-chip pedido-credito">${res.credito} a crédito</span>`);
+  if (res.contado) partes.push(`<span class="ped-chip pedido-contado">${res.contado} al contado</span>`);
+  if (res.devuelto) partes.push(`<span class="ped-chip pedido-devuelto">${res.devuelto} devuelto</span>`);
+  return partes.join(' ');
+}
+
+function renderListaDespachos() {
+  const cont = $('#despachos-list');
+  const lista = despachosOrdenados();
+  $('#desp-vacio').hidden = lista.length > 0;
+  cont.innerHTML = lista.map(d => {
+    const res = resumenDespacho(d);
+    return `
+      <button type="button" class="despacho-card" data-abrir-despacho="${d.id}">
+        <div class="despacho-card-cab">
+          <span class="despacho-fecha">${formatoFecha(d.fecha)}</span>
+        </div>
+        <div class="despacho-card-rep">🧍 ${escapeHtml(d.repartidor || '(sin repartidor)')}${d.carguero ? ` · 🚚 ${escapeHtml(d.carguero)}` : ''}</div>
+        <div class="despacho-card-pie">
+          <span class="despacho-cont">${res.total} pedido${res.total === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</span>
+        </div>
+        <div class="despacho-chips">${chipPedidos(res) || '<span class="ped-chip">Sin pedidos aún</span>'}</div>
+      </button>`;
+  }).join('');
+}
+
+function llenarSelectRepartidores(valor = '') {
+  const sel = $('#desp-repartidor');
+  const activos = repartidoresActivos();
+  sel.innerHTML = '<option value="">— Elige un repartidor —</option>' +
+    activos.map(r => `<option value="${escapeHtml(r.nombre)}">${escapeHtml(r.nombre)}</option>`).join('');
+  // Si el repartidor guardado ya no está en la lista, lo mantenemos como opción
+  if (valor && !activos.some(r => r.nombre === valor)) {
+    sel.innerHTML += `<option value="${escapeHtml(valor)}">${escapeHtml(valor)}</option>`;
+  }
+  sel.value = valor;
+}
+
+function abrirFormDespacho(despacho = null) {
+  $('#desp-form').reset();
+  $('#desp-id').value = despacho ? despacho.id : '';
+  $('#desp-form-title').textContent = despacho ? 'Editar despacho' : 'Nuevo despacho';
+  $('#desp-fecha').value = despacho ? despacho.fecha : hoyISO();
+  $('#desp-carguero').value = despacho ? (despacho.carguero || '') : '';
+  $('#desp-notas').value = despacho ? (despacho.notas || '') : '';
+  llenarSelectRepartidores(despacho ? (despacho.repartidor || '') : '');
+  mostrarVistaDespacho('form');
+  if (!repartidoresActivos().length) {
+    toast('💡 Primero agrega repartidores (botón 🧍 Repartidores)');
+  }
+}
+
+async function guardarDespachoForm(ev) {
+  ev.preventDefault();
+  if (!puede('despachos')) return;
+  const repartidor = $('#desp-repartidor').value.trim();
+  if (!repartidor) { toast('⚠️ Elige un repartidor'); return; }
+  const id = $('#desp-id').value || nuevoId();
+  const existente = despachoPorId(id);
+  const despacho = {
+    id,
+    fecha: $('#desp-fecha').value || hoyISO(),
+    repartidor,
+    carguero: $('#desp-carguero').value.trim(),
+    notas: $('#desp-notas').value.trim(),
+    pedidos: existente ? pedidosDe(existente) : [],
+    creado: existente ? existente.creado : Date.now(),
+    creadoPor: existente ? existente.creadoPor : quienSoy(),
+  };
+  try {
+    await guardarDespachoEnStore(despacho);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar el despacho. Revisa tu conexión.');
+    return;
+  }
+  const idx = despachos.findIndex(d => d.id === id);
+  if (idx >= 0) despachos[idx] = despacho; else despachos.push(despacho);
+  despachoActivoId = id;
+  toast(existente ? '✅ Despacho actualizado' : '✅ Despacho creado');
+  abrirDetalleDespacho(id);
+}
+
+function abrirDetalleDespacho(id) {
+  despachoActivoId = id;
+  $('#ped-form').hidden = true;
+  $('#btn-ped-nuevo').hidden = false;
+  mostrarVistaDespacho('detalle');
+  renderDetalleDespacho();
+}
+
+function renderDetalleDespacho() {
+  const d = despachoPorId(despachoActivoId);
+  if (!d) { mostrarVistaDespacho('lista'); renderListaDespachos(); return; }
+  const res = resumenDespacho(d);
+  $('#desp-det-title').textContent = `Despacho del ${formatoFecha(d.fecha)}`;
+  $('#desp-det-info').innerHTML = `
+    <div class="desp-det-fila"><span>🧍 Repartidor</span><strong>${escapeHtml(d.repartidor || '—')}</strong></div>
+    ${d.carguero ? `<div class="desp-det-fila"><span>🚚 Carguero</span><strong>${escapeHtml(d.carguero)}</strong></div>` : ''}
+    ${d.notas ? `<div class="desp-det-fila"><span>📝 Nota</span><strong>${escapeHtml(d.notas)}</strong></div>` : ''}`;
+  $('#desp-det-totales').innerHTML = `
+    <div class="desp-total"><span>Pedidos</span><strong>${res.total}</strong></div>
+    <div class="desp-total"><span>Monto total</span><strong>${formatoMonto(res.monto)}</strong></div>
+    <div class="desp-total"><span>A crédito</span><strong>${res.credito}</strong></div>
+    <div class="desp-total"><span>Al contado</span><strong>${res.contado}</strong></div>`;
+  renderPedidos();
+}
+
+function renderPedidos() {
+  const d = despachoPorId(despachoActivoId);
+  if (!d) return;
+  const ped = pedidosDe(d);
+  const cont = $('#pedidos-list');
+  $('#pedidos-vacio').hidden = ped.length > 0;
+  cont.innerHTML = ped.map((p, i) => {
+    const info = estadoPedidoInfo(p.estado);
+    const comprobante = p.comprobante ? `${tipoComprobanteLabel(p.tipoComprobante)} N° ${escapeHtml(p.comprobante)}` : tipoComprobanteLabel(p.tipoComprobante);
+    let acciones = '';
+    if (p.estado === 'pendiente') {
+      acciones = `
+        <button type="button" class="btn btn-primary btn-small" data-ped-credito="${p.id}">📄 Volvió firmado → crédito</button>
+        <button type="button" class="btn btn-secondary btn-small" data-ped-estado="${p.id}|contado">💵 Al contado</button>
+        <button type="button" class="btn btn-secondary btn-small" data-ped-estado="${p.id}|devuelto">↩️ Devuelto</button>`;
+    } else if (p.estado === 'credito' && p.creditoId) {
+      acciones = `<button type="button" class="btn btn-secondary btn-small" data-ped-ver-credito="${p.id}">Ver crédito</button>
+                  <button type="button" class="btn btn-secondary btn-small" data-ped-estado="${p.id}|pendiente">Deshacer</button>`;
+    } else {
+      acciones = `<button type="button" class="btn btn-secondary btn-small" data-ped-estado="${p.id}|pendiente">Deshacer</button>`;
+    }
+    return `
+      <div class="pedido-item ${info.clase}">
+        <div class="pedido-cab">
+          <strong>${escapeHtml(p.cliente || '(sin cliente)')}</strong>
+          <span class="ped-chip ${info.clase}">${info.etiqueta}</span>
+        </div>
+        <div class="pedido-datos">
+          <span>${comprobante}</span>
+          <span>${formatoMonto(Number(p.monto) || 0)}</span>
+          ${p.zona ? `<span>📍 ${escapeHtml(p.zona)}</span>` : ''}
+        </div>
+        <div class="pedido-acciones">
+          ${acciones}
+          <button type="button" class="btn btn-secondary btn-small" data-ped-editar="${p.id}">✏️</button>
+          <button type="button" class="btn btn-danger btn-small" data-ped-borrar="${p.id}">🗑️</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function llenarDatalistClientesPedido() {
+  $('#ped-clientes-datalist').innerHTML = clientes
+    .map(c => `<option value="${escapeHtml(c.nombre)}">`).join('');
+}
+
+function abrirFormPedido(pedido = null) {
+  $('#ped-form').reset();
+  $('#ped-id').value = pedido ? pedido.id : '';
+  $('#ped-form-title').textContent = pedido ? 'Editar pedido' : 'Agregar pedido';
+  llenarDatalistClientesPedido();
+  $('#ped-cliente').value = pedido ? (pedido.cliente || '') : '';
+  $('#ped-tipo').value = (pedido && pedido.tipoComprobante) || 'boleta';
+  $('#ped-comprobante').value = pedido ? (pedido.comprobante || '') : '';
+  $('#ped-monto').value = pedido ? (pedido.monto || '') : '';
+  $('#ped-zona').value = pedido ? (pedido.zona || '') : '';
+  $('#ped-form').hidden = false;
+  $('#btn-ped-nuevo').hidden = true;
+  $('#ped-cliente').focus();
+}
+
+function cerrarFormPedido() {
+  $('#ped-form').hidden = true;
+  $('#btn-ped-nuevo').hidden = false;
+}
+
+async function guardarPedidoForm(ev) {
+  ev.preventDefault();
+  const d = despachoPorId(despachoActivoId);
+  if (!d) return;
+  const nombreTexto = $('#ped-cliente').value.trim();
+  if (!nombreTexto) { toast('⚠️ Escribe el cliente'); return; }
+  const monto = Number($('#ped-monto').value) || 0;
+  const cli = clientePorNombre(nombreTexto);
+  const id = $('#ped-id').value || nuevoId();
+  const ped = pedidosDe(d);
+  const existente = ped.find(p => p.id === id);
+  const pedido = {
+    id,
+    cliente: cli ? cli.nombre : nombreTexto,
+    clienteId: cli ? cli.id : '',
+    tipoComprobante: $('#ped-tipo').value,
+    comprobante: $('#ped-comprobante').value.trim(),
+    monto,
+    zona: $('#ped-zona').value || (cli ? (cli.zona || '') : ''),
+    estado: existente ? existente.estado : 'pendiente',
+    creditoId: existente ? (existente.creditoId || '') : '',
+  };
+  const nuevos = existente ? ped.map(p => p.id === id ? pedido : p) : ped.concat(pedido);
+  await guardarPedidosDe(d, nuevos, existente ? '✅ Pedido actualizado' : '✅ Pedido agregado');
+  cerrarFormPedido();
+}
+
+/* Guarda la lista de pedidos de un despacho y refresca la vista */
+async function guardarPedidosDe(d, nuevosPedidos, mensaje) {
+  const actualizado = { ...d, pedidos: nuevosPedidos };
+  try {
+    await guardarDespachoEnStore(actualizado);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar. Revisa tu conexión.');
+    return false;
+  }
+  const idx = despachos.findIndex(x => x.id === d.id);
+  if (idx >= 0) despachos[idx] = actualizado;
+  renderDetalleDespacho();
+  if (mensaje) toast(mensaje);
+  return true;
+}
+
+async function cambiarEstadoPedido(pedidoId, estado) {
+  const d = despachoPorId(despachoActivoId);
+  if (!d) return;
+  const nuevos = pedidosDe(d).map(p => {
+    if (p.id !== pedidoId) return p;
+    const cambio = { ...p, estado };
+    if (estado !== 'credito') cambio.creditoId = '';
+    return cambio;
+  });
+  await guardarPedidosDe(d, nuevos);
+}
+
+async function borrarPedido(pedidoId) {
+  const d = despachoPorId(despachoActivoId);
+  if (!d) return;
+  const p = pedidosDe(d).find(x => x.id === pedidoId);
+  if (!p) return;
+  if (!confirm(`¿Borrar el pedido de ${p.cliente || 'este cliente'}?`)) return;
+  const nuevos = pedidosDe(d).filter(x => x.id !== pedidoId);
+  await guardarPedidosDe(d, nuevos, '🗑️ Pedido borrado');
+}
+
+async function borrarDespachoActual() {
+  const d = despachoPorId(despachoActivoId);
+  if (!d) return;
+  if (!confirm(`¿Borrar el despacho del ${formatoFecha(d.fecha)} (${d.repartidor})?\nSe borran también sus ${pedidosDe(d).length} pedido(s).`)) return;
+  try {
+    await eliminarDespachoDeStore(d.id);
+  } catch (e) {
+    toast('❌ No se pudo borrar. Revisa tu conexión.');
+    return;
+  }
+  despachos = despachos.filter(x => x.id !== d.id);
+  despachoActivoId = null;
+  toast('🗑️ Despacho borrado');
+  mostrarVistaDespacho('lista');
+  renderListaDespachos();
+}
+
+/* Abre el formulario de crédito ya prellenado con los datos del pedido.
+   Al guardar el crédito, el pedido queda marcado como "a crédito" y enlazado. */
+function crearCreditoDesdePedido(pedidoId) {
+  if (!puede('crear')) { toast('🔒 No tienes permiso para crear créditos'); return; }
+  const d = despachoPorId(despachoActivoId);
+  const p = d && pedidosDe(d).find(x => x.id === pedidoId);
+  if (!p) return;
+  pedidoOrigen = { despachoId: d.id, pedidoId: p.id };
+  $('#modal-despachos').close();
+  abrirFormulario(null, {
+    boleta: p.comprobante || '',
+    clienteId: p.clienteId || '',
+    clienteNombre: p.cliente || '',
+    zona: p.zona || '',
+    monto: Number(p.monto) || 0,
+    fechaDespacho: d.fecha || '',
+  });
+}
+
+/* Enlaza el pedido de origen con el crédito recién creado */
+async function vincularPedidoConCredito(origen, credito) {
+  const d = despachoPorId(origen.despachoId);
+  if (!d) return;
+  const nuevos = pedidosDe(d).map(p =>
+    p.id === origen.pedidoId ? { ...p, estado: 'credito', creditoId: credito.id } : p);
+  const actualizado = { ...d, pedidos: nuevos };
+  try {
+    await guardarDespachoEnStore(actualizado);
+    const idx = despachos.findIndex(x => x.id === d.id);
+    if (idx >= 0) despachos[idx] = actualizado;
+  } catch (e) {
+    console.error('No se pudo enlazar el pedido con el crédito:', e);
+  }
+}
+
+function verCreditoDePedido(pedidoId) {
+  const d = despachoPorId(despachoActivoId);
+  const p = d && pedidosDe(d).find(x => x.id === pedidoId);
+  const c = p && p.creditoId && creditos.find(x => x.id === p.creditoId);
+  if (c) { $('#modal-despachos').close(); abrirInfo(c); }
+  else toast('El crédito enlazado ya no existe');
+}
+
+/* ====== Repartidores ====== */
+function abrirRepartidores() {
+  mostrarVistaDespacho('repartidores');
+  $('#rep-form').reset();
+  renderRepartidores();
+}
+
+function renderRepartidores() {
+  const cont = $('#repartidores-list');
+  const lista = repartidores.slice().sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+  $('#repartidores-vacio').hidden = lista.length > 0;
+  cont.innerHTML = lista.map(r => `
+    <div class="repartidor-item">
+      <span>🧍 ${escapeHtml(r.nombre)}</span>
+      <button type="button" class="btn btn-danger btn-small" data-borrar-repartidor="${r.id}">Quitar</button>
+    </div>`).join('');
+}
+
+async function agregarRepartidor(ev) {
+  ev.preventDefault();
+  if (!puede('despachos')) return;
+  const nombre = $('#rep-nombre').value.trim();
+  if (!nombre) { toast('⚠️ Escribe un nombre'); return; }
+  if (repartidores.some(r => (r.nombre || '').toLowerCase() === nombre.toLowerCase())) {
+    toast('⚠️ Ese repartidor ya está en la lista'); return;
+  }
+  const r = { id: nuevoId(), nombre, activo: true, creado: Date.now() };
+  try {
+    await guardarRepartidorEnStore(r);
+  } catch (e) {
+    toast('❌ No se pudo guardar. Revisa tu conexión.');
+    return;
+  }
+  if (!repartidores.some(x => x.id === r.id)) repartidores.push(r);
+  $('#rep-form').reset();
+  renderRepartidores();
+  toast('✅ Repartidor agregado');
+}
+
+async function borrarRepartidor(id) {
+  const r = repartidores.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`¿Quitar a "${r.nombre}" de la lista de repartidores?`)) return;
+  try {
+    await eliminarRepartidorDeStore(id);
+  } catch (e) {
+    toast('❌ No se pudo quitar. Revisa tu conexión.');
+    return;
+  }
+  repartidores = repartidores.filter(x => x.id !== id);
+  renderRepartidores();
+  toast('🗑️ Repartidor quitado');
+}
+
 async function guardarCredito(ev) {
   ev.preventDefault();
 
@@ -2961,9 +3475,14 @@ async function guardarCredito(ev) {
   const idx = creditos.findIndex(c => c.id === id);
   if (idx >= 0) creditos[idx] = credito; else creditos.push(credito);
 
+  // Si el crédito nació de un pedido de despacho, enlázalos y márcalo "a crédito"
+  const origen = existente ? null : pedidoOrigen;
+  pedidoOrigen = null;
+  if (origen) await vincularPedidoConCredito(origen, credito);
+
   modalForm.close();
   render();
-  toast(existente ? '✅ Crédito actualizado' : '✅ Crédito guardado');
+  toast(existente ? '✅ Crédito actualizado' : (origen ? '✅ Crédito creado y pedido enlazado' : '✅ Crédito guardado'));
 }
 
 async function borrarCredito(id) {
@@ -2986,7 +3505,7 @@ async function borrarCredito(id) {
 
 /* ====== Respaldo ====== */
 function exportarRespaldo() {
-  const datos = { version: 2, exportado: new Date().toISOString(), settings, creditos, clientes };
+  const datos = { version: 3, exportado: new Date().toISOString(), settings, creditos, clientes, despachos, repartidores };
   const blob = new Blob([JSON.stringify(datos)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -3023,6 +3542,24 @@ async function importarRespaldo(file) {
       renderClientes();
       llenarSelectClientes();
     }
+    if (Array.isArray(datos.despachos)) {
+      for (const d of datos.despachos) {
+        await guardarDespachoEnStore(d);
+        if (!modoNube) {
+          const i = despachos.findIndex(x => x.id === d.id);
+          if (i >= 0) despachos[i] = d; else despachos.push(d);
+        }
+      }
+    }
+    if (Array.isArray(datos.repartidores)) {
+      for (const r of datos.repartidores) {
+        await guardarRepartidorEnStore(r);
+        if (!modoNube) {
+          const i = repartidores.findIndex(x => x.id === r.id);
+          if (i >= 0) repartidores[i] = r; else repartidores.push(r);
+        }
+      }
+    }
     if (datos.settings) { settings = { ...settings, ...datos.settings }; await guardarSettings().catch(() => {}); }
     render();
     toast('⬆️ Respaldo importado correctamente');
@@ -3038,6 +3575,8 @@ function poblarSelectores() {
     ZONAS.map(z => `<option value="${z}">${z}</option>`).join('');
   $('#cli-zona').innerHTML = '<option value="">— Sin zona —</option>' +
     ZONAS.map(z => `<option value="${z}">${z}</option>`).join('');
+  $('#ped-zona').innerHTML = '<option value="">— Sin zona —</option>' +
+    ZONAS.map(z => `<option value="${z}">${z}</option>`).join('');
   $('#filtro-zonas').innerHTML = ZONAS.map(z =>
     `<label><input type="checkbox" class="fil-zona" value="${escapeHtml(z)}"> ${escapeHtml(z)}</label>`).join('');
   $('#filtro-meses').innerHTML = MESES.map((m, i) =>
@@ -3050,6 +3589,8 @@ function inicializarEventos() {
 
   $('#btn-new').addEventListener('click', () => abrirFormulario());
   $('#btn-cancelar').addEventListener('click', () => modalForm.close());
+  // Si se cancela un crédito que venía de un despacho, se descarta el enlace pendiente
+  modalForm.addEventListener('close', () => { pedidoOrigen = null; });
   $('#credit-form').addEventListener('submit', guardarCredito);
 
   // Abonos "a cuenta" (en edición)
@@ -3270,6 +3811,87 @@ function inicializarEventos() {
   $('#btn-hoja-crear').addEventListener('click', () => crearHojaCobranza($('#cob-fecha').value || hoyISO()));
   $('#btn-hoja-cerrar').addEventListener('click', () => cerrarHojaCobranza($('#cob-fecha').value || hoyISO()));
 
+  // ====== Despachos ======
+  $('#btn-despachos').addEventListener('click', abrirDespachos);
+  $('#btn-desp-cerrar').addEventListener('click', () => $('#modal-despachos').close());
+  $('#btn-desp-nuevo').addEventListener('click', () => abrirFormDespacho());
+  $('#btn-desp-repartidores').addEventListener('click', abrirRepartidores);
+  $('#desp-form').addEventListener('submit', guardarDespachoForm);
+  $('#btn-desp-editar').addEventListener('click', () => {
+    const d = despachoPorId(despachoActivoId);
+    if (d) abrirFormDespacho(d);
+  });
+  $('#btn-desp-borrar').addEventListener('click', borrarDespachoActual);
+  $('#btn-desp-rep-rapido').addEventListener('click', () => {
+    const nombre = (prompt('Nombre del repartidor nuevo:') || '').trim();
+    if (!nombre) return;
+    $('#rep-nombre').value = nombre;
+    // Reutiliza el alta normal y, al terminar, lo deja elegido en el select
+    const form = $('#rep-form');
+    agregarRepartidor({ preventDefault() {} }).then(() => llenarSelectRepartidores(nombre));
+    void form;
+  });
+
+  // Pedidos dentro de un despacho
+  $('#btn-ped-nuevo').addEventListener('click', () => abrirFormPedido());
+  $('#btn-ped-cancelar').addEventListener('click', cerrarFormPedido);
+  $('#ped-form').addEventListener('submit', guardarPedidoForm);
+  // Al elegir un cliente registrado, su zona se pone sola
+  $('#ped-cliente').addEventListener('input', () => {
+    const cli = clientePorNombre($('#ped-cliente').value.trim());
+    if (cli && cli.zona) $('#ped-zona').value = cli.zona;
+  });
+
+  // Repartidores
+  $('#rep-form').addEventListener('submit', agregarRepartidor);
+  $('#repartidores-list').addEventListener('click', ev => {
+    const btn = ev.target.closest('[data-borrar-repartidor]');
+    if (btn) borrarRepartidor(btn.dataset.borrarRepartidor);
+  });
+
+  // Botones "◀ Volver" de las distintas vistas del modal de despachos
+  $('#modal-despachos').addEventListener('click', ev => {
+    if (ev.target.closest('[data-desp-volver]')) {
+      mostrarVistaDespacho('lista');
+      renderListaDespachos();
+    }
+  });
+
+  // Lista de despachos: abrir uno
+  $('#despachos-list').addEventListener('click', ev => {
+    const card = ev.target.closest('[data-abrir-despacho]');
+    if (card) abrirDetalleDespacho(card.dataset.abrirDespacho);
+  });
+
+  // Acciones sobre los pedidos (delegación)
+  $('#pedidos-list').addEventListener('click', ev => {
+    const credito = ev.target.closest('[data-ped-credito]');
+    const estado = ev.target.closest('[data-ped-estado]');
+    const editar = ev.target.closest('[data-ped-editar]');
+    const borrar = ev.target.closest('[data-ped-borrar]');
+    const verCred = ev.target.closest('[data-ped-ver-credito]');
+    if (credito) crearCreditoDesdePedido(credito.dataset.pedCredito);
+    else if (estado) {
+      const [pid, est] = estado.dataset.pedEstado.split('|');
+      cambiarEstadoPedido(pid, est);
+    } else if (editar) {
+      const d = despachoPorId(despachoActivoId);
+      const p = d && pedidosDe(d).find(x => x.id === editar.dataset.pedEditar);
+      if (p) abrirFormPedido(p);
+    } else if (borrar) borrarPedido(borrar.dataset.pedBorrar);
+    else if (verCred) verCreditoDePedido(verCred.dataset.pedVerCredito);
+  });
+
+  // Panel lateral (escritorio): mismos destinos que la cabecera
+  $('#nav-inicio').addEventListener('click', () => {
+    document.querySelectorAll('dialog[open]').forEach(d => d.close());
+  });
+  $('#nav-despachos').addEventListener('click', abrirDespachos);
+  $('#nav-clientes').addEventListener('click', abrirClientes);
+  $('#nav-cobranza').addEventListener('click', () => { if (puede('cobranza')) abrirCobranza(); });
+  $('#nav-usuarios').addEventListener('click', () => { if (esAdmin()) abrirUsuarios(); });
+  $('#nav-settings').addEventListener('click', () => $('#btn-settings').click());
+
   // Configuración
   $('#btn-settings').addEventListener('click', () => {
     $('#s-dias').value = settings.dias;
@@ -3376,6 +3998,8 @@ function inicializarEventos() {
     const btnClave = ev.target.closest('[data-resetear-clave]');
     if (btnClave) restablecerContrasenaEmpleado(btnClave.dataset.resetearClave, btnClave.dataset.usuarioNombre);
   });
+
+  sincronizarNavLateral();
 }
 
 /* ====== Inicio ====== */
@@ -3383,11 +4007,15 @@ async function iniciarLocal() {
   try {
     creditos = await DB.getAll();
     clientes = await DB.getAllClientes();
+    despachos = await DB.getAllDespachos();
+    repartidores = await DB.getAllRepartidores();
     ordenarClientes();
   } catch (e) {
     toast('❌ No se pudo abrir la base de datos local');
     creditos = [];
     clientes = [];
+    despachos = [];
+    repartidores = [];
   }
   cargarSeguridad();
   llenarSelectClientes();

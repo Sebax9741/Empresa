@@ -15,6 +15,17 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+  <!-- Panel lateral de navegación (solo en pantallas anchas: PC/tablet horizontal) -->
+  <nav id="nav-lateral" class="nav-lateral" aria-label="Menú principal">
+    <div class="nav-marca">💳 <span>Créditos</span></div>
+    <button type="button" class="nav-item" id="nav-inicio"><span class="nav-ico">📋</span> Créditos</button>
+    <button type="button" class="nav-item" id="nav-despachos"><span class="nav-ico">📦</span> Despachos</button>
+    <button type="button" class="nav-item" id="nav-clientes"><span class="nav-ico">🧑‍🤝‍🧑</span> Clientes</button>
+    <button type="button" class="nav-item" id="nav-cobranza"><span class="nav-ico">🧾</span> Hoja de cobranza</button>
+    <button type="button" class="nav-item" id="nav-usuarios" hidden><span class="nav-ico">👥</span> Usuarios</button>
+    <button type="button" class="nav-item" id="nav-settings"><span class="nav-ico">⚙️</span> Configuración</button>
+  </nav>
+
   <!-- Pantalla de inicio de sesión (solo en modo nube) -->
   <div id="auth-screen" class="auth-screen" hidden>
     <div class="auth-box">
@@ -40,6 +51,7 @@
     <div class="header-inner">
       <h1>💳 <span class="titulo-largo">Control de </span>Créditos</h1>
       <div class="header-actions">
+        <button id="btn-despachos" class="btn-icon" title="Despachos" aria-label="Despachos">📦</button>
         <button id="btn-clientes" class="btn-icon" title="Clientes" aria-label="Clientes">🧑‍🤝‍🧑</button>
         <button id="btn-usuarios" class="btn-icon" title="Usuarios" aria-label="Usuarios" hidden>👥</button>
         <button id="btn-cobranza" class="btn-icon" title="Hoja de cobranza" aria-label="Hoja de cobranza">🧾</button>
@@ -343,6 +355,7 @@
         <label class="u-perm"><input type="checkbox" id="u-perm-clientes" checked> Registrar/editar clientes</label>
         <label class="u-perm"><input type="checkbox" id="u-perm-hojaCrear"> Crear la hoja de cobranza del día</label>
         <label class="u-perm"><input type="checkbox" id="u-perm-vencimiento"> Cambiar la fecha de vencimiento</label>
+        <label class="u-perm"><input type="checkbox" id="u-perm-despachos"> Armar despachos de reparto</label>
       </div>
       <button type="submit" id="btn-u-crear" class="btn btn-primary btn-block">➕ Crear usuario</button>
     </form>
@@ -549,6 +562,128 @@
       <button type="button" id="btn-cob-imprimir" class="btn btn-secondary">🖨️ Imprimir</button>
       <button type="button" id="btn-cob-excel" class="btn btn-primary">⬇️ Exportar a Excel</button>
     </div>
+  </dialog>
+
+  <!-- Modal: Despachos (viajes de reparto) -->
+  <dialog id="modal-despachos" class="modal modal-despachos">
+
+    <!-- Vista: lista de despachos -->
+    <section id="desp-vista-lista" class="desp-vista">
+      <div class="desp-cab">
+        <h2>📦 Despachos</h2>
+        <div class="desp-cab-botones">
+          <button type="button" id="btn-desp-repartidores" class="btn btn-secondary btn-small">🧍 Repartidores</button>
+          <button type="button" id="btn-desp-nuevo" class="btn btn-primary btn-small">➕ Nuevo despacho</button>
+        </div>
+      </div>
+      <p class="desp-intro">Cada despacho es una salida: un repartidor con su carguero en una fecha, y adentro los pedidos que lleva.</p>
+      <div id="despachos-list" class="despachos-list"></div>
+      <p class="desp-vacio" id="desp-vacio" hidden>Aún no hay despachos. Toca <strong>“➕ Nuevo despacho”</strong> para armar el primero.</p>
+      <div class="modal-buttons">
+        <button type="button" id="btn-desp-cerrar" class="btn btn-secondary">Cerrar</button>
+      </div>
+    </section>
+
+    <!-- Vista: formulario de despacho (nuevo / editar) -->
+    <section id="desp-vista-form" class="desp-vista" hidden>
+      <div class="desp-cab">
+        <button type="button" class="btn btn-secondary btn-small desp-volver" data-desp-volver>◀ Volver</button>
+        <h2 id="desp-form-title">Nuevo despacho</h2>
+      </div>
+      <form id="desp-form">
+        <input type="hidden" id="desp-id">
+        <div class="field-row">
+          <label class="field"><span>Fecha de salida *</span>
+            <input type="date" id="desp-fecha" class="input" required></label>
+          <label class="field"><span>Carguero <small>opcional</small></span>
+            <input type="text" id="desp-carguero" class="input" placeholder="Ej: Camión 2 / Placa ABC-123"></label>
+        </div>
+        <label class="field"><span>Repartidor *</span>
+          <div class="desp-rep-fila">
+            <select id="desp-repartidor" class="input" required></select>
+            <button type="button" id="btn-desp-rep-rapido" class="btn btn-secondary btn-small" title="Agregar un repartidor nuevo">➕</button>
+          </div>
+        </label>
+        <label class="field"><span>Nota <small>opcional</small></span>
+          <input type="text" id="desp-notas" class="input" placeholder="Ej: sale temprano por la zona Carretera"></label>
+        <div class="modal-buttons">
+          <button type="button" class="btn btn-secondary" data-desp-volver>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-desp-guardar">Guardar despacho</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Vista: detalle de un despacho con sus pedidos -->
+    <section id="desp-vista-detalle" class="desp-vista" hidden>
+      <div class="desp-cab">
+        <button type="button" class="btn btn-secondary btn-small desp-volver" data-desp-volver>◀ Volver</button>
+        <h2 id="desp-det-title">Despacho</h2>
+        <div class="desp-cab-botones">
+          <button type="button" id="btn-desp-editar" class="btn btn-secondary btn-small">✏️ Editar</button>
+          <button type="button" id="btn-desp-borrar" class="btn btn-danger btn-small">🗑️ Borrar</button>
+        </div>
+      </div>
+      <div id="desp-det-info" class="desp-det-info"></div>
+      <div id="desp-det-totales" class="desp-det-totales"></div>
+
+      <h3 class="desp-sub">Pedidos de este viaje</h3>
+      <div id="pedidos-list" class="pedidos-list"></div>
+      <p class="desp-vacio" id="pedidos-vacio" hidden>Todavía no cargaste pedidos en este despacho.</p>
+
+      <!-- Formulario para agregar / editar un pedido -->
+      <form id="ped-form" class="ped-form" hidden>
+        <h3 class="desp-sub" id="ped-form-title">Agregar pedido</h3>
+        <input type="hidden" id="ped-id">
+        <label class="field"><span>Cliente *</span>
+          <input type="text" id="ped-cliente" class="input" list="ped-clientes-datalist" autocomplete="off" placeholder="Escribe o elige el cliente">
+          <datalist id="ped-clientes-datalist"></datalist>
+        </label>
+        <div class="field-row">
+          <label class="field"><span>Comprobante</span>
+            <select id="ped-tipo" class="input">
+              <option value="boleta">Boleta</option>
+              <option value="factura">Factura</option>
+              <option value="nota">Nota de venta</option>
+            </select></label>
+          <label class="field"><span>N° de comprobante</span>
+            <input type="text" id="ped-comprobante" class="input" inputmode="numeric" placeholder="Ej: 001234"></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>Monto *</span>
+            <input type="number" id="ped-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+          <label class="field"><span>Zona</span>
+            <select id="ped-zona" class="input"></select></label>
+        </div>
+        <div class="modal-buttons">
+          <button type="button" id="btn-ped-cancelar" class="btn btn-secondary btn-small">Cancelar</button>
+          <button type="submit" id="btn-ped-guardar" class="btn btn-primary btn-small">Guardar pedido</button>
+        </div>
+      </form>
+      <button type="button" id="btn-ped-nuevo" class="btn btn-secondary btn-block">➕ Agregar pedido</button>
+
+      <div class="modal-buttons">
+        <button type="button" class="btn btn-secondary" data-desp-volver>◀ Volver a la lista</button>
+      </div>
+    </section>
+
+    <!-- Vista: gestión de repartidores -->
+    <section id="desp-vista-repartidores" class="desp-vista" hidden>
+      <div class="desp-cab">
+        <button type="button" class="btn btn-secondary btn-small desp-volver" data-desp-volver>◀ Volver</button>
+        <h2>🧍 Repartidores</h2>
+      </div>
+      <p class="desp-intro">Los repartidores solo se anotan por nombre (no usan la app). Elígelos al armar cada despacho.</p>
+      <form id="rep-form" class="rep-form">
+        <label class="field"><span>Nombre del repartidor *</span>
+          <input type="text" id="rep-nombre" class="input" placeholder="Ej: Luis Pérez" autocomplete="off"></label>
+        <button type="submit" id="btn-rep-guardar" class="btn btn-primary btn-small">➕ Agregar</button>
+      </form>
+      <div id="repartidores-list" class="repartidores-list"></div>
+      <p class="desp-vacio" id="repartidores-vacio" hidden>Aún no hay repartidores. Agrega el primero arriba.</p>
+      <div class="modal-buttons">
+        <button type="button" class="btn btn-secondary" data-desp-volver>◀ Volver</button>
+      </div>
+    </section>
   </dialog>
 
   <!-- Visor de imagen a pantalla completa -->

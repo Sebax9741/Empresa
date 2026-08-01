@@ -54,6 +54,17 @@ service cloud.firestore {
         allow update, delete: if esAdmin();
       }
 
+      // Despachos (viajes de reparto) y sus pedidos, y la lista de repartidores.
+      // Quien tenga el permiso "despachos" (o el administrador) los arma y edita.
+      match /despachos/{docId} {
+        allow read: if esMiembro();
+        allow create, update, delete: if permiso('despachos');
+      }
+      match /repartidores/{docId} {
+        allow read: if esMiembro();
+        allow create, update, delete: if permiso('despachos');
+      }
+
       // Ajustes del negocio (por ahora: la huella del código de seguridad).
       // Todos la pueden leer para comprobar el código, pero solo el
       // administrador la puede cambiar.
