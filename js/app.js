@@ -214,6 +214,15 @@ function textoRegistrado(a) {
   return a.registrado ? fechaHoraDeTimestamp(a.registrado) : formatoFecha(a.registradoFecha);
 }
 
+/* Solo la hora "14:32" de un timestamp. Vacío si no se guardó la hora. */
+function horaDeTimestamp(ts) {
+  const d = momentoDe(ts);
+  if (!d) return '';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
 async function crearHojaCobranza(fechaISO) {
   if (!puede('hojaCrear')) { toast('🔒 No tienes permiso para crear la hoja de cobranza'); return; }
   if (hojaDe(fechaISO)) { toast('Esa hoja ya existe'); return; }
@@ -2687,6 +2696,7 @@ function renderCobranza() {
       <td class="col-num ${f.saldo > 0 ? 'saldo-pend' : 'saldo-ok'}">${f.saldo > 0 ? formatoMonto(f.saldo) : '✓ saldado'}</td>
       <td><span class="pago-tag pago-${f.metodo}">${metodoLabel(f.metodo)}</span></td>
       <td>${f.cobradoPor ? escapeHtml(f.cobradoPor) : '—'}</td>
+      <td>${horaDeTimestamp(f.registrado) || '—'}</td>
       <td>${f.firma
         ? `<img src="${f.firma}" class="firma-mini" alt="Firma" data-ver-firma-cob="${escapeHtml(f.creditoId)}|${f.indice}" title="Ver la firma">`
         : '<span class="sin-firma">—</span>'}</td>
@@ -2779,7 +2789,7 @@ function exportarCobranzaExcel() {
       { v: 'Código', s: th }, { v: 'Cliente', s: thIzq }, { v: 'Zona', s: thIzq },
       { v: 'Boleta', s: th }, { v: 'Fecha emisión', s: th }, { v: 'Fecha despacho', s: th },
       { v: 'Cobrado', s: th }, { v: 'Queda debiendo', s: th },
-      { v: 'Pago', s: th }, { v: 'Cobró', s: thIzq },
+      { v: 'Pago', s: th }, { v: 'Cobró', s: thIzq }, { v: 'Hora', s: th },
     ],
   ];
 
@@ -2797,6 +2807,7 @@ function exportarCobranzaExcel() {
       { v: Number(f.saldo) || 0, s: tdNum(z) },
       { v: `${MET[m].emoji} ${MET[m].nombre}`, s: tdMet(m) },
       { v: f.cobradoPor || '—', s: tdTxt(z) },
+      { v: horaDeTimestamp(f.registrado) || '—', s: { align: 'center', border: true, bg: z ? CEBRA : undefined } },
     ]);
   });
 
@@ -2809,13 +2820,13 @@ function exportarCobranzaExcel() {
     { v: '', s: { border: true } }, { v: '', s: { border: true } }, { v: '', s: { border: true } },
     { v: '', s: { border: true } }, { v: '', s: { border: true } }, { v: 'TOTAL', s: totEt },
     { v: Number(totales.total) || 0, s: totVal }, { v: '', s: { border: true } },
-    { v: '', s: { border: true } }, { v: '', s: { border: true } },
+    { v: '', s: { border: true } }, { v: '', s: { border: true } }, { v: '', s: { border: true } },
   ]);
 
   descargarXlsx(`cobranza-${fecha}.xlsx`, {
     nombre: 'Cobranza',
-    cols: [10, 26, 15, 11, 12, 12, 13, 16, 14, 14],
-    merges: ['A1:J1', 'A2:J2', 'A3:J3', 'A4:J4'],
+    cols: [10, 26, 15, 11, 12, 12, 13, 16, 14, 14, 8],
+    merges: ['A1:K1', 'A2:K2', 'A3:K3', 'A4:K4'],
     filas: filasXlsx,
   });
   toast('⬇️ Hoja de cobranza exportada (.xlsx)');
@@ -2842,6 +2853,7 @@ function imprimirCobranza() {
       <td style="text-align:right">${formatoMonto(f.monto)}</td>
       <td style="text-align:right">${f.saldo > 0 ? formatoMonto(f.saldo) : 'saldado'}</td>
       <td>${metodoLabel(f.metodo)}</td><td>${escapeHtml(f.cobradoPor || '—')}</td>
+      <td>${horaDeTimestamp(f.registrado) || '—'}</td>
       <td>${f.firma ? `<img src="${f.firma}" style="height:34px">` : '—'}</td></tr>`).join('');
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Cobranza ${formatoFecha(fecha)}</title>
     <style>
@@ -2859,8 +2871,8 @@ function imprimirCobranza() {
     <table><thead><tr><th>Código</th><th>Cliente</th><th>Zona</th><th>Boleta</th>
     <th>Fecha emisión</th><th>Fecha despacho</th>
     <th style="text-align:right">Cobrado</th><th style="text-align:right">Queda debiendo</th>
-    <th>Pago</th><th>Cobró</th><th>Firma</th></tr></thead>
-    <tbody>${filasHtml || '<tr><td colspan="11" style="text-align:center">Sin cobros este día</td></tr>'}</tbody></table>
+    <th>Pago</th><th>Cobró</th><th>Hora</th><th>Firma</th></tr></thead>
+    <tbody>${filasHtml || '<tr><td colspan="12" style="text-align:center">Sin cobros este día</td></tr>'}</tbody></table>
     <div class="tot">
       <div><strong>💵 Efectivo:</strong> ${formatoMonto(totales.efectivo)}</div>
       <div><strong>📱 Yape:</strong> ${formatoMonto(totales.yape)}</div>
@@ -2910,7 +2922,15 @@ async function guardarCredito(ev) {
     abonos = abonosActuales.slice();
   } else {
     const pagoInicial = Number($('#f-pago-inicial').value) || 0;
-    abonos = pagoInicial > 0 ? [{ monto: pagoInicial, fecha, metodo: $('#f-pago-metodo').value }] : [];
+    abonos = pagoInicial > 0 ? [{
+      monto: pagoInicial,
+      fecha,
+      metodo: $('#f-pago-metodo').value,
+      // Constancia automática: quién lo registró, en qué día y a qué hora
+      registradoPor: quienSoy(),
+      registradoFecha: hoyISO(),
+      registrado: Date.now(),
+    }] : [];
   }
 
   const credito = {
