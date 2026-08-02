@@ -767,6 +767,24 @@
           <small>Notificación en tu celular Android, aunque la app esté cerrada. (En iPhone/PC el aviso aparece al abrir la app.)</small>
         </span>
       </label>
+      <!-- Solo el administrador: apertura automática de la hoja de cobranza -->
+      <div class="field settings-hoja-auto" id="settings-hoja-auto" hidden>
+        <span class="field-label">🧾 Apertura automática de la hoja de cobranza</span>
+        <small>Cuando está activa, la hoja de cobranza del día se abre sola para <strong>todo el equipo</strong> (administrador y empleados) los días y a la hora que elijas. Nadie necesita crearla a mano.</small>
+        <label class="field-check hoja-auto-activar">
+          <input type="checkbox" id="s-hoja-auto">
+          <span>Abrir la hoja de cobranza automáticamente</span>
+        </label>
+        <div id="s-hoja-auto-detalle" class="hoja-auto-detalle">
+          <span class="field-label">Días</span>
+          <div id="s-hoja-dias" class="hoja-auto-dias"></div>
+          <label class="field hoja-auto-hora">
+            <span>A partir de las</span>
+            <input type="time" id="s-hoja-hora" class="input" value="08:00">
+          </label>
+        </div>
+      </div>
+
       <!-- Solo el administrador: código de seguridad para borrar -->
       <div class="field settings-seguridad" id="settings-seguridad" hidden>
         <span class="field-label">🔒 Código de seguridad</span>

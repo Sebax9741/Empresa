@@ -45,12 +45,15 @@ service cloud.firestore {
         allow create, update, delete: if permiso('clientes') || permiso('crear');
       }
 
-      // Hojas de cobranza: se crean explícitamente (quien tenga el permiso) y
-      // solo el administrador las cierra. Una vez cerrada, solo el
-      // administrador la puede volver a tocar.
+      // Hojas de cobranza: cualquier miembro del equipo puede ABRIR la hoja del
+      // día (creación no destructiva; queda constancia de quién/cuándo con la
+      // hora del servidor). Esto permite la apertura automática configurada por
+      // el administrador para todo el equipo. El botón manual de "crear hoja"
+      // se sigue mostrando solo a quien tenga el permiso 'hojaCrear'.
+      // Cerrar o modificar una hoja sigue siendo solo del administrador.
       match /hojas/{fecha} {
         allow read: if esMiembro();
-        allow create: if permiso('hojaCrear');
+        allow create: if esMiembro();
         allow update, delete: if esAdmin();
       }
 

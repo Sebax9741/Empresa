@@ -12,6 +12,11 @@ let settings = {
   avisos: true,
   atajo1: 15,   // atajo rápido 1: días después de la emisión
   atajo2: 45,   // atajo rápido 2: días después de la emisión
+  // Apertura automática de la hoja de cobranza (la define el administrador,
+  // vale para todo el equipo). Días: 0=Dom … 6=Sáb.
+  hojaAutoActiva: false,
+  hojaAutoDias: [1, 2, 3, 4, 5, 6],
+  hojaAutoHora: '08:00',
 };
 let vencimientoEditadoManual = false;
 
@@ -299,6 +304,47 @@ async function crearHojaCobranza(fechaISO) {
   }
 }
 
+/* ¿Toca abrir hoy la hoja automáticamente, según lo que definió el admin? */
+function debeAbrirHojaHoy() {
+  if (!settings.hojaAutoActiva) return false;
+  const dias = Array.isArray(settings.hojaAutoDias) ? settings.hojaAutoDias : [];
+  const ahora = new Date();
+  if (!dias.includes(ahora.getDay())) return false;   // 0=Dom … 6=Sáb
+  const [hh, mm] = String(settings.hojaAutoHora || '08:00').split(':').map(Number);
+  const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
+  const minutosConfig = (hh || 0) * 60 + (mm || 0);
+  return minutosAhora >= minutosConfig;
+}
+
+/* Abre la hoja de hoy sin pedir permiso (la autoriza la config del admin).
+   La dispara cualquier dispositivo del equipo; el primero que cumpla la crea
+   y los demás la reciben por la sincronización. */
+async function revisarAperturaAutomatica() {
+  if (!modoNube) return;                 // en modo local la hoja siempre "existe"
+  if (!debeAbrirHojaHoy()) return;
+  const hoy = hoyISO();
+  if (hojaDe(hoy)) return;               // ya está creada (abierta o cerrada)
+  const hoja = {
+    fecha: hoy,
+    creada: true,
+    creadaPor: '⏰ apertura automática',
+    creadaEn: marcaDeTiempo(),           // hora del servidor
+    cerrada: false,
+    cerradaPor: null,
+    cerradaEn: null,
+    auto: true,
+  };
+  try {
+    await guardarHojaEnStore(hoja);
+    const local = { ...hoja, creadaEn: null };
+    const i = hojas.findIndex(h => h.fecha === hoy);
+    if (i >= 0) hojas[i] = local; else hojas.push(local);
+    if (!$('#view-cobranza').hidden) renderCobranza();
+  } catch (e) {
+    console.error('No se pudo abrir la hoja automáticamente:', e);
+  }
+}
+
 async function cerrarHojaCobranza(fechaISO) {
   if (!esAdmin()) { toast('🔒 Solo el administrador puede cerrar la hoja de cobranza'); return; }
   const h = hojaDe(fechaISO);
@@ -566,7 +612,7 @@ async function sincronizarAhora() {
    todos los usuarios. Además quedan copiados en este dispositivo, para
    que la app funcione igual sin internet.
    El aviso de vencimiento es de cada dispositivo, así que no se sube. */
-const CLAVES_NEGOCIO = ['dias', 'moneda', 'atajo1', 'atajo2'];
+const CLAVES_NEGOCIO = ['dias', 'moneda', 'atajo1', 'atajo2', 'hojaAutoActiva', 'hojaAutoDias', 'hojaAutoHora'];
 
 function cargarSettings() {
   try {
@@ -592,12 +638,38 @@ function aplicarAjustesNube(datos) {
   if (!datos) return;
   let cambio = false;
   for (const k of CLAVES_NEGOCIO) {
-    if (datos[k] !== undefined && datos[k] !== settings[k]) { settings[k] = datos[k]; cambio = true; }
+    if (datos[k] === undefined) continue;
+    // Comparación por valor (los arrays/objetos no se comparan por referencia)
+    const distinto = JSON.stringify(datos[k]) !== JSON.stringify(settings[k]);
+    if (distinto) { settings[k] = datos[k]; cambio = true; }
   }
   if (!cambio) return;
   localStorage.setItem('creditos-settings', JSON.stringify(settings));
   actualizarAtajosVenc();
   render();
+  // Si el admin acaba de activar/ajustar la apertura automática, revísala ya
+  revisarAperturaAutomatica();
+  if (!$('#view-settings').hidden) renderConfigHojaAuto();
+}
+
+/* Días de la semana para la apertura automática (Lun primero; 0=Dom … 6=Sáb) */
+const DIAS_SEMANA = [[1, 'Lun'], [2, 'Mar'], [3, 'Mié'], [4, 'Jue'], [5, 'Vie'], [6, 'Sáb'], [0, 'Dom']];
+
+/* Dibuja el bloque de apertura automática en Configuración (solo admin) */
+function renderConfigHojaAuto() {
+  const bloque = $('#settings-hoja-auto');
+  if (!bloque) return;
+  bloque.hidden = !esAdmin();            // solo el administrador la configura
+  if (bloque.hidden) return;
+  $('#s-hoja-auto').checked = !!settings.hojaAutoActiva;
+  $('#s-hoja-auto-detalle').hidden = !settings.hojaAutoActiva;
+  $('#s-hoja-hora').value = settings.hojaAutoHora || '08:00';
+  const activos = new Set(Array.isArray(settings.hojaAutoDias) ? settings.hojaAutoDias : []);
+  $('#s-hoja-dias').innerHTML = DIAS_SEMANA.map(([n, etq]) => `
+    <label class="hoja-dia${activos.has(n) ? ' activo' : ''}">
+      <input type="checkbox" value="${n}" ${activos.has(n) ? 'checked' : ''}>
+      <span>${etq}</span>
+    </label>`).join('');
 }
 
 /* ====== Almacenamiento: nube o local ====== */
@@ -962,6 +1034,7 @@ function suscribirNube() {
   unsubHojas = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'hojas'), snap => {
     hojas = snap.docs.map(d => d.data());
     if (!$('#view-cobranza').hidden) renderCobranza();
+    revisarAperturaAutomatica();
   }, err => {
     console.error('Error al sincronizar las hojas de cobranza:', err);
   });
@@ -2798,6 +2871,7 @@ async function manejarFoto(input) {
 
 /* ====== Hoja de cobranza (modal) ====== */
 function abrirCobranza() {
+  revisarAperturaAutomatica();
   if (!$('#cob-fecha').value) $('#cob-fecha').value = hoyISO();
   renderCobranza();
   mostrarSeccion('cobranza');
@@ -4027,11 +4101,20 @@ function inicializarEventos() {
     $('#s-atajo2').value = settings.atajo2;
     actualizarEstadoPin();
     renderEstadoOffline();
+    renderConfigHojaAuto();
     // Los ajustes del negocio los define el administrador para todos
     const soloAdmin = modoNube && !esAdmin();
     ['s-dias', 's-moneda', 's-atajo1', 's-atajo2'].forEach(id => { $('#' + id).disabled = soloAdmin; });
     $('#settings-nota-admin').hidden = !soloAdmin;
     mostrarSeccion('settings');
+  });
+  // Apertura automática: mostrar/ocultar el detalle al activar la casilla
+  $('#s-hoja-auto').addEventListener('change', () => {
+    $('#s-hoja-auto-detalle').hidden = !$('#s-hoja-auto').checked;
+  });
+  $('#s-hoja-dias').addEventListener('change', ev => {
+    const lbl = ev.target.closest('.hoja-dia');
+    if (lbl) lbl.classList.toggle('activo', ev.target.checked);
   });
   $('#btn-preparar-offline').addEventListener('click', prepararOffline);
   $('#btn-settings-cerrar').addEventListener('click', () => mostrarSeccion('creditos'));
@@ -4042,9 +4125,17 @@ function inicializarEventos() {
     settings.avisos = $('#s-avisos').checked;
     settings.atajo1 = Math.min(365, Math.max(1, Number($('#s-atajo1').value) || 15));
     settings.atajo2 = Math.min(365, Math.max(1, Number($('#s-atajo2').value) || 45));
+    // Apertura automática de la hoja de cobranza (solo el admin la puede tocar)
+    if (esAdmin()) {
+      settings.hojaAutoActiva = $('#s-hoja-auto').checked;
+      settings.hojaAutoDias = Array.from(document.querySelectorAll('#s-hoja-dias input:checked'))
+        .map(c => Number(c.value)).sort((a, b) => a - b);
+      settings.hojaAutoHora = $('#s-hoja-hora').value || '08:00';
+    }
     actualizarAtajosVenc();
     mostrarSeccion('creditos');
     render();
+    revisarAperturaAutomatica();
     try {
       await guardarSettings();
       toast('✅ Configuración guardada');
@@ -4160,6 +4251,12 @@ async function iniciar() {
   window.addEventListener('online', actualizarAvisoConexion);
   window.addEventListener('offline', actualizarAvisoConexion);
   $('#btn-sincronizar').addEventListener('click', sincronizarAhora);
+
+  // Apertura automática de la hoja de cobranza: se revisa cada pocos minutos
+  // y cada vez que se vuelve a la app, para que abra sola al llegar la hora.
+  setInterval(revisarAperturaAutomatica, 3 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarAperturaAutomatica(); });
+  window.addEventListener('focus', revisarAperturaAutomatica);
 
   if (configNubeValida()) {
     try {
