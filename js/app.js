@@ -1357,11 +1357,14 @@ function creditosVisibles() {
       case 'monto': va = Number(a.monto); vb = Number(b.monto); break;
       case 'saldo': va = saldoDe(a); vb = saldoDe(b); break;
       case 'fecha': va = a.fecha; vb = b.fecha; break;
+      // "creado": orden por el momento real en que se registró el crédito
+      case 'creado': va = a.creado || 0; vb = b.creado || 0; break;
       case 'vencimiento': default: va = a.vencimiento; vb = b.vencimiento; break;
     }
     if (va < vb) return -1 * mult;
     if (va > vb) return 1 * mult;
-    return 0;
+    // Desempate estable: a igualdad, el creado más reciente primero
+    return (b.creado || 0) - (a.creado || 0);
   });
 
   return lista;
