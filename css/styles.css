@@ -139,6 +139,28 @@ body {
 }
 .btn-icon:hover { background: var(--border); }
 
+/* Chip de usuario en la cabecera: nombre + acceso a la cuenta + salir */
+.usuario-chip { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.25rem; }
+.usuario-cuenta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 190px;
+  background: var(--bg-tint);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.34rem 0.7rem 0.34rem 0.55rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.usuario-cuenta:hover { background: var(--border); }
+.usuario-cuenta .usuario-ico { font-size: 1rem; line-height: 1; }
+.usuario-nombre { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ====== Layout ====== */
 .container {
   max-width: 1500px;
@@ -1012,6 +1034,9 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   /* En móvil el botón principal muestra solo "＋" para no saturar el header */
   #btn-new .btn-label { display: none; }
   #btn-new { width: 40px; height: 40px; padding: 0; font-size: 1.3rem; }
+  /* En móvil dejamos solo el 👤 para no saturar; el nombre se ve en Configuración */
+  .usuario-nombre { display: none; }
+  .usuario-cuenta { padding: 0; width: 34px; height: 34px; justify-content: center; border-radius: 50%; }
 
   .summary { grid-template-columns: 1fr 1fr; }
   .summary-value { font-size: 1.2rem; }
@@ -1294,7 +1319,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .desp-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .desp-resumen-monto { margin-top: 0.4rem; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
 
-.despachos-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0.7rem; }
+.despachos-list { display: flex; flex-direction: column; gap: 0.7rem; }
 .despacho-card {
   display: block;
   width: 100%;

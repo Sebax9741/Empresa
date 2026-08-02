@@ -987,7 +987,7 @@ function sesionCerrada() {
   actualizarAvisoConexion();
   render();
   $('#settings-cuenta').hidden = true;
-  $('#btn-logout-header').hidden = true;
+  $('#usuario-chip').hidden = true;
   $('#auth-screen').hidden = false;
 }
 
@@ -1063,7 +1063,8 @@ function aplicarPermisos() {
   $('#btn-despachos').hidden = !puede('despachos');
   $('#btn-usuarios').hidden = !esAdmin();
   $('#btn-cliente-nuevo').hidden = !puede('clientes');
-  $('#btn-logout-header').hidden = false;
+  $('#usuario-chip').hidden = !modoNube;
+  $('#hdr-usuario').textContent = (yo && (yo.nombre || yo.usuario)) || '';
   sincronizarNavLateral();
   render(); // redibuja la tabla para aplicar permisos de editar/borrar
 }
@@ -4198,6 +4199,7 @@ function inicializarEventos() {
   $('#auth-form').addEventListener('submit', enviarAuth);
   $('#btn-logout').addEventListener('click', cerrarSesion);
   $('#btn-logout-header').addEventListener('click', cerrarSesion);
+  $('#btn-cuenta').addEventListener('click', () => mostrarSeccion('settings'));
   $('#btn-cambiar-pass').addEventListener('click', cambiarMiContrasena);
 
   // Panel de administración de usuarios (solo admin)
