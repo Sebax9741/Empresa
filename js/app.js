@@ -3217,17 +3217,21 @@ function renderListaDespachos() {
        <div class="desp-resumen-monto">${rotulo} · ${lista.length} despacho${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
     : `<div class="desp-resumen-monto">${rotulo} · sin despachos</div>`;
 
-  // Tabla (escritorio): N° boleta, monto, fecha, zona, repartidores
+  // Tabla (escritorio): cliente (con N° boleta y monto debajo), fecha, zona,
+  // repartidores y estado
   $('#desp-tabla-body').innerHTML = lista.map(d => {
     const info = estadoDespachoInfo(d.estado);
     const reps = repartidoresDe(d);
     return `
       <tr class="desp-fila ${info.clase}" data-abrir-despacho="${d.id}" title="${escapeHtml(info.etiqueta)} — ver detalle">
-        <td><strong>${escapeHtml(d.boleta || '—')}</strong></td>
-        <td class="col-num">${formatoMonto(Number(d.monto) || 0)}</td>
+        <td>
+          <strong class="desp-cel-cliente">${escapeHtml(d.cliente || '(sin cliente)')}</strong>
+          <span class="desp-cel-sub">N° ${escapeHtml(d.boleta || '—')} · ${formatoMonto(Number(d.monto) || 0)}</span>
+        </td>
         <td>${formatoFecha(d.fecha)}</td>
         <td>${d.zona ? escapeHtml(d.zona) : '—'}</td>
         <td>${reps.length ? reps.map(escapeHtml).join(', ') : '—'}</td>
+        <td><span class="ped-chip ${info.clase}">${info.etiqueta}</span></td>
       </tr>`;
   }).join('');
 
@@ -3238,10 +3242,11 @@ function renderListaDespachos() {
     return `
       <button type="button" class="despacho-card ${info.clase}" data-abrir-despacho="${d.id}">
         <div class="despacho-card-cab">
-          <strong>N° ${escapeHtml(d.boleta || '—')}</strong>
+          <strong>${escapeHtml(d.cliente || '(sin cliente)')}</strong>
           <span class="ped-chip ${info.clase}">${info.etiqueta}</span>
         </div>
         <div class="despacho-card-datos">
+          <span>🧾 N° ${escapeHtml(d.boleta || '—')}</span>
           <span>💵 ${formatoMonto(Number(d.monto) || 0)}</span>
           <span>📅 ${formatoFecha(d.fecha)}</span>
           ${d.zona ? `<span>📍 ${escapeHtml(d.zona)}</span>` : ''}
@@ -3288,8 +3293,8 @@ function imprimirDespachos() {
     const reps = repartidoresDe(d);
     const info = estadoDespachoInfo(d.estado);
     return `<tr>
-      <td>${escapeHtml(d.boleta || '—')}</td>
       <td>${escapeHtml(d.cliente || '—')}</td>
+      <td>${escapeHtml(d.boleta || '—')}</td>
       <td style="text-align:right">${formatoMonto(Number(d.monto) || 0)}</td>
       <td>${formatoFecha(d.fecha)}</td>
       <td>${escapeHtml(d.zona || '—')}</td>
@@ -3308,7 +3313,7 @@ function imprimirDespachos() {
     </style></head><body>
     <h1>🚚 Hoja de despachos</h1>
     <p class="sub">${despachoFiltroFecha ? 'Fecha: ' + formatoFecha(despachoFiltroFecha) : 'Todos los despachos'} — ${lista.length} despacho(s)</p>
-    <table><thead><tr><th>N° Boleta</th><th>Cliente</th><th style="text-align:right">Monto</th>
+    <table><thead><tr><th>Cliente</th><th>N° Boleta</th><th style="text-align:right">Monto</th>
     <th>Fecha</th><th>Zona</th><th>Repartidores</th><th>Estado</th></tr></thead>
     <tbody>${filasHtml || '<tr><td colspan="7" style="text-align:center">Sin despachos</td></tr>'}</tbody></table>
     <div class="tot">

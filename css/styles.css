@@ -1350,6 +1350,11 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .desp-tabla-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
 .desp-fila { cursor: pointer; transition: background 0.12s; }
 .desp-fila:hover { background: var(--bg-tint); }
+/* Primera celda: cliente arriba, N° boleta y monto debajo */
+.desp-cel-cliente { display: block; font-size: 0.95rem; }
+.desp-cel-sub { display: block; color: var(--muted); font-size: 0.8rem; font-weight: 600; margin-top: 0.1rem; }
+.desp-tabla td { white-space: nowrap; }
+.desp-tabla td:first-child { white-space: normal; }
 /* Franja de color a la izquierda según el estado del despacho */
 .desp-fila td:first-child { border-left: 4px solid var(--gray); }
 .desp-fila.pedido-pendiente td:first-child { border-left-color: var(--warning); }
