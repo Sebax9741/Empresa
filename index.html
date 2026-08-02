@@ -593,10 +593,21 @@
       </div>
       <form id="desp-form">
         <input type="hidden" id="desp-id">
-        <label class="field"><span>Cliente *</span>
-          <input type="text" id="desp-cliente" class="input" list="desp-clientes-datalist" autocomplete="off" placeholder="Escribe o elige el cliente" required>
-          <datalist id="desp-clientes-datalist"></datalist>
-        </label>
+        <div class="field">
+          <span class="field-label">Cliente *</span>
+          <div class="cliente-picker">
+            <div class="combo" id="desp-cliente-combo">
+              <input type="text" id="desp-cliente-buscar" class="input" autocomplete="off"
+                     role="combobox" aria-expanded="false" aria-autocomplete="list"
+                     aria-controls="desp-cliente-sugerencias"
+                     placeholder="Escribe el nombre del cliente…">
+              <input type="hidden" id="desp-cliente">
+              <ul class="combo-lista" id="desp-cliente-sugerencias" role="listbox" hidden></ul>
+            </div>
+            <button type="button" id="btn-desp-cliente-nuevo" class="btn btn-secondary btn-small" title="Registrar un cliente nuevo">➕ Nuevo</button>
+          </div>
+          <small id="desp-cliente-ayuda" class="cliente-ayuda"></small>
+        </div>
         <div class="field-row">
           <label class="field"><span>Comprobante</span>
             <select id="desp-tipo" class="input">

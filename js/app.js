@@ -2022,6 +2022,10 @@ async function guardarClienteForm(ev) {
   limpiarFormCliente();
   renderClientes();
   llenarSelectClientes($('#f-cliente').value);
+  // Si estabas armando un despacho y registraste un cliente nuevo, queda elegido
+  if (!anterior && $('#modal-despachos').open && !$('#desp-vista-form').hidden) {
+    seleccionarClienteDesp(cliente.id);
+  }
   render();
   toast(anterior
     ? `✅ Cliente actualizado${actualizados ? ` (${actualizados} crédito(s) al día)` : ''}`
@@ -3090,9 +3094,79 @@ function renderListaDespachos() {
   }).join('');
 }
 
-function llenarDatalistClientesDespacho() {
-  $('#desp-clientes-datalist').innerHTML = clientes
-    .map(c => `<option value="${escapeHtml(c.nombre)}">`).join('');
+/* ---- Buscador de clientes del formulario de despachos ----
+   Igual que en créditos: se escribe y va sugiriendo; el id del cliente
+   elegido queda en el campo oculto #desp-cliente. */
+let comboIndiceDesp = -1;
+
+function llenarComboClienteDespacho(valorSeleccionado = '') {
+  const oculto = $('#desp-cliente');
+  const caja = $('#desp-cliente-buscar');
+  if (!oculto || !caja) return;
+  let valor = valorSeleccionado || '';
+  if (valor && !String(valor).startsWith('libre:') && !clientePorId(valor)) valor = '';
+  oculto.value = valor;
+  caja.value = textoCliente(valor);
+  caja.placeholder = clientes.length
+    ? 'Escribe el nombre del cliente…'
+    : 'Aún no hay clientes: toca “➕ Nuevo”';
+  cerrarSugerenciasDesp();
+  aplicarClienteDespacho();
+}
+
+function renderSugerenciasDesp(texto) {
+  const lista = $('#desp-cliente-sugerencias');
+  if (!lista) return;
+  const encontrados = clientesQueCoinciden(texto);
+  comboIndiceDesp = -1;
+  if (!clientes.length) {
+    lista.innerHTML = '<li class="combo-vacio">Aún no tienes clientes registrados. Toca “➕ Nuevo”.</li>';
+  } else if (!encontrados.length) {
+    lista.innerHTML = `<li class="combo-vacio">Ningún cliente coincide con “${escapeHtml(texto)}”.</li>`;
+  } else {
+    lista.innerHTML = encontrados.map(c => `
+      <li class="combo-op" role="option" data-id="${escapeHtml(c.id)}">
+        <span class="combo-nombre">${c.codigo ? `<b class="combo-codigo">${escapeHtml(c.codigo)}</b> ` : ''}${resaltarCoincidencia(c.nombre, texto)}</span>
+        ${c.zona ? `<span class="combo-zona">${escapeHtml(c.zona)}</span>` : ''}
+      </li>`).join('');
+  }
+  lista.hidden = false;
+  $('#desp-cliente-buscar').setAttribute('aria-expanded', 'true');
+}
+
+function cerrarSugerenciasDesp() {
+  const lista = $('#desp-cliente-sugerencias');
+  if (!lista) return;
+  lista.hidden = true;
+  comboIndiceDesp = -1;
+  const caja = $('#desp-cliente-buscar');
+  if (caja) caja.setAttribute('aria-expanded', 'false');
+}
+
+function seleccionarClienteDesp(id) {
+  $('#desp-cliente').value = id;
+  $('#desp-cliente-buscar').value = textoCliente(id);
+  cerrarSugerenciasDesp();
+  aplicarClienteDespacho();
+}
+
+/* Muestra la zona/datos del cliente elegido como ayuda (el despacho la toma de él) */
+function aplicarClienteDespacho() {
+  const ayuda = $('#desp-cliente-ayuda');
+  if (!ayuda) return;
+  const valor = $('#desp-cliente').value;
+  const cli = valor && !valor.startsWith('libre:') ? clientePorId(valor) : null;
+  if (cli) {
+    ayuda.textContent = [
+      cli.zona ? `📍 ${cli.zona}` : '',
+      cli.direccion ? `🏠 ${cli.direccion}` : '',
+      cli.telefono ? `📞 ${cli.telefono}` : '',
+    ].filter(Boolean).join(' · ');
+  } else {
+    ayuda.textContent = valor.startsWith('libre:')
+      ? 'Este cliente aún no está registrado. Regístralo para guardar su zona.'
+      : '';
+  }
 }
 
 /* Casillas de repartidores en el formulario (se pueden elegir varios) */
@@ -3120,8 +3194,15 @@ function abrirFormDespacho(despacho = null) {
   $('#desp-form').reset();
   $('#desp-id').value = despacho ? despacho.id : '';
   $('#desp-form-title').textContent = despacho ? 'Editar despacho' : 'Nuevo despacho';
-  llenarDatalistClientesDespacho();
-  $('#desp-cliente').value = despacho ? (despacho.cliente || '') : '';
+  // Cliente: si el despacho ya tiene uno registrado, lo dejamos elegido;
+  // si era texto libre, lo mostramos como "libre:".
+  let valorCli = '';
+  if (despacho) {
+    if (despacho.clienteId && clientePorId(despacho.clienteId)) valorCli = despacho.clienteId;
+    else if (despacho.cliente) valorCli = `libre:${despacho.cliente}`;
+  }
+  llenarComboClienteDespacho(valorCli);
+  $('#btn-desp-cliente-nuevo').hidden = !puede('clientes');
   $('#desp-tipo').value = (despacho && despacho.tipoComprobante) || 'boleta';
   $('#desp-boleta').value = despacho ? (despacho.boleta || '') : '';
   $('#desp-monto').value = despacho ? (despacho.monto || '') : '';
@@ -3129,25 +3210,37 @@ function abrirFormDespacho(despacho = null) {
   $('#desp-notas').value = despacho ? (despacho.notas || '') : '';
   renderRepartidoresCheck(despacho ? repartidoresDe(despacho) : []);
   mostrarVistaDespacho('form');
-  $('#desp-cliente').focus();
+  $('#desp-cliente-buscar').focus();
 }
 
 async function guardarDespachoForm(ev) {
   ev.preventDefault();
   if (!puede('despachos')) return;
-  const nombreTexto = $('#desp-cliente').value.trim();
-  if (!nombreTexto) { toast('⚠️ Escribe o elige el cliente'); return; }
+  // Cliente: del combo (id oculto); si escribió sin elegir, se resuelve por
+  // nombre exacto y, si no existe, se guarda como texto libre.
+  let clienteNombre = '', clienteId = '', zonaCli = '';
+  const valorCli = $('#desp-cliente').value;
+  if (valorCli && !valorCli.startsWith('libre:')) {
+    const cli = clientePorId(valorCli);
+    if (cli) { clienteNombre = cli.nombre; clienteId = cli.id; zonaCli = cli.zona || ''; }
+  }
+  if (!clienteNombre) {
+    const texto = $('#desp-cliente-buscar').value.trim();
+    if (!texto) { toast('⚠️ Escribe o elige el cliente'); return; }
+    const exacto = clientePorNombre(texto);
+    if (exacto) { clienteNombre = exacto.nombre; clienteId = exacto.id; zonaCli = exacto.zona || ''; }
+    else clienteNombre = texto;
+  }
   const reps = repartidoresSeleccionados();
   if (!reps.length) { toast('⚠️ Elige al menos un repartidor'); return; }
-  const cli = clientePorNombre(nombreTexto);
   const id = $('#desp-id').value || nuevoId();
   const existente = despachoPorId(id);
   const despacho = {
     id,
     fecha: $('#desp-fecha').value || hoyISO(),
-    cliente: cli ? cli.nombre : nombreTexto,
-    clienteId: cli ? cli.id : '',
-    zona: cli ? (cli.zona || '') : ((existente && existente.zona) || ''),
+    cliente: clienteNombre,
+    clienteId,
+    zona: clienteId ? zonaCli : ((existente && existente.zona) || ''),
     tipoComprobante: $('#desp-tipo').value,
     boleta: $('#desp-boleta').value.trim(),
     monto: Number($('#desp-monto').value) || 0,
@@ -3772,6 +3865,55 @@ function inicializarEventos() {
     await agregarRepartidor({ preventDefault() {} });
     if (!sel.includes(nombre)) sel.push(nombre);
     renderRepartidoresCheck(sel);
+  });
+
+  // Buscador de clientes del formulario de despacho (igual que en créditos)
+  const cajaCliDesp = $('#desp-cliente-buscar');
+  const listaCliDesp = $('#desp-cliente-sugerencias');
+  cajaCliDesp.addEventListener('input', () => renderSugerenciasDesp(cajaCliDesp.value));
+  cajaCliDesp.addEventListener('focus', () => renderSugerenciasDesp(cajaCliDesp.value));
+  cajaCliDesp.addEventListener('click', () => renderSugerenciasDesp(cajaCliDesp.value));
+  listaCliDesp.addEventListener('pointerdown', ev => {
+    const op = ev.target.closest('.combo-op');
+    if (!op) return;
+    ev.preventDefault();
+    seleccionarClienteDesp(op.dataset.id);
+  });
+  cajaCliDesp.addEventListener('keydown', ev => {
+    const ops = [...listaCliDesp.querySelectorAll('.combo-op')];
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (listaCliDesp.hidden) { renderSugerenciasDesp(cajaCliDesp.value); return; }
+      if (!ops.length) return;
+      comboIndiceDesp = ev.key === 'ArrowDown'
+        ? (comboIndiceDesp + 1) % ops.length
+        : (comboIndiceDesp - 1 + ops.length) % ops.length;
+      ops.forEach((o, i) => o.classList.toggle('activa', i === comboIndiceDesp));
+      ops[comboIndiceDesp].scrollIntoView({ block: 'nearest' });
+    } else if (ev.key === 'Enter') {
+      if (!listaCliDesp.hidden) {
+        ev.preventDefault();
+        if (comboIndiceDesp >= 0 && ops[comboIndiceDesp]) seleccionarClienteDesp(ops[comboIndiceDesp].dataset.id);
+        else if (ops.length === 1) seleccionarClienteDesp(ops[0].dataset.id);
+        else cerrarSugerenciasDesp();
+      }
+    } else if (ev.key === 'Escape') {
+      if (!listaCliDesp.hidden) { ev.preventDefault(); ev.stopPropagation(); cerrarSugerenciasDesp(); }
+    }
+  });
+  cajaCliDesp.addEventListener('blur', () => {
+    cerrarSugerenciasDesp();
+    const texto = cajaCliDesp.value.trim();
+    const exacto = texto ? clientePorNombre(texto) : null;
+    if (!texto) $('#desp-cliente').value = '';
+    else if (exacto) $('#desp-cliente').value = exacto.id;
+    cajaCliDesp.value = textoCliente($('#desp-cliente').value);
+    aplicarClienteDespacho();
+  });
+  $('#btn-desp-cliente-nuevo').addEventListener('click', () => {
+    if (!puede('clientes')) { toast('🔒 No tienes permiso para registrar clientes'); return; }
+    abrirClientes();
+    $('#cli-nombre').focus();
   });
 
   // Repartidores
