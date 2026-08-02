@@ -3534,13 +3534,10 @@ function renderDetalleDespacho() {
       <button type="button" class="btn btn-primary btn-block" id="btn-desp-ver-credito">📄 Ver crédito enlazado</button>
       <button type="button" class="btn btn-secondary btn-block" data-desp-estado="reparto">↩️ Deshacer enlace (volver a “en reparto”)</button>`;
   } else {
+    // Solo la acción principal: cuando la boleta vuelve firmada, se convierte
+    // en crédito. (Se quitaron "Al contado" y "Devuelto".)
     acciones = `
-      <button type="button" class="btn btn-primary btn-block" id="btn-desp-a-credito">📄 Volvió firmada → crear crédito</button>
-      <div class="desp-acc-fila">
-        <button type="button" class="btn btn-secondary" data-desp-estado="contado"${d.estado === 'contado' ? ' disabled' : ''}>💵 Al contado</button>
-        <button type="button" class="btn btn-secondary" data-desp-estado="devuelto"${d.estado === 'devuelto' ? ' disabled' : ''}>↩️ Devuelto</button>
-        ${d.estado !== 'reparto' ? `<button type="button" class="btn btn-secondary" data-desp-estado="reparto">🚚 En reparto</button>` : ''}
-      </div>`;
+      <button type="button" class="btn btn-primary btn-block" id="btn-desp-a-credito">📄 Volvió firmada → crear crédito</button>`;
   }
   $('#desp-det-acciones').innerHTML = acciones;
 }
