@@ -1223,6 +1223,12 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .desp-intro { color: var(--muted); font-size: 0.86rem; margin: 0 0 0.9rem; }
 .desp-sub { font-size: 0.95rem; font-weight: 700; margin: 1.1rem 0 0.6rem; }
 
+/* Resumen arriba de la lista */
+.desp-resumen { margin-bottom: 0.8rem; }
+.desp-resumen:empty { margin-bottom: 0; }
+.desp-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.desp-resumen-monto { margin-top: 0.4rem; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+
 .despachos-list { display: flex; flex-direction: column; gap: 0.6rem; }
 .despacho-card {
   display: block;
@@ -1230,6 +1236,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   text-align: left;
   background: var(--card);
   border: 1px solid var(--border);
+  border-left: 4px solid var(--gray);
   border-radius: var(--radius-sm);
   padding: 0.8rem 0.9rem;
   cursor: pointer;
@@ -1238,11 +1245,14 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .despacho-card:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+.despacho-card.pedido-pendiente { border-left-color: var(--warning); }
+.despacho-card.pedido-credito { border-left-color: var(--primary); }
+.despacho-card.pedido-contado { border-left-color: var(--ok); }
+.despacho-card.pedido-devuelto { border-left-color: var(--danger); }
 .despacho-card-cab { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.despacho-fecha { font-weight: 700; font-size: 1rem; }
-.despacho-card-rep { color: var(--muted); font-size: 0.88rem; margin-top: 0.2rem; }
-.despacho-card-pie { margin-top: 0.4rem; font-size: 0.85rem; color: var(--text); font-weight: 600; }
-.despacho-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem; }
+.despacho-card-cab strong { font-size: 1rem; }
+.despacho-card-datos { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; color: var(--muted); font-size: 0.85rem; margin-top: 0.4rem; }
+.despacho-card-rep { color: var(--muted); font-size: 0.85rem; margin-top: 0.35rem; }
 
 .ped-chip {
   display: inline-block;
@@ -1259,9 +1269,37 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .ped-chip.pedido-contado { background: var(--ok-light); color: var(--ok); border-color: transparent; }
 .ped-chip.pedido-devuelto { background: var(--danger-light); color: var(--danger); border-color: transparent; }
 
-.desp-det-info { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.8rem; }
+.desp-det-info { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.4rem; }
 .desp-det-fila { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.9rem; }
 .desp-det-fila span { color: var(--muted); }
+.desp-det-fila strong { text-align: right; }
+.desp-det-estado { margin-bottom: 0.3rem; }
+.desp-det-meta { font-size: 0.8rem; margin-top: 0.2rem; }
+
+/* Acciones al volver la boleta */
+.desp-det-acciones { display: flex; flex-direction: column; gap: 0.5rem; }
+.desp-acc-fila { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.desp-acc-fila .btn { flex: 1 1 auto; }
+
+/* Casillas de repartidores en el formulario */
+.desp-rep-label { display: flex !important; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.desp-repartidores-check { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.4rem; }
+.desp-rep-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  user-select: none;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.desp-rep-check.activo { background: var(--primary-light); border-color: var(--primary); color: var(--primary-dark); }
+.desp-rep-check input { accent-color: var(--primary); }
+.desp-vacio-mini { color: var(--muted); font-size: 0.85rem; margin: 0.4rem 0 0; }
 .desp-det-totales {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));

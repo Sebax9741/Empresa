@@ -99,41 +99,46 @@ function abonosDe(c) { return Array.isArray(c.abonos) ? c.abonos : []; }
 /* Quién está usando la app ahora (para dejar constancia en cada "a cuenta") */
 function quienSoy() { return (modoNube && yo && yo.usuario) ? yo.usuario : 'dueño'; }
 
-/* ====== Despachos (viajes de reparto) ======
-   Un despacho es una SALIDA: un repartidor + su carguero + la fecha, y adentro
-   la lista de pedidos que lleva. Cada pedido guarda datos básicos (cliente,
-   Nº de comprobante, monto, zona) y un estado. Cuando un pedido vuelve firmado,
-   desde ahí se abre el formulario de crédito ya prellenado. */
+/* ====== Despachos de pedidos ======
+   Cada despacho es UN pedido / una boleta que sale a reparto: cliente,
+   Nº de comprobante, monto, fecha de salida y los repartidores que la llevan.
+   Cuando la boleta vuelve firmada, desde el despacho se abre el formulario de
+   crédito ya prellenado y ambos quedan enlazados (la foto firmada y las notas
+   se guardan en el crédito). También puede marcarse "al contado" o "devuelto".
+   Los despachos antiguos tipo "viaje" (con lista .pedidos) ya no se muestran. */
 const TIPOS_COMPROBANTE = { boleta: 'Boleta', factura: 'Factura', nota: 'Nota de venta' };
-const ESTADOS_PEDIDO = {
-  pendiente: { etiqueta: '🕐 En reparto', clase: 'pedido-pendiente' },
-  credito:   { etiqueta: '📄 A crédito', clase: 'pedido-credito' },
-  contado:   { etiqueta: '💵 Al contado', clase: 'pedido-contado' },
-  devuelto:  { etiqueta: '↩️ Devuelto', clase: 'pedido-devuelto' },
+const ESTADOS_DESPACHO = {
+  reparto:  { etiqueta: '🚚 En reparto', clase: 'pedido-pendiente' },
+  credito:  { etiqueta: '📄 A crédito', clase: 'pedido-credito' },
+  contado:  { etiqueta: '💵 Al contado', clase: 'pedido-contado' },
+  devuelto: { etiqueta: '↩️ Devuelto', clase: 'pedido-devuelto' },
 };
-function estadoPedidoInfo(estado) { return ESTADOS_PEDIDO[estado] || ESTADOS_PEDIDO.pendiente; }
+function estadoDespachoInfo(estado) { return ESTADOS_DESPACHO[estado] || ESTADOS_DESPACHO.reparto; }
 function tipoComprobanteLabel(t) { return TIPOS_COMPROBANTE[t] || TIPOS_COMPROBANTE.boleta; }
 
-function pedidosDe(d) { return Array.isArray(d && d.pedidos) ? d.pedidos : []; }
 function despachoPorId(id) { return despachos.find(d => d.id === id) || null; }
+/* Un despacho "de pedido" (modelo nuevo) NO tiene lista .pedidos adentro.
+   Los despachos-viaje antiguos se filtran para no mostrarse. */
+function esDespachoPedido(d) { return d && !Array.isArray(d.pedidos); }
+function repartidoresDe(d) { return Array.isArray(d && d.repartidores) ? d.repartidores : []; }
 function repartidoresActivos() {
   return repartidores.filter(r => r.activo !== false)
     .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
 }
 
-/* Ordena los despachos del más reciente al más antiguo (por fecha y creación) */
+/* Ordena los despachos-pedido del más reciente al más antiguo (por fecha y creación) */
 function despachosOrdenados() {
-  return despachos.slice().sort((a, b) =>
+  return despachos.filter(esDespachoPedido).sort((a, b) =>
     (b.fecha || '').localeCompare(a.fecha || '') || (b.creado || 0) - (a.creado || 0));
 }
 
-/* Resumen de un despacho: cuántos pedidos hay en cada estado y el monto total */
-function resumenDespacho(d) {
-  const ped = pedidosDe(d);
-  const r = { total: ped.length, pendiente: 0, credito: 0, contado: 0, devuelto: 0, monto: 0 };
-  for (const p of ped) {
-    r[p.estado] = (r[p.estado] || 0) + 1;
-    r.monto += Number(p.monto) || 0;
+/* Resumen de una lista de despachos: cuántos hay en cada estado y el monto total */
+function resumenDespachos(lista) {
+  const r = { total: lista.length, reparto: 0, credito: 0, contado: 0, devuelto: 0, monto: 0 };
+  for (const d of lista) {
+    const e = ESTADOS_DESPACHO[d.estado] ? d.estado : 'reparto';
+    r[e] = (r[e] || 0) + 1;
+    r.monto += Number(d.monto) || 0;
   }
   return r;
 }
@@ -3018,9 +3023,9 @@ function imprimirCobranza() {
   w.document.close();
 }
 
-/* ====== Despachos (viajes de reparto) ====== */
+/* ====== Despachos de pedidos ====== */
 let despachoActivoId = null;   // despacho abierto en la vista de detalle
-let pedidoOrigen = null;       // { despachoId, pedidoId } del pedido que se está pasando a crédito
+let despachoOrigen = null;     // id del despacho que se está pasando a crédito
 
 const VISTAS_DESPACHO = ['lista', 'form', 'detalle', 'repartidores'];
 function mostrarVistaDespacho(nombre) {
@@ -3044,9 +3049,9 @@ function renderDespachos() {
   else if (!$('#desp-vista-repartidores').hidden) renderRepartidores();
 }
 
-function chipPedidos(res) {
+function chipDespachos(res) {
   const partes = [];
-  if (res.pendiente) partes.push(`<span class="ped-chip pedido-pendiente">${res.pendiente} en reparto</span>`);
+  if (res.reparto) partes.push(`<span class="ped-chip pedido-pendiente">${res.reparto} en reparto</span>`);
   if (res.credito) partes.push(`<span class="ped-chip pedido-credito">${res.credito} a crédito</span>`);
   if (res.contado) partes.push(`<span class="ped-chip pedido-contado">${res.contado} al contado</span>`);
   if (res.devuelto) partes.push(`<span class="ped-chip pedido-devuelto">${res.devuelto} devuelto</span>`);
@@ -3057,64 +3062,102 @@ function renderListaDespachos() {
   const cont = $('#despachos-list');
   const lista = despachosOrdenados();
   $('#desp-vacio').hidden = lista.length > 0;
+  const res = resumenDespachos(lista);
+  $('#desp-resumen').innerHTML = lista.length
+    ? `<div class="desp-chips">${chipDespachos(res)}</div>
+       <div class="desp-resumen-monto">${lista.length} despacho${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
+    : '';
   cont.innerHTML = lista.map(d => {
-    const res = resumenDespacho(d);
+    const info = estadoDespachoInfo(d.estado);
+    const reps = repartidoresDe(d);
+    const comprobante = d.boleta
+      ? `${tipoComprobanteLabel(d.tipoComprobante)} N° ${escapeHtml(d.boleta)}`
+      : tipoComprobanteLabel(d.tipoComprobante);
     return `
-      <button type="button" class="despacho-card" data-abrir-despacho="${d.id}">
+      <button type="button" class="despacho-card ${info.clase}" data-abrir-despacho="${d.id}">
         <div class="despacho-card-cab">
-          <span class="despacho-fecha">${formatoFecha(d.fecha)}</span>
+          <strong>${escapeHtml(d.cliente || '(sin cliente)')}</strong>
+          <span class="ped-chip ${info.clase}">${info.etiqueta}</span>
         </div>
-        <div class="despacho-card-rep">🧍 ${escapeHtml(d.repartidor || '(sin repartidor)')}${d.carguero ? ` · 🚚 ${escapeHtml(d.carguero)}` : ''}</div>
-        <div class="despacho-card-pie">
-          <span class="despacho-cont">${res.total} pedido${res.total === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</span>
+        <div class="despacho-card-datos">
+          <span>🧾 ${comprobante}</span>
+          <span>💵 ${formatoMonto(Number(d.monto) || 0)}</span>
+          <span>📅 ${formatoFecha(d.fecha)}</span>
+          ${d.zona ? `<span>📍 ${escapeHtml(d.zona)}</span>` : ''}
         </div>
-        <div class="despacho-chips">${chipPedidos(res) || '<span class="ped-chip">Sin pedidos aún</span>'}</div>
+        ${reps.length ? `<div class="despacho-card-rep">🧍 ${reps.map(escapeHtml).join(', ')}</div>` : ''}
       </button>`;
   }).join('');
 }
 
-function llenarSelectRepartidores(valor = '') {
-  const sel = $('#desp-repartidor');
+function llenarDatalistClientesDespacho() {
+  $('#desp-clientes-datalist').innerHTML = clientes
+    .map(c => `<option value="${escapeHtml(c.nombre)}">`).join('');
+}
+
+/* Casillas de repartidores en el formulario (se pueden elegir varios) */
+function renderRepartidoresCheck(seleccion = []) {
+  const cont = $('#desp-repartidores-check');
   const activos = repartidoresActivos();
-  sel.innerHTML = '<option value="">— Elige un repartidor —</option>' +
-    activos.map(r => `<option value="${escapeHtml(r.nombre)}">${escapeHtml(r.nombre)}</option>`).join('');
-  // Si el repartidor guardado ya no está en la lista, lo mantenemos como opción
-  if (valor && !activos.some(r => r.nombre === valor)) {
-    sel.innerHTML += `<option value="${escapeHtml(valor)}">${escapeHtml(valor)}</option>`;
+  if (!activos.length) {
+    cont.innerHTML = '<p class="desp-vacio-mini">Aún no hay repartidores. Toca “➕” para agregar el primero.</p>';
+    return;
   }
-  sel.value = valor;
+  const sel = new Set(seleccion);
+  cont.innerHTML = activos.map(r => `
+    <label class="desp-rep-check${sel.has(r.nombre) ? ' activo' : ''}">
+      <input type="checkbox" value="${escapeHtml(r.nombre)}" ${sel.has(r.nombre) ? 'checked' : ''}>
+      <span>🧍 ${escapeHtml(r.nombre)}</span>
+    </label>`).join('');
+}
+
+function repartidoresSeleccionados() {
+  return Array.from(document.querySelectorAll('#desp-repartidores-check input[type="checkbox"]:checked'))
+    .map(c => c.value);
 }
 
 function abrirFormDespacho(despacho = null) {
   $('#desp-form').reset();
   $('#desp-id').value = despacho ? despacho.id : '';
   $('#desp-form-title').textContent = despacho ? 'Editar despacho' : 'Nuevo despacho';
+  llenarDatalistClientesDespacho();
+  $('#desp-cliente').value = despacho ? (despacho.cliente || '') : '';
+  $('#desp-tipo').value = (despacho && despacho.tipoComprobante) || 'boleta';
+  $('#desp-boleta').value = despacho ? (despacho.boleta || '') : '';
+  $('#desp-monto').value = despacho ? (despacho.monto || '') : '';
   $('#desp-fecha').value = despacho ? despacho.fecha : hoyISO();
-  $('#desp-carguero').value = despacho ? (despacho.carguero || '') : '';
   $('#desp-notas').value = despacho ? (despacho.notas || '') : '';
-  llenarSelectRepartidores(despacho ? (despacho.repartidor || '') : '');
+  renderRepartidoresCheck(despacho ? repartidoresDe(despacho) : []);
   mostrarVistaDespacho('form');
-  if (!repartidoresActivos().length) {
-    toast('💡 Primero agrega repartidores (botón 🧍 Repartidores)');
-  }
+  $('#desp-cliente').focus();
 }
 
 async function guardarDespachoForm(ev) {
   ev.preventDefault();
   if (!puede('despachos')) return;
-  const repartidor = $('#desp-repartidor').value.trim();
-  if (!repartidor) { toast('⚠️ Elige un repartidor'); return; }
+  const nombreTexto = $('#desp-cliente').value.trim();
+  if (!nombreTexto) { toast('⚠️ Escribe o elige el cliente'); return; }
+  const reps = repartidoresSeleccionados();
+  if (!reps.length) { toast('⚠️ Elige al menos un repartidor'); return; }
+  const cli = clientePorNombre(nombreTexto);
   const id = $('#desp-id').value || nuevoId();
   const existente = despachoPorId(id);
   const despacho = {
     id,
     fecha: $('#desp-fecha').value || hoyISO(),
-    repartidor,
-    carguero: $('#desp-carguero').value.trim(),
+    cliente: cli ? cli.nombre : nombreTexto,
+    clienteId: cli ? cli.id : '',
+    zona: cli ? (cli.zona || '') : ((existente && existente.zona) || ''),
+    tipoComprobante: $('#desp-tipo').value,
+    boleta: $('#desp-boleta').value.trim(),
+    monto: Number($('#desp-monto').value) || 0,
+    repartidores: reps,
     notas: $('#desp-notas').value.trim(),
-    pedidos: existente ? pedidosDe(existente) : [],
+    estado: existente ? (existente.estado || 'reparto') : 'reparto',
+    creditoId: existente ? (existente.creditoId || '') : '',
     creado: existente ? existente.creado : Date.now(),
     creadoPor: existente ? existente.creadoPor : quienSoy(),
+    registrado: existente ? (existente.registrado || existente.creado || Date.now()) : Date.now(),
   };
   try {
     await guardarDespachoEnStore(despacho);
@@ -3132,8 +3175,6 @@ async function guardarDespachoForm(ev) {
 
 function abrirDetalleDespacho(id) {
   despachoActivoId = id;
-  $('#ped-form').hidden = true;
-  $('#btn-ped-nuevo').hidden = false;
   mostrarVistaDespacho('detalle');
   renderDetalleDespacho();
 }
@@ -3141,156 +3182,61 @@ function abrirDetalleDespacho(id) {
 function renderDetalleDespacho() {
   const d = despachoPorId(despachoActivoId);
   if (!d) { mostrarVistaDespacho('lista'); renderListaDespachos(); return; }
-  const res = resumenDespacho(d);
-  $('#desp-det-title').textContent = `Despacho del ${formatoFecha(d.fecha)}`;
+  const info = estadoDespachoInfo(d.estado);
+  const reps = repartidoresDe(d);
+  const comprobante = d.boleta
+    ? `${tipoComprobanteLabel(d.tipoComprobante)} N° ${escapeHtml(d.boleta)}`
+    : tipoComprobanteLabel(d.tipoComprobante);
+  $('#desp-det-title').textContent = d.cliente || 'Despacho';
   $('#desp-det-info').innerHTML = `
-    <div class="desp-det-fila"><span>🧍 Repartidor</span><strong>${escapeHtml(d.repartidor || '—')}</strong></div>
-    ${d.carguero ? `<div class="desp-det-fila"><span>🚚 Carguero</span><strong>${escapeHtml(d.carguero)}</strong></div>` : ''}
-    ${d.notas ? `<div class="desp-det-fila"><span>📝 Nota</span><strong>${escapeHtml(d.notas)}</strong></div>` : ''}`;
-  $('#desp-det-totales').innerHTML = `
-    <div class="desp-total"><span>Pedidos</span><strong>${res.total}</strong></div>
-    <div class="desp-total"><span>Monto total</span><strong>${formatoMonto(res.monto)}</strong></div>
-    <div class="desp-total"><span>A crédito</span><strong>${res.credito}</strong></div>
-    <div class="desp-total"><span>Al contado</span><strong>${res.contado}</strong></div>`;
-  renderPedidos();
-}
+    <div class="desp-det-estado"><span class="ped-chip ${info.clase}">${info.etiqueta}</span></div>
+    <div class="desp-det-fila"><span>🧾 Comprobante</span><strong>${comprobante}</strong></div>
+    <div class="desp-det-fila"><span>💵 Monto</span><strong>${formatoMonto(Number(d.monto) || 0)}</strong></div>
+    <div class="desp-det-fila"><span>📅 Fecha de salida</span><strong>${formatoFecha(d.fecha)}</strong></div>
+    ${d.zona ? `<div class="desp-det-fila"><span>📍 Zona</span><strong>${escapeHtml(d.zona)}</strong></div>` : ''}
+    <div class="desp-det-fila"><span>🧍 Repartidores</span><strong>${reps.length ? reps.map(escapeHtml).join(', ') : '—'}</strong></div>
+    ${d.notas ? `<div class="desp-det-fila"><span>📝 Nota</span><strong>${escapeHtml(d.notas)}</strong></div>` : ''}
+    <div class="desp-det-fila desp-det-meta"><span>Registrado por</span><strong>${escapeHtml(d.creadoPor || '—')}${d.registrado ? ' · ' + (horaDeTimestamp(d.registrado) || '') : ''}</strong></div>`;
 
-function renderPedidos() {
-  const d = despachoPorId(despachoActivoId);
-  if (!d) return;
-  const ped = pedidosDe(d);
-  const cont = $('#pedidos-list');
-  $('#pedidos-vacio').hidden = ped.length > 0;
-  cont.innerHTML = ped.map((p, i) => {
-    const info = estadoPedidoInfo(p.estado);
-    const comprobante = p.comprobante ? `${tipoComprobanteLabel(p.tipoComprobante)} N° ${escapeHtml(p.comprobante)}` : tipoComprobanteLabel(p.tipoComprobante);
-    let acciones = '';
-    if (p.estado === 'pendiente') {
-      acciones = `
-        <button type="button" class="btn btn-primary btn-small" data-ped-credito="${p.id}">📄 Volvió firmado → crédito</button>
-        <button type="button" class="btn btn-secondary btn-small" data-ped-estado="${p.id}|contado">💵 Al contado</button>
-        <button type="button" class="btn btn-secondary btn-small" data-ped-estado="${p.id}|devuelto">↩️ Devuelto</button>`;
-    } else if (p.estado === 'credito' && p.creditoId) {
-      acciones = `<button type="button" class="btn btn-secondary btn-small" data-ped-ver-credito="${p.id}">Ver crédito</button>
-                  <button type="button" class="btn btn-secondary btn-small" data-ped-estado="${p.id}|pendiente">Deshacer</button>`;
-    } else {
-      acciones = `<button type="button" class="btn btn-secondary btn-small" data-ped-estado="${p.id}|pendiente">Deshacer</button>`;
-    }
-    return `
-      <div class="pedido-item ${info.clase}">
-        <div class="pedido-cab">
-          <strong>${escapeHtml(p.cliente || '(sin cliente)')}</strong>
-          <span class="ped-chip ${info.clase}">${info.etiqueta}</span>
-        </div>
-        <div class="pedido-datos">
-          <span>${comprobante}</span>
-          <span>${formatoMonto(Number(p.monto) || 0)}</span>
-          ${p.zona ? `<span>📍 ${escapeHtml(p.zona)}</span>` : ''}
-        </div>
-        <div class="pedido-acciones">
-          ${acciones}
-          <button type="button" class="btn btn-secondary btn-small" data-ped-editar="${p.id}">✏️</button>
-          <button type="button" class="btn btn-danger btn-small" data-ped-borrar="${p.id}">🗑️</button>
-        </div>
+  let acciones = '';
+  if (d.estado === 'credito' && d.creditoId) {
+    acciones = `
+      <button type="button" class="btn btn-primary btn-block" id="btn-desp-ver-credito">📄 Ver crédito enlazado</button>
+      <button type="button" class="btn btn-secondary btn-block" data-desp-estado="reparto">↩️ Deshacer enlace (volver a “en reparto”)</button>`;
+  } else {
+    acciones = `
+      <button type="button" class="btn btn-primary btn-block" id="btn-desp-a-credito">📄 Volvió firmada → crear crédito</button>
+      <div class="desp-acc-fila">
+        <button type="button" class="btn btn-secondary" data-desp-estado="contado"${d.estado === 'contado' ? ' disabled' : ''}>💵 Al contado</button>
+        <button type="button" class="btn btn-secondary" data-desp-estado="devuelto"${d.estado === 'devuelto' ? ' disabled' : ''}>↩️ Devuelto</button>
+        ${d.estado !== 'reparto' ? `<button type="button" class="btn btn-secondary" data-desp-estado="reparto">🚚 En reparto</button>` : ''}
       </div>`;
-  }).join('');
+  }
+  $('#desp-det-acciones').innerHTML = acciones;
 }
 
-function llenarDatalistClientesPedido() {
-  $('#ped-clientes-datalist').innerHTML = clientes
-    .map(c => `<option value="${escapeHtml(c.nombre)}">`).join('');
-}
-
-function abrirFormPedido(pedido = null) {
-  $('#ped-form').reset();
-  $('#ped-id').value = pedido ? pedido.id : '';
-  $('#ped-form-title').textContent = pedido ? 'Editar pedido' : 'Agregar pedido';
-  llenarDatalistClientesPedido();
-  $('#ped-cliente').value = pedido ? (pedido.cliente || '') : '';
-  $('#ped-tipo').value = (pedido && pedido.tipoComprobante) || 'boleta';
-  $('#ped-comprobante').value = pedido ? (pedido.comprobante || '') : '';
-  $('#ped-monto').value = pedido ? (pedido.monto || '') : '';
-  $('#ped-zona').value = pedido ? (pedido.zona || '') : '';
-  $('#ped-form').hidden = false;
-  $('#btn-ped-nuevo').hidden = true;
-  $('#ped-cliente').focus();
-}
-
-function cerrarFormPedido() {
-  $('#ped-form').hidden = true;
-  $('#btn-ped-nuevo').hidden = false;
-}
-
-async function guardarPedidoForm(ev) {
-  ev.preventDefault();
+/* Cambia el estado del despacho abierto (al contado / devuelto / en reparto) */
+async function cambiarEstadoDespacho(estado) {
   const d = despachoPorId(despachoActivoId);
   if (!d) return;
-  const nombreTexto = $('#ped-cliente').value.trim();
-  if (!nombreTexto) { toast('⚠️ Escribe el cliente'); return; }
-  const monto = Number($('#ped-monto').value) || 0;
-  const cli = clientePorNombre(nombreTexto);
-  const id = $('#ped-id').value || nuevoId();
-  const ped = pedidosDe(d);
-  const existente = ped.find(p => p.id === id);
-  const pedido = {
-    id,
-    cliente: cli ? cli.nombre : nombreTexto,
-    clienteId: cli ? cli.id : '',
-    tipoComprobante: $('#ped-tipo').value,
-    comprobante: $('#ped-comprobante').value.trim(),
-    monto,
-    zona: $('#ped-zona').value || (cli ? (cli.zona || '') : ''),
-    estado: existente ? existente.estado : 'pendiente',
-    creditoId: existente ? (existente.creditoId || '') : '',
-  };
-  const nuevos = existente ? ped.map(p => p.id === id ? pedido : p) : ped.concat(pedido);
-  await guardarPedidosDe(d, nuevos, existente ? '✅ Pedido actualizado' : '✅ Pedido agregado');
-  cerrarFormPedido();
-}
-
-/* Guarda la lista de pedidos de un despacho y refresca la vista */
-async function guardarPedidosDe(d, nuevosPedidos, mensaje) {
-  const actualizado = { ...d, pedidos: nuevosPedidos };
+  const actualizado = { ...d, estado };
+  if (estado !== 'credito') actualizado.creditoId = '';
   try {
     await guardarDespachoEnStore(actualizado);
   } catch (e) {
-    console.error(e);
     toast('❌ No se pudo guardar. Revisa tu conexión.');
-    return false;
+    return;
   }
   const idx = despachos.findIndex(x => x.id === d.id);
   if (idx >= 0) despachos[idx] = actualizado;
   renderDetalleDespacho();
-  if (mensaje) toast(mensaje);
-  return true;
-}
-
-async function cambiarEstadoPedido(pedidoId, estado) {
-  const d = despachoPorId(despachoActivoId);
-  if (!d) return;
-  const nuevos = pedidosDe(d).map(p => {
-    if (p.id !== pedidoId) return p;
-    const cambio = { ...p, estado };
-    if (estado !== 'credito') cambio.creditoId = '';
-    return cambio;
-  });
-  await guardarPedidosDe(d, nuevos);
-}
-
-async function borrarPedido(pedidoId) {
-  const d = despachoPorId(despachoActivoId);
-  if (!d) return;
-  const p = pedidosDe(d).find(x => x.id === pedidoId);
-  if (!p) return;
-  if (!confirm(`¿Borrar el pedido de ${p.cliente || 'este cliente'}?`)) return;
-  const nuevos = pedidosDe(d).filter(x => x.id !== pedidoId);
-  await guardarPedidosDe(d, nuevos, '🗑️ Pedido borrado');
+  toast(`✅ Marcado: ${estadoDespachoInfo(estado).etiqueta}`);
 }
 
 async function borrarDespachoActual() {
   const d = despachoPorId(despachoActivoId);
   if (!d) return;
-  if (!confirm(`¿Borrar el despacho del ${formatoFecha(d.fecha)} (${d.repartidor})?\nSe borran también sus ${pedidosDe(d).length} pedido(s).`)) return;
+  if (!confirm(`¿Borrar el despacho de ${d.cliente || 'este cliente'} (boleta ${d.boleta || '—'})?`)) return;
   try {
     await eliminarDespachoDeStore(d.id);
   } catch (e) {
@@ -3304,45 +3250,42 @@ async function borrarDespachoActual() {
   renderListaDespachos();
 }
 
-/* Abre el formulario de crédito ya prellenado con los datos del pedido.
-   Al guardar el crédito, el pedido queda marcado como "a crédito" y enlazado. */
-function crearCreditoDesdePedido(pedidoId) {
+/* Abre el formulario de crédito ya prellenado con los datos del despacho.
+   Al guardar el crédito, el despacho queda marcado "a crédito" y enlazado
+   (la foto de la boleta firmada y las notas se guardan en el crédito). */
+function crearCreditoDesdeDespacho(id) {
   if (!puede('crear')) { toast('🔒 No tienes permiso para crear créditos'); return; }
-  const d = despachoPorId(despachoActivoId);
-  const p = d && pedidosDe(d).find(x => x.id === pedidoId);
-  if (!p) return;
-  pedidoOrigen = { despachoId: d.id, pedidoId: p.id };
+  const d = despachoPorId(id);
+  if (!d) return;
+  despachoOrigen = d.id;
   $('#modal-despachos').close();
   abrirFormulario(null, {
-    boleta: p.comprobante || '',
-    clienteId: p.clienteId || '',
-    clienteNombre: p.cliente || '',
-    zona: p.zona || '',
-    monto: Number(p.monto) || 0,
+    boleta: d.boleta || '',
+    clienteId: d.clienteId || '',
+    clienteNombre: d.cliente || '',
+    zona: d.zona || '',
+    monto: Number(d.monto) || 0,
     fechaDespacho: d.fecha || '',
   });
 }
 
-/* Enlaza el pedido de origen con el crédito recién creado */
-async function vincularPedidoConCredito(origen, credito) {
-  const d = despachoPorId(origen.despachoId);
+/* Enlaza el despacho de origen con el crédito recién creado */
+async function vincularDespachoConCredito(despachoId, credito) {
+  const d = despachoPorId(despachoId);
   if (!d) return;
-  const nuevos = pedidosDe(d).map(p =>
-    p.id === origen.pedidoId ? { ...p, estado: 'credito', creditoId: credito.id } : p);
-  const actualizado = { ...d, pedidos: nuevos };
+  const actualizado = { ...d, estado: 'credito', creditoId: credito.id };
   try {
     await guardarDespachoEnStore(actualizado);
     const idx = despachos.findIndex(x => x.id === d.id);
     if (idx >= 0) despachos[idx] = actualizado;
   } catch (e) {
-    console.error('No se pudo enlazar el pedido con el crédito:', e);
+    console.error('No se pudo enlazar el despacho con el crédito:', e);
   }
 }
 
-function verCreditoDePedido(pedidoId) {
-  const d = despachoPorId(despachoActivoId);
-  const p = d && pedidosDe(d).find(x => x.id === pedidoId);
-  const c = p && p.creditoId && creditos.find(x => x.id === p.creditoId);
+function verCreditoDeDespacho(id) {
+  const d = despachoPorId(id);
+  const c = d && d.creditoId && creditos.find(x => x.id === d.creditoId);
   if (c) { $('#modal-despachos').close(); abrirInfo(c); }
   else toast('El crédito enlazado ya no existe');
 }
@@ -3475,14 +3418,14 @@ async function guardarCredito(ev) {
   const idx = creditos.findIndex(c => c.id === id);
   if (idx >= 0) creditos[idx] = credito; else creditos.push(credito);
 
-  // Si el crédito nació de un pedido de despacho, enlázalos y márcalo "a crédito"
-  const origen = existente ? null : pedidoOrigen;
-  pedidoOrigen = null;
-  if (origen) await vincularPedidoConCredito(origen, credito);
+  // Si el crédito nació de un despacho, enlázalos y márcalo "a crédito"
+  const origen = existente ? null : despachoOrigen;
+  despachoOrigen = null;
+  if (origen) await vincularDespachoConCredito(origen, credito);
 
   modalForm.close();
   render();
-  toast(existente ? '✅ Crédito actualizado' : (origen ? '✅ Crédito creado y pedido enlazado' : '✅ Crédito guardado'));
+  toast(existente ? '✅ Crédito actualizado' : (origen ? '✅ Crédito creado y despacho enlazado' : '✅ Crédito guardado'));
 }
 
 async function borrarCredito(id) {
@@ -3575,8 +3518,6 @@ function poblarSelectores() {
     ZONAS.map(z => `<option value="${z}">${z}</option>`).join('');
   $('#cli-zona').innerHTML = '<option value="">— Sin zona —</option>' +
     ZONAS.map(z => `<option value="${z}">${z}</option>`).join('');
-  $('#ped-zona').innerHTML = '<option value="">— Sin zona —</option>' +
-    ZONAS.map(z => `<option value="${z}">${z}</option>`).join('');
   $('#filtro-zonas').innerHTML = ZONAS.map(z =>
     `<label><input type="checkbox" class="fil-zona" value="${escapeHtml(z)}"> ${escapeHtml(z)}</label>`).join('');
   $('#filtro-meses').innerHTML = MESES.map((m, i) =>
@@ -3590,7 +3531,7 @@ function inicializarEventos() {
   $('#btn-new').addEventListener('click', () => abrirFormulario());
   $('#btn-cancelar').addEventListener('click', () => modalForm.close());
   // Si se cancela un crédito que venía de un despacho, se descarta el enlace pendiente
-  modalForm.addEventListener('close', () => { pedidoOrigen = null; });
+  modalForm.addEventListener('close', () => { despachoOrigen = null; });
   $('#credit-form').addEventListener('submit', guardarCredito);
 
   // Abonos "a cuenta" (en edición)
@@ -3822,24 +3763,15 @@ function inicializarEventos() {
     if (d) abrirFormDespacho(d);
   });
   $('#btn-desp-borrar').addEventListener('click', borrarDespachoActual);
-  $('#btn-desp-rep-rapido').addEventListener('click', () => {
+  // Agregar un repartidor al vuelo desde el formulario, sin perder lo ya elegido
+  $('#btn-desp-rep-rapido').addEventListener('click', async () => {
     const nombre = (prompt('Nombre del repartidor nuevo:') || '').trim();
     if (!nombre) return;
+    const sel = repartidoresSeleccionados();
     $('#rep-nombre').value = nombre;
-    // Reutiliza el alta normal y, al terminar, lo deja elegido en el select
-    const form = $('#rep-form');
-    agregarRepartidor({ preventDefault() {} }).then(() => llenarSelectRepartidores(nombre));
-    void form;
-  });
-
-  // Pedidos dentro de un despacho
-  $('#btn-ped-nuevo').addEventListener('click', () => abrirFormPedido());
-  $('#btn-ped-cancelar').addEventListener('click', cerrarFormPedido);
-  $('#ped-form').addEventListener('submit', guardarPedidoForm);
-  // Al elegir un cliente registrado, su zona se pone sola
-  $('#ped-cliente').addEventListener('input', () => {
-    const cli = clientePorNombre($('#ped-cliente').value.trim());
-    if (cli && cli.zona) $('#ped-zona').value = cli.zona;
+    await agregarRepartidor({ preventDefault() {} });
+    if (!sel.includes(nombre)) sel.push(nombre);
+    renderRepartidoresCheck(sel);
   });
 
   // Repartidores
@@ -3863,23 +3795,18 @@ function inicializarEventos() {
     if (card) abrirDetalleDespacho(card.dataset.abrirDespacho);
   });
 
-  // Acciones sobre los pedidos (delegación)
-  $('#pedidos-list').addEventListener('click', ev => {
-    const credito = ev.target.closest('[data-ped-credito]');
-    const estado = ev.target.closest('[data-ped-estado]');
-    const editar = ev.target.closest('[data-ped-editar]');
-    const borrar = ev.target.closest('[data-ped-borrar]');
-    const verCred = ev.target.closest('[data-ped-ver-credito]');
-    if (credito) crearCreditoDesdePedido(credito.dataset.pedCredito);
-    else if (estado) {
-      const [pid, est] = estado.dataset.pedEstado.split('|');
-      cambiarEstadoPedido(pid, est);
-    } else if (editar) {
-      const d = despachoPorId(despachoActivoId);
-      const p = d && pedidosDe(d).find(x => x.id === editar.dataset.pedEditar);
-      if (p) abrirFormPedido(p);
-    } else if (borrar) borrarPedido(borrar.dataset.pedBorrar);
-    else if (verCred) verCreditoDePedido(verCred.dataset.pedVerCredito);
+  // Casillas de repartidores del formulario: marcar/desmarcar resalta la fila
+  $('#desp-repartidores-check').addEventListener('change', ev => {
+    const lbl = ev.target.closest('.desp-rep-check');
+    if (lbl) lbl.classList.toggle('activo', ev.target.checked);
+  });
+
+  // Acciones del detalle de un despacho (crear/ver crédito, cambiar estado)
+  $('#desp-det-acciones').addEventListener('click', ev => {
+    const est = ev.target.closest('[data-desp-estado]');
+    if (est) { cambiarEstadoDespacho(est.dataset.despEstado); return; }
+    if (ev.target.closest('#btn-desp-a-credito')) { crearCreditoDesdeDespacho(despachoActivoId); return; }
+    if (ev.target.closest('#btn-desp-ver-credito')) { verCreditoDeDespacho(despachoActivoId); return; }
   });
 
   // Panel lateral (escritorio): mismos destinos que la cabecera

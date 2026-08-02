@@ -576,9 +576,10 @@
           <button type="button" id="btn-desp-nuevo" class="btn btn-primary btn-small">➕ Nuevo despacho</button>
         </div>
       </div>
-      <p class="desp-intro">Cada despacho es una salida: un repartidor con su carguero en una fecha, y adentro los pedidos que lleva.</p>
+      <p class="desp-intro">Cada despacho es un pedido / una boleta que sale a reparto: cliente, N° de comprobante, monto, fecha y los repartidores que la llevan. Cuando vuelve firmada, la conviertes en crédito.</p>
+      <div id="desp-resumen" class="desp-resumen"></div>
       <div id="despachos-list" class="despachos-list"></div>
-      <p class="desp-vacio" id="desp-vacio" hidden>Aún no hay despachos. Toca <strong>“➕ Nuevo despacho”</strong> para armar el primero.</p>
+      <p class="desp-vacio" id="desp-vacio" hidden>Aún no hay despachos. Toca <strong>“➕ Nuevo despacho”</strong> para registrar el primero.</p>
       <div class="modal-buttons">
         <button type="button" id="btn-desp-cerrar" class="btn btn-secondary">Cerrar</button>
       </div>
@@ -592,20 +593,34 @@
       </div>
       <form id="desp-form">
         <input type="hidden" id="desp-id">
-        <div class="field-row">
-          <label class="field"><span>Fecha de salida *</span>
-            <input type="date" id="desp-fecha" class="input" required></label>
-          <label class="field"><span>Carguero <small>opcional</small></span>
-            <input type="text" id="desp-carguero" class="input" placeholder="Ej: Camión 2 / Placa ABC-123"></label>
-        </div>
-        <label class="field"><span>Repartidor *</span>
-          <div class="desp-rep-fila">
-            <select id="desp-repartidor" class="input" required></select>
-            <button type="button" id="btn-desp-rep-rapido" class="btn btn-secondary btn-small" title="Agregar un repartidor nuevo">➕</button>
-          </div>
+        <label class="field"><span>Cliente *</span>
+          <input type="text" id="desp-cliente" class="input" list="desp-clientes-datalist" autocomplete="off" placeholder="Escribe o elige el cliente" required>
+          <datalist id="desp-clientes-datalist"></datalist>
         </label>
+        <div class="field-row">
+          <label class="field"><span>Comprobante</span>
+            <select id="desp-tipo" class="input">
+              <option value="boleta">Boleta</option>
+              <option value="factura">Factura</option>
+              <option value="nota">Nota de venta</option>
+            </select></label>
+          <label class="field"><span>N° de boleta</span>
+            <input type="text" id="desp-boleta" class="input" inputmode="numeric" placeholder="Ej: 001234"></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>Monto *</span>
+            <input type="number" id="desp-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0" required></label>
+          <label class="field"><span>Fecha de despacho *</span>
+            <input type="date" id="desp-fecha" class="input" required></label>
+        </div>
+        <div class="field">
+          <span class="desp-rep-label">Repartidores que la llevan *
+            <button type="button" id="btn-desp-rep-rapido" class="btn btn-secondary btn-small" title="Agregar un repartidor nuevo">➕ Nuevo</button>
+          </span>
+          <div id="desp-repartidores-check" class="desp-repartidores-check"></div>
+        </div>
         <label class="field"><span>Nota <small>opcional</small></span>
-          <input type="text" id="desp-notas" class="input" placeholder="Ej: sale temprano por la zona Carretera"></label>
+          <input type="text" id="desp-notas" class="input" placeholder="Ej: entregar en la mañana"></label>
         <div class="modal-buttons">
           <button type="button" class="btn btn-secondary" data-desp-volver>Cancelar</button>
           <button type="submit" class="btn btn-primary" id="btn-desp-guardar">Guardar despacho</button>
@@ -613,7 +628,7 @@
       </form>
     </section>
 
-    <!-- Vista: detalle de un despacho con sus pedidos -->
+    <!-- Vista: detalle de un despacho (un pedido / una boleta) -->
     <section id="desp-vista-detalle" class="desp-vista" hidden>
       <div class="desp-cab">
         <button type="button" class="btn btn-secondary btn-small desp-volver" data-desp-volver>◀ Volver</button>
@@ -624,42 +639,9 @@
         </div>
       </div>
       <div id="desp-det-info" class="desp-det-info"></div>
-      <div id="desp-det-totales" class="desp-det-totales"></div>
 
-      <h3 class="desp-sub">Pedidos de este viaje</h3>
-      <div id="pedidos-list" class="pedidos-list"></div>
-      <p class="desp-vacio" id="pedidos-vacio" hidden>Todavía no cargaste pedidos en este despacho.</p>
-
-      <!-- Formulario para agregar / editar un pedido -->
-      <form id="ped-form" class="ped-form" hidden>
-        <h3 class="desp-sub" id="ped-form-title">Agregar pedido</h3>
-        <input type="hidden" id="ped-id">
-        <label class="field"><span>Cliente *</span>
-          <input type="text" id="ped-cliente" class="input" list="ped-clientes-datalist" autocomplete="off" placeholder="Escribe o elige el cliente">
-          <datalist id="ped-clientes-datalist"></datalist>
-        </label>
-        <div class="field-row">
-          <label class="field"><span>Comprobante</span>
-            <select id="ped-tipo" class="input">
-              <option value="boleta">Boleta</option>
-              <option value="factura">Factura</option>
-              <option value="nota">Nota de venta</option>
-            </select></label>
-          <label class="field"><span>N° de comprobante</span>
-            <input type="text" id="ped-comprobante" class="input" inputmode="numeric" placeholder="Ej: 001234"></label>
-        </div>
-        <div class="field-row">
-          <label class="field"><span>Monto *</span>
-            <input type="number" id="ped-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0"></label>
-          <label class="field"><span>Zona</span>
-            <select id="ped-zona" class="input"></select></label>
-        </div>
-        <div class="modal-buttons">
-          <button type="button" id="btn-ped-cancelar" class="btn btn-secondary btn-small">Cancelar</button>
-          <button type="submit" id="btn-ped-guardar" class="btn btn-primary btn-small">Guardar pedido</button>
-        </div>
-      </form>
-      <button type="button" id="btn-ped-nuevo" class="btn btn-secondary btn-block">➕ Agregar pedido</button>
+      <h3 class="desp-sub">Al volver la boleta</h3>
+      <div id="desp-det-acciones" class="desp-det-acciones"></div>
 
       <div class="modal-buttons">
         <button type="button" class="btn btn-secondary" data-desp-volver>◀ Volver a la lista</button>
