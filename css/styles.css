@@ -146,6 +146,31 @@ body {
   padding: 1rem;
 }
 
+/* ====== Secciones (apartados como página, ya no ventanas flotantes) ====== */
+.vista {
+  max-width: 760px;
+  margin: 1rem auto 2rem;
+  padding: 1.4rem;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+/* Estas antes eran modales con ancho fijo; como secciones usan la columna cómoda,
+   salvo la cobranza que necesita ancho para su tabla. */
+.vista.modal-usuarios,
+.vista.modal-clientes,
+.vista.modal-despachos { width: auto; max-width: 760px; }
+.vista.modal-cobranza { width: auto; max-width: 1100px; }
+.vista > h2 { margin-top: 0; }
+@media (max-width: 640px) {
+  .vista { margin: 0.5rem auto 1.5rem; padding: 1rem; border-radius: var(--radius-sm); }
+}
+/* Item activo del panel lateral */
+.nav-item.activo { background: var(--primary-light); color: var(--primary-dark); font-weight: 700; }
+/* Botón activo en la cabecera (celular) */
+.header-actions .btn-icon.activo { background: var(--primary-light); color: var(--primary-dark); }
+.cli-acciones-top { margin: 0 0 0.8rem; }
+
 /* ====== Resumen ====== */
 .summary {
   display: grid;

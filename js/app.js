@@ -921,7 +921,7 @@ function sesionCerrada() {
 
 async function cerrarSesion() {
   if (confirm('¿Cerrar sesión?')) {
-    $('#modal-settings').close();
+    mostrarSeccion('creditos');
     await fb.salir(fb.auth);
   }
 }
@@ -961,7 +961,7 @@ function suscribirNube() {
   if (unsubHojas) unsubHojas();
   unsubHojas = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'hojas'), snap => {
     hojas = snap.docs.map(d => d.data());
-    if ($('#modal-cobranza').open) renderCobranza();
+    if (!$('#view-cobranza').hidden) renderCobranza();
   }, err => {
     console.error('Error al sincronizar las hojas de cobranza:', err);
   });
@@ -969,7 +969,7 @@ function suscribirNube() {
   if (unsubDespachos) unsubDespachos();
   unsubDespachos = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'despachos'), snap => {
     despachos = snap.docs.map(d => d.data());
-    if ($('#modal-despachos').open) renderDespachos();
+    if (!$('#view-despachos').hidden) renderDespachos();
   }, err => {
     console.error('Error al sincronizar los despachos:', err);
   });
@@ -977,7 +977,7 @@ function suscribirNube() {
   if (unsubRepartidores) unsubRepartidores();
   unsubRepartidores = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'repartidores'), snap => {
     repartidores = snap.docs.map(d => d.data());
-    if ($('#modal-despachos').open) renderDespachos();
+    if (!$('#view-despachos').hidden) renderDespachos();
   }, err => {
     console.error('Error al sincronizar los repartidores:', err);
   });
@@ -1007,6 +1007,28 @@ function sincronizarNavLateral() {
     const el = document.getElementById(id);
     if (el) el.hidden = !visible;
   }
+}
+
+/* ====== Router de apartados (cada uno es una sección de página, no un modal) ====== */
+const SECCIONES = ['creditos', 'despachos', 'clientes', 'cobranza', 'usuarios', 'settings'];
+let seccionActual = 'creditos';
+
+function mostrarSeccion(nombre) {
+  if (!SECCIONES.includes(nombre)) nombre = 'creditos';
+  seccionActual = nombre;
+  SECCIONES.forEach(s => {
+    const el = $('#view-' + s);
+    if (el) el.hidden = (s !== nombre);
+  });
+  // El botón "＋ Nuevo crédito" solo aplica en Créditos
+  const btnNew = $('#btn-new');
+  if (btnNew) btnNew.hidden = (nombre !== 'creditos') || !puede('crear');
+  // Resaltar el destino activo en el panel lateral y en la cabecera
+  const navId = nombre === 'creditos' ? 'nav-inicio' : 'nav-' + nombre;
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('activo', b.id === navId));
+  const btnId = { despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
+  document.querySelectorAll('.header-actions .btn-icon').forEach(b => b.classList.toggle('activo', b.id === btnId));
+  window.scrollTo(0, 0);
 }
 
 /* Si el dispositivo tenía créditos guardados en modo local, ofrece subirlos a la cuenta */
@@ -1082,7 +1104,7 @@ async function abrirUsuarios() {
   if (!esAdmin()) return;
   await renderUsuarios();
   $('#u-form-nuevo').reset();
-  $('#modal-usuarios').showModal();
+  mostrarSeccion('usuarios');
 }
 
 async function renderUsuarios() {
@@ -1879,14 +1901,21 @@ function aplicarClienteSeleccionado() {
 }
 
 function abrirClientes() {
-  limpiarFormCliente();
   $('#cli-buscar').value = '';
   const permitido = puede('clientes');
-  $('#cli-form').hidden = !permitido;
+  $('#btn-cli-registrar').hidden = !permitido;
   $('#btn-cli-importar').hidden = !permitido;
   $('#btn-cli-codigos').hidden = !permitido || !clientes.some(c => !String(c.codigo || '').trim());
   renderClientes();
-  $('#modal-clientes').showModal();
+  mostrarSeccion('clientes');
+}
+
+/* Abre el formulario de cliente (modal) para registrar uno nuevo */
+function abrirModalClienteForm() {
+  if (!puede('clientes')) { toast('🔒 No tienes permiso para registrar clientes'); return; }
+  limpiarFormCliente();
+  $('#modal-cliente-form').showModal();
+  $('#cli-nombre').focus();
 }
 
 function limpiarFormCliente() {
@@ -1895,7 +1924,6 @@ function limpiarFormCliente() {
   $('#cli-codigo').value = siguienteCodigoCliente();
   $('#cli-form-title').textContent = 'Registrar cliente';
   $('#btn-cli-guardar').textContent = '💾 Guardar cliente';
-  $('#btn-cli-cancelar').hidden = true;
 }
 
 function renderClientes() {
@@ -1958,7 +1986,7 @@ function editarClienteForm(id) {
   $('#cli-notas').value = cli.notas || '';
   $('#cli-form-title').textContent = `Editar cliente — ${cli.nombre}`;
   $('#btn-cli-guardar').textContent = '💾 Guardar cambios';
-  $('#btn-cli-cancelar').hidden = false;
+  $('#modal-cliente-form').showModal();
   $('#cli-nombre').focus();
 }
 
@@ -2019,12 +2047,15 @@ async function guardarClienteForm(ev) {
     }
   }
 
+  $('#modal-cliente-form').close();
   limpiarFormCliente();
   renderClientes();
   llenarSelectClientes($('#f-cliente').value);
-  // Si estabas armando un despacho y registraste un cliente nuevo, queda elegido
-  if (!anterior && $('#modal-despachos').open && !$('#desp-vista-form').hidden) {
-    seleccionarClienteDesp(cliente.id);
+  // Si registraste el cliente nuevo mientras armabas un crédito o un despacho,
+  // queda elegido automáticamente en el formulario correspondiente.
+  if (!anterior) {
+    if ($('#modal-form').open) seleccionarCliente(cliente.id);
+    else if (!$('#view-despachos').hidden && !$('#desp-vista-form').hidden) seleccionarClienteDesp(cliente.id);
   }
   render();
   toast(anterior
@@ -2769,7 +2800,7 @@ async function manejarFoto(input) {
 function abrirCobranza() {
   if (!$('#cob-fecha').value) $('#cob-fecha').value = hoyISO();
   renderCobranza();
-  $('#modal-cobranza').showModal();
+  mostrarSeccion('cobranza');
 }
 
 /* Muestra si la hoja del día está creada, abierta o cerrada, y los
@@ -3048,7 +3079,7 @@ function abrirDespachos() {
   if (!puede('despachos')) { toast('🔒 No tienes permiso para armar despachos'); return; }
   mostrarVistaDespacho('lista');
   renderListaDespachos();
-  $('#modal-despachos').showModal();
+  mostrarSeccion('despachos');
 }
 
 /* Vuelve a dibujar la vista de despachos que esté abierta (al llegar datos de la nube) */
@@ -3358,7 +3389,6 @@ function crearCreditoDesdeDespacho(id) {
   const d = despachoPorId(id);
   if (!d) return;
   despachoOrigen = d.id;
-  $('#modal-despachos').close();
   abrirFormulario(null, {
     boleta: d.boleta || '',
     clienteId: d.clienteId || '',
@@ -3387,7 +3417,7 @@ async function vincularDespachoConCredito(despachoId, credito) {
 function verCreditoDeDespacho(id) {
   const d = despachoPorId(id);
   const c = d && d.creditoId && creditos.find(x => x.id === d.creditoId);
-  if (c) { $('#modal-despachos').close(); abrirInfo(c); }
+  if (c) abrirInfo(c);
   else toast('El crédito enlazado ya no existe');
 }
 
@@ -3448,7 +3478,7 @@ function abrirModalRepNuevo() {
 async function guardarRepNuevoForm(ev) {
   ev.preventDefault();
   // Si estás armando un despacho, recordamos qué repartidores ya tenías marcados
-  const enForm = $('#modal-despachos').open && !$('#desp-vista-form').hidden;
+  const enForm = !$('#view-despachos').hidden && !$('#desp-vista-form').hidden;
   const seleccion = enForm ? repartidoresSeleccionados() : null;
   const r = await crearRepartidor($('#rep-nuevo-nombre').value);
   if (!r) return;  // error o repetido: el aviso ya salió, el modal sigue abierto
@@ -3744,14 +3774,12 @@ function inicializarEventos() {
     cajaCliente.value = textoCliente($('#f-cliente').value);
     aplicarClienteSeleccionado();
   });
-  $('#btn-cliente-nuevo').addEventListener('click', () => {
-    abrirClientes();
-    $('#cli-nombre').focus();
-  });
+  $('#btn-cliente-nuevo').addEventListener('click', abrirModalClienteForm);
   $('#btn-clientes').addEventListener('click', abrirClientes);
-  $('#btn-clientes-cerrar').addEventListener('click', () => $('#modal-clientes').close());
+  $('#btn-clientes-cerrar').addEventListener('click', () => mostrarSeccion('creditos'));
+  $('#btn-cli-registrar').addEventListener('click', abrirModalClienteForm);
   $('#cli-form').addEventListener('submit', guardarClienteForm);
-  $('#btn-cli-cancelar').addEventListener('click', limpiarFormCliente);
+  $('#btn-cli-cancelar').addEventListener('click', () => $('#modal-cliente-form').close());
   $('#cli-buscar').addEventListener('input', renderClientes);
   $('#btn-cli-importar').addEventListener('click', importarClientesDesdeCreditos);
   $('#clientes-list').addEventListener('click', ev => {
@@ -3877,7 +3905,7 @@ function inicializarEventos() {
   $('#btn-cob-siguiente').addEventListener('click', () => saltarDiaCobranza(1));
   $('#btn-cob-hoy').addEventListener('click', () => { $('#cob-fecha').value = hoyISO(); renderCobranza(); });
   $('#btn-cli-codigos').addEventListener('click', generarCodigosFaltantes);
-  $('#btn-cob-cerrar').addEventListener('click', () => $('#modal-cobranza').close());
+  $('#btn-cob-cerrar').addEventListener('click', () => mostrarSeccion('creditos'));
   $('#btn-cob-excel').addEventListener('click', exportarCobranzaExcel);
   $('#btn-cob-imprimir').addEventListener('click', imprimirCobranza);
   $('#btn-hoja-crear').addEventListener('click', () => crearHojaCobranza($('#cob-fecha').value || hoyISO()));
@@ -3885,7 +3913,7 @@ function inicializarEventos() {
 
   // ====== Despachos ======
   $('#btn-despachos').addEventListener('click', abrirDespachos);
-  $('#btn-desp-cerrar').addEventListener('click', () => $('#modal-despachos').close());
+  $('#btn-desp-cerrar').addEventListener('click', () => mostrarSeccion('creditos'));
   $('#btn-desp-nuevo').addEventListener('click', () => abrirFormDespacho());
   $('#btn-desp-repartidores').addEventListener('click', abrirRepartidores);
   $('#desp-form').addEventListener('submit', guardarDespachoForm);
@@ -3942,11 +3970,7 @@ function inicializarEventos() {
     cajaCliDesp.value = textoCliente($('#desp-cliente').value);
     aplicarClienteDespacho();
   });
-  $('#btn-desp-cliente-nuevo').addEventListener('click', () => {
-    if (!puede('clientes')) { toast('🔒 No tienes permiso para registrar clientes'); return; }
-    abrirClientes();
-    $('#cli-nombre').focus();
-  });
+  $('#btn-desp-cliente-nuevo').addEventListener('click', abrirModalClienteForm);
 
   // Repartidores
   $('#rep-form').addEventListener('submit', agregarRepartidor);
@@ -3955,8 +3979,8 @@ function inicializarEventos() {
     if (btn) borrarRepartidor(btn.dataset.borrarRepartidor);
   });
 
-  // Botones "◀ Volver" de las distintas vistas del modal de despachos
-  $('#modal-despachos').addEventListener('click', ev => {
+  // Botones "◀ Volver" de las distintas vistas de la sección de despachos
+  $('#view-despachos').addEventListener('click', ev => {
     if (ev.target.closest('[data-desp-volver]')) {
       mostrarVistaDespacho('lista');
       renderListaDespachos();
@@ -3986,6 +4010,7 @@ function inicializarEventos() {
   // Panel lateral (escritorio): mismos destinos que la cabecera
   $('#nav-inicio').addEventListener('click', () => {
     document.querySelectorAll('dialog[open]').forEach(d => d.close());
+    mostrarSeccion('creditos');
   });
   $('#nav-despachos').addEventListener('click', abrirDespachos);
   $('#nav-clientes').addEventListener('click', abrirClientes);
@@ -4006,10 +4031,10 @@ function inicializarEventos() {
     const soloAdmin = modoNube && !esAdmin();
     ['s-dias', 's-moneda', 's-atajo1', 's-atajo2'].forEach(id => { $('#' + id).disabled = soloAdmin; });
     $('#settings-nota-admin').hidden = !soloAdmin;
-    $('#modal-settings').showModal();
+    mostrarSeccion('settings');
   });
   $('#btn-preparar-offline').addEventListener('click', prepararOffline);
-  $('#btn-settings-cerrar').addEventListener('click', () => $('#modal-settings').close());
+  $('#btn-settings-cerrar').addEventListener('click', () => mostrarSeccion('creditos'));
   $('#settings-form').addEventListener('submit', async ev => {
     ev.preventDefault();
     settings.dias = Math.max(1, Number($('#s-dias').value) || 30);
@@ -4018,7 +4043,7 @@ function inicializarEventos() {
     settings.atajo1 = Math.min(365, Math.max(1, Number($('#s-atajo1').value) || 15));
     settings.atajo2 = Math.min(365, Math.max(1, Number($('#s-atajo2').value) || 45));
     actualizarAtajosVenc();
-    $('#modal-settings').close();
+    mostrarSeccion('creditos');
     render();
     try {
       await guardarSettings();
@@ -4086,7 +4111,7 @@ function inicializarEventos() {
 
   // Panel de administración de usuarios (solo admin)
   $('#btn-usuarios').addEventListener('click', abrirUsuarios);
-  $('#btn-usuarios-cerrar').addEventListener('click', () => $('#modal-usuarios').close());
+  $('#btn-usuarios-cerrar').addEventListener('click', () => mostrarSeccion('creditos'));
   $('#u-form-nuevo').addEventListener('submit', crearUsuario);
   $('#u-admin').addEventListener('change', ev => { $('#u-permisos-detalle').style.display = ev.target.checked ? 'none' : ''; });
   $('#usuarios-list').addEventListener('change', ev => {
@@ -4128,6 +4153,7 @@ async function iniciarLocal() {
 async function iniciar() {
   cargarSettings();
   inicializarEventos();
+  mostrarSeccion('creditos');
   render();
 
   // Avisa cuando se va y cuando vuelve el internet (la app sigue funcionando igual)

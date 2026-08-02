@@ -68,7 +68,7 @@
     <button type="button" id="btn-sincronizar" class="btn-sincronizar">🔄 Sincronizar ahora</button>
   </div>
 
-  <main class="container">
+  <main class="container" id="view-creditos">
     <!-- Resumen -->
     <section class="summary" id="summary">
       <div class="summary-card">
@@ -330,8 +330,8 @@
   </dialog>
 
   <!-- Modal: administración de usuarios (solo admin) -->
-  <dialog id="modal-usuarios" class="modal modal-usuarios">
-    <h2>👥 Usuarios</h2>
+  <section id="view-usuarios" class="vista modal-usuarios" hidden>
+    <h2>👥 Usuarios y accesos</h2>
 
     <form id="u-form-nuevo" class="u-nuevo">
       <h3>Crear usuario</h3>
@@ -364,9 +364,9 @@
     <div id="usuarios-list" class="usuarios-list"></div>
 
     <div class="modal-buttons">
-      <button type="button" id="btn-usuarios-cerrar" class="btn btn-secondary">Cerrar</button>
+      <button type="button" id="btn-usuarios-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
     </div>
-  </dialog>
+  </section>
 
   <!-- Modal: información del crédito (solo lectura) y registro de cobro con firma -->
   <dialog id="modal-info" class="modal modal-info">
@@ -468,9 +468,28 @@
   </dialog>
 
   <!-- Modal: Clientes (base de datos de clientes con su zona) -->
-  <dialog id="modal-clientes" class="modal modal-clientes">
+  <section id="view-clientes" class="vista modal-clientes" hidden>
     <h2>🧑‍🤝‍🧑 Clientes</h2>
 
+    <div class="cli-lista-cab">
+      <h3>Clientes registrados <span id="cli-contador" class="cli-contador"></span></h3>
+      <input type="search" id="cli-buscar" class="input cli-buscar" placeholder="🔍 Buscar cliente…">
+    </div>
+    <div class="cli-acciones-top">
+      <button type="button" id="btn-cli-registrar" class="btn btn-primary btn-small">➕ Registrar cliente</button>
+    </div>
+    <div id="clientes-list" class="clientes-list"></div>
+
+    <div class="modal-buttons">
+      <button type="button" id="btn-cli-codigos" class="btn btn-secondary" hidden>🔢 Generar códigos faltantes</button>
+      <button type="button" id="btn-cli-importar" class="btn btn-secondary">📥 Importar desde mis créditos</button>
+      <button type="button" id="btn-clientes-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
+    </div>
+  </section>
+
+  <!-- Modal: formulario de registrar/editar cliente (se abre desde Clientes,
+       Créditos y Despachos) -->
+  <dialog id="modal-cliente-form" class="modal modal-cliente-form">
     <form id="cli-form" class="cli-nuevo">
       <h3 id="cli-form-title">Registrar cliente</h3>
       <input type="hidden" id="cli-id">
@@ -490,27 +509,15 @@
         <input type="text" id="cli-direccion" class="input" placeholder="Ej: Jr. Los Olivos 425, frente al mercado"></label>
       <label class="field"><span>Nota <small>opcional</small></span>
         <input type="text" id="cli-notas" class="input" placeholder="Ej: paga los viernes"></label>
-      <div class="cli-form-botones">
+      <div class="cli-form-botones modal-buttons">
+        <button type="button" id="btn-cli-cancelar" class="btn btn-secondary">Cancelar</button>
         <button type="submit" id="btn-cli-guardar" class="btn btn-primary">💾 Guardar cliente</button>
-        <button type="button" id="btn-cli-cancelar" class="btn btn-secondary" hidden>Cancelar</button>
       </div>
     </form>
-
-    <div class="cli-lista-cab">
-      <h3>Clientes registrados <span id="cli-contador" class="cli-contador"></span></h3>
-      <input type="search" id="cli-buscar" class="input cli-buscar" placeholder="🔍 Buscar cliente…">
-    </div>
-    <div id="clientes-list" class="clientes-list"></div>
-
-    <div class="modal-buttons">
-      <button type="button" id="btn-cli-codigos" class="btn btn-secondary" hidden>🔢 Generar códigos faltantes</button>
-      <button type="button" id="btn-cli-importar" class="btn btn-secondary">📥 Importar desde mis créditos</button>
-      <button type="button" id="btn-clientes-cerrar" class="btn btn-secondary">Cerrar</button>
-    </div>
   </dialog>
 
-  <!-- Modal: Hoja de cobranza del día -->
-  <dialog id="modal-cobranza" class="modal modal-cobranza">
+  <!-- Sección: Hoja de cobranza del día -->
+  <section id="view-cobranza" class="vista modal-cobranza" hidden>
     <div class="cobranza-head">
       <h2>🧾 Hoja de cobranza</h2>
       <label class="field cob-fecha-field">
@@ -558,14 +565,14 @@
     <p class="cob-vacio" id="cob-vacio" hidden>No hay cobros registrados en esta fecha.</p>
 
     <div class="modal-buttons">
-      <button type="button" id="btn-cob-cerrar" class="btn btn-secondary">Cerrar</button>
+      <button type="button" id="btn-cob-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
       <button type="button" id="btn-cob-imprimir" class="btn btn-secondary">🖨️ Imprimir</button>
       <button type="button" id="btn-cob-excel" class="btn btn-primary">⬇️ Exportar a Excel</button>
     </div>
-  </dialog>
+  </section>
 
-  <!-- Modal: Despachos (viajes de reparto) -->
-  <dialog id="modal-despachos" class="modal modal-despachos">
+  <!-- Sección: Despachos (un pedido / una boleta por despacho) -->
+  <section id="view-despachos" class="vista modal-despachos" hidden>
 
     <!-- Vista: lista de despachos -->
     <section id="desp-vista-lista" class="desp-vista">
@@ -581,7 +588,7 @@
       <div id="despachos-list" class="despachos-list"></div>
       <p class="desp-vacio" id="desp-vacio" hidden>Aún no hay despachos. Toca <strong>“➕ Nuevo despacho”</strong> para registrar el primero.</p>
       <div class="modal-buttons">
-        <button type="button" id="btn-desp-cerrar" class="btn btn-secondary">Cerrar</button>
+        <button type="button" id="btn-desp-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
       </div>
     </section>
 
@@ -673,7 +680,7 @@
         <button type="button" class="btn btn-secondary" data-desp-volver>◀ Volver</button>
       </div>
     </section>
-  </dialog>
+  </section>
 
   <!-- Modal: agregar un repartidor al vuelo (desde el formulario de despacho) -->
   <dialog id="modal-rep-nuevo" class="modal modal-mini">
@@ -704,9 +711,9 @@
     </div>
   </dialog>
 
-  <!-- Modal: configuración -->
-  <dialog id="modal-settings" class="modal">
-    <form id="settings-form" method="dialog">
+  <!-- Sección: configuración -->
+  <section id="view-settings" class="vista" hidden>
+    <form id="settings-form">
       <h2>⚙️ Configuración</h2>
       <div class="settings-cuenta" id="settings-cuenta" hidden>
         <span class="field-label">Mi cuenta</span>
@@ -787,11 +794,11 @@
         <small>Exporta un archivo con todos tus créditos (incluye fotos) para guardarlo o pasarlo a otro dispositivo.</small>
       </div>
       <div class="modal-buttons">
-        <button type="button" id="btn-settings-cerrar" class="btn btn-secondary">Cerrar</button>
+        <button type="button" id="btn-settings-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
         <button type="submit" class="btn btn-primary">Guardar</button>
       </div>
     </form>
-  </dialog>
+  </section>
 
   <div id="toast" class="toast" hidden></div>
 
