@@ -589,12 +589,47 @@
           <button type="button" id="btn-desp-nuevo" class="btn btn-primary btn-small">➕ Nuevo despacho</button>
         </div>
       </div>
-      <p class="desp-intro">Cada despacho es un pedido / una boleta que sale a reparto: cliente, N° de comprobante, monto, fecha y los repartidores que la llevan. Cuando vuelve firmada, la conviertes en crédito.</p>
+      <p class="desp-intro">Cada despacho es un pedido / una boleta que sale a reparto: cliente, N° de comprobante, monto, fecha y los repartidores que la llevan. Cuando vuelve firmada, la conviertes en crédito. Todos quedan guardados y puedes buscarlos por día.</p>
+
+      <!-- Buscar despachos por día (como la hoja de cobranza) -->
+      <div class="desp-filtro">
+        <label class="field cob-fecha-field">
+          <span>Buscar por día</span>
+          <input type="date" id="desp-fecha-filtro" class="input">
+        </label>
+        <div class="cob-nav">
+          <button type="button" id="btn-desp-dia-ant" class="btn btn-secondary btn-small" title="Día anterior con despachos">◀</button>
+          <select id="desp-dias" class="input cob-dias" aria-label="Días con despachos"></select>
+          <button type="button" id="btn-desp-dia-sig" class="btn btn-secondary btn-small" title="Día siguiente con despachos">▶</button>
+          <button type="button" id="btn-desp-hoy" class="btn btn-secondary btn-small">Hoy</button>
+          <button type="button" id="btn-desp-todos" class="btn btn-secondary btn-small">Ver todos</button>
+        </div>
+      </div>
+
       <div id="desp-resumen" class="desp-resumen"></div>
+
+      <!-- Tabla (escritorio / tablet) -->
+      <div class="desp-tabla-wrap">
+        <table class="cob-tabla desp-tabla" id="desp-tabla">
+          <thead>
+            <tr>
+              <th>N° Boleta</th>
+              <th class="col-num">Monto</th>
+              <th>Fecha</th>
+              <th>Zona</th>
+              <th>Repartidores</th>
+            </tr>
+          </thead>
+          <tbody id="desp-tabla-body"></tbody>
+        </table>
+      </div>
+      <!-- Tarjetas (celular) -->
       <div id="despachos-list" class="despachos-list"></div>
+
       <p class="desp-vacio" id="desp-vacio" hidden>Aún no hay despachos. Toca <strong>“➕ Nuevo despacho”</strong> para registrar el primero.</p>
       <div class="modal-buttons">
         <button type="button" id="btn-desp-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
+        <button type="button" id="btn-desp-imprimir" class="btn btn-secondary">🖨️ Imprimir hoja de despachos</button>
       </div>
     </section>
 

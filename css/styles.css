@@ -1044,6 +1044,9 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 @media (max-width: 760px) {
   .table-wrap { display: none; }
   .cards { display: flex; }
+  /* Despachos: en celular se muestran las tarjetas y se oculta la tabla */
+  .desp-tabla-wrap { display: none; }
+  .despachos-list { display: flex; }
 
   .app-header h1 { font-size: 0.98rem; }
   /* En móvil el título se acorta a "💳 Créditos" para dejar sitio a los botones */
@@ -1333,13 +1336,29 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .desp-intro { color: var(--muted); font-size: 0.86rem; margin: 0 0 0.9rem; }
 .desp-sub { font-size: 0.95rem; font-weight: 700; margin: 1.1rem 0 0.6rem; }
 
+/* Buscar despachos por día (mismo estilo que la hoja de cobranza) */
+.desp-filtro { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem 1rem; margin-bottom: 0.9rem; }
+.desp-filtro .cob-nav { margin-bottom: 0; }
+
 /* Resumen arriba de la lista */
 .desp-resumen { margin-bottom: 0.8rem; }
 .desp-resumen:empty { margin-bottom: 0; }
 .desp-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .desp-resumen-monto { margin-top: 0.4rem; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
 
-.despachos-list { display: flex; flex-direction: column; gap: 0.7rem; }
+/* Tabla de despachos (escritorio), clasificada como los créditos */
+.desp-tabla-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+.desp-fila { cursor: pointer; transition: background 0.12s; }
+.desp-fila:hover { background: var(--bg-tint); }
+/* Franja de color a la izquierda según el estado del despacho */
+.desp-fila td:first-child { border-left: 4px solid var(--gray); }
+.desp-fila.pedido-pendiente td:first-child { border-left-color: var(--warning); }
+.desp-fila.pedido-credito td:first-child { border-left-color: var(--primary); }
+.desp-fila.pedido-contado td:first-child { border-left-color: var(--ok); }
+.desp-fila.pedido-devuelto td:first-child { border-left-color: var(--danger); }
+
+/* Las tarjetas solo se usan en celular; en escritorio manda la tabla */
+.despachos-list { display: none; flex-direction: column; gap: 0.7rem; }
 .despacho-card {
   display: block;
   width: 100%;

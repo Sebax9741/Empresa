@@ -3141,6 +3141,29 @@ function imprimirCobranza() {
 /* ====== Despachos de pedidos ====== */
 let despachoActivoId = null;   // despacho abierto en la vista de detalle
 let despachoOrigen = null;     // id del despacho que se está pasando a crédito
+let despachoFiltroFecha = null; // día seleccionado para filtrar (null = ver todos)
+
+/* Días que tienen al menos un despacho, del más reciente al más antiguo,
+   con la cantidad y el monto de ese día (para el navegador y el desplegable). */
+function diasConDespachos() {
+  const mapa = new Map();
+  for (const d of despachos.filter(esDespachoPedido)) {
+    const f = d.fecha || '';
+    if (!f) continue;
+    const acc = mapa.get(f) || { fecha: f, cantidad: 0, monto: 0 };
+    acc.cantidad += 1;
+    acc.monto += Number(d.monto) || 0;
+    mapa.set(f, acc);
+  }
+  return [...mapa.values()].sort((a, b) => b.fecha.localeCompare(a.fecha));
+}
+
+/* Despachos que se muestran ahora mismo: todos, o solo los del día elegido. */
+function despachosDelDia() {
+  const lista = despachosOrdenados();
+  if (!despachoFiltroFecha) return lista;
+  return lista.filter(d => (d.fecha || '') === despachoFiltroFecha);
+}
 
 const VISTAS_DESPACHO = ['lista', 'form', 'detalle', 'repartidores'];
 function mostrarVistaDespacho(nombre) {
@@ -3174,28 +3197,48 @@ function chipDespachos(res) {
 }
 
 function renderListaDespachos() {
-  const cont = $('#despachos-list');
-  const lista = despachosOrdenados();
-  $('#desp-vacio').hidden = lista.length > 0;
+  const lista = despachosDelDia();
+  const hayDespachos = despachos.filter(esDespachoPedido).length > 0;
+  $('#desp-vacio').hidden = hayDespachos;
+
+  // Navegador de días (fecha, ◀ ▶, desplegable, Hoy, Ver todos)
+  renderNavDespachos();
+
+  // Resumen del día / de todos: estados + cantidad + monto
   const res = resumenDespachos(lista);
+  const rotulo = despachoFiltroFecha
+    ? `Día ${formatoFecha(despachoFiltroFecha)}`
+    : 'Todos los despachos';
   $('#desp-resumen').innerHTML = lista.length
     ? `<div class="desp-chips">${chipDespachos(res)}</div>
-       <div class="desp-resumen-monto">${lista.length} despacho${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
-    : '';
-  cont.innerHTML = lista.map(d => {
+       <div class="desp-resumen-monto">${rotulo} · ${lista.length} despacho${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
+    : `<div class="desp-resumen-monto">${rotulo} · sin despachos</div>`;
+
+  // Tabla (escritorio): N° boleta, monto, fecha, zona, repartidores
+  $('#desp-tabla-body').innerHTML = lista.map(d => {
     const info = estadoDespachoInfo(d.estado);
     const reps = repartidoresDe(d);
-    const comprobante = d.boleta
-      ? `${tipoComprobanteLabel(d.tipoComprobante)} N° ${escapeHtml(d.boleta)}`
-      : tipoComprobanteLabel(d.tipoComprobante);
+    return `
+      <tr class="desp-fila ${info.clase}" data-abrir-despacho="${d.id}" title="${escapeHtml(info.etiqueta)} — ver detalle">
+        <td><strong>${escapeHtml(d.boleta || '—')}</strong></td>
+        <td class="col-num">${formatoMonto(Number(d.monto) || 0)}</td>
+        <td>${formatoFecha(d.fecha)}</td>
+        <td>${d.zona ? escapeHtml(d.zona) : '—'}</td>
+        <td>${reps.length ? reps.map(escapeHtml).join(', ') : '—'}</td>
+      </tr>`;
+  }).join('');
+
+  // Tarjetas (celular): misma información en formato compacto
+  $('#despachos-list').innerHTML = lista.map(d => {
+    const info = estadoDespachoInfo(d.estado);
+    const reps = repartidoresDe(d);
     return `
       <button type="button" class="despacho-card ${info.clase}" data-abrir-despacho="${d.id}">
         <div class="despacho-card-cab">
-          <strong>${escapeHtml(d.cliente || '(sin cliente)')}</strong>
+          <strong>N° ${escapeHtml(d.boleta || '—')}</strong>
           <span class="ped-chip ${info.clase}">${info.etiqueta}</span>
         </div>
         <div class="despacho-card-datos">
-          <span>🧾 ${comprobante}</span>
           <span>💵 ${formatoMonto(Number(d.monto) || 0)}</span>
           <span>📅 ${formatoFecha(d.fecha)}</span>
           ${d.zona ? `<span>📍 ${escapeHtml(d.zona)}</span>` : ''}
@@ -3203,6 +3246,79 @@ function renderListaDespachos() {
         ${reps.length ? `<div class="despacho-card-rep">🧍 ${reps.map(escapeHtml).join(', ')}</div>` : ''}
       </button>`;
   }).join('');
+}
+
+/* Llena el desplegable de días con despachos y sincroniza el campo de fecha */
+function renderNavDespachos() {
+  const dias = diasConDespachos();
+  const sel = $('#desp-dias');
+  const opcTodos = `<option value="">Ver todos — ${dias.reduce((s, d) => s + d.cantidad, 0)} despacho(s)</option>`;
+  const opciones = dias.map(d =>
+    `<option value="${d.fecha}">${formatoFecha(d.fecha)} — ${d.cantidad} despacho(s) · ${formatoMonto(d.monto)}</option>`).join('');
+  // Si el día elegido no tiene despachos (p. ej. hoy sin nada), igual lo mostramos
+  const hayFecha = !despachoFiltroFecha || dias.some(d => d.fecha === despachoFiltroFecha);
+  const extra = hayFecha ? '' : `<option value="${despachoFiltroFecha}">${formatoFecha(despachoFiltroFecha)} — sin despachos</option>`;
+  sel.innerHTML = opcTodos + extra + opciones;
+  sel.value = despachoFiltroFecha || '';
+  $('#desp-fecha-filtro').value = despachoFiltroFecha || '';
+}
+
+/* Salta al día anterior/siguiente que tenga despachos */
+function saltarDiaDespacho(direccion) {
+  const dias = diasConDespachos().map(d => d.fecha);   // del más nuevo al más viejo
+  if (!dias.length) { toast('Todavía no hay despachos registrados'); return; }
+  const desde = despachoFiltroFecha || hoyISO();
+  const anteriores = dias.filter(d => d < desde);
+  const siguientes = dias.filter(d => d > desde);
+  const destino = direccion < 0 ? anteriores[0] : siguientes[siguientes.length - 1];
+  if (!destino) { toast(direccion < 0 ? 'No hay días anteriores con despachos' : 'No hay días siguientes con despachos'); return; }
+  despachoFiltroFecha = destino;
+  renderListaDespachos();
+}
+
+/* Genera la hoja de despachos del día (o de todos) lista para imprimir */
+function imprimirDespachos() {
+  const lista = despachosDelDia();
+  const res = resumenDespachos(lista);
+  const titulo = despachoFiltroFecha ? `del ${formatoFecha(despachoFiltroFecha)}` : '(todos)';
+  const filasHtml = lista.map(d => {
+    const reps = repartidoresDe(d);
+    const info = estadoDespachoInfo(d.estado);
+    return `<tr>
+      <td>${escapeHtml(d.boleta || '—')}</td>
+      <td>${escapeHtml(d.cliente || '—')}</td>
+      <td style="text-align:right">${formatoMonto(Number(d.monto) || 0)}</td>
+      <td>${formatoFecha(d.fecha)}</td>
+      <td>${escapeHtml(d.zona || '—')}</td>
+      <td>${reps.length ? escapeHtml(reps.join(', ')) : '—'}</td>
+      <td>${escapeHtml(info.etiqueta)}</td></tr>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Despachos ${titulo}</title>
+    <style>
+      body{font-family:system-ui,sans-serif;padding:20px;color:#111}
+      h1{font-size:18px;margin:0 0 4px} .sub{color:#555;margin:0 0 16px}
+      table{width:100%;border-collapse:collapse;font-size:13px}
+      th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}
+      th{background:#f0f0f0}
+      .tot{margin-top:16px;font-size:14px} .tot div{margin:2px 0}
+      .tot strong{display:inline-block;min-width:150px}
+    </style></head><body>
+    <h1>🚚 Hoja de despachos</h1>
+    <p class="sub">${despachoFiltroFecha ? 'Fecha: ' + formatoFecha(despachoFiltroFecha) : 'Todos los despachos'} — ${lista.length} despacho(s)</p>
+    <table><thead><tr><th>N° Boleta</th><th>Cliente</th><th style="text-align:right">Monto</th>
+    <th>Fecha</th><th>Zona</th><th>Repartidores</th><th>Estado</th></tr></thead>
+    <tbody>${filasHtml || '<tr><td colspan="7" style="text-align:center">Sin despachos</td></tr>'}</tbody></table>
+    <div class="tot">
+      <div><strong>Total de despachos:</strong> ${lista.length}</div>
+      <div><strong>Monto total:</strong> ${formatoMonto(res.monto)}</div>
+      <div><strong>En reparto:</strong> ${res.reparto} · <strong style="min-width:0">A crédito:</strong> ${res.credito} · <strong style="min-width:0">Al contado:</strong> ${res.contado} · <strong style="min-width:0">Devueltos:</strong> ${res.devuelto}</div>
+    </div>
+    <script>window.onload=function(){window.print();}<\/script>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  w.document.write(html);
+  w.document.close();
 }
 
 /* ---- Buscador de clientes del formulario de despachos ----
@@ -4062,11 +4178,26 @@ function inicializarEventos() {
     }
   });
 
-  // Lista de despachos: abrir uno
-  $('#despachos-list').addEventListener('click', ev => {
-    const card = ev.target.closest('[data-abrir-despacho]');
-    if (card) abrirDetalleDespacho(card.dataset.abrirDespacho);
+  // Lista de despachos: abrir uno (funciona en la tabla y en las tarjetas)
+  $('#desp-vista-lista').addEventListener('click', ev => {
+    const fila = ev.target.closest('[data-abrir-despacho]');
+    if (fila) abrirDetalleDespacho(fila.dataset.abrirDespacho);
   });
+
+  // Buscar despachos por día
+  $('#desp-fecha-filtro').addEventListener('change', ev => {
+    despachoFiltroFecha = ev.target.value || null;
+    renderListaDespachos();
+  });
+  $('#desp-dias').addEventListener('change', ev => {
+    despachoFiltroFecha = ev.target.value || null;
+    renderListaDespachos();
+  });
+  $('#btn-desp-dia-ant').addEventListener('click', () => saltarDiaDespacho(-1));
+  $('#btn-desp-dia-sig').addEventListener('click', () => saltarDiaDespacho(1));
+  $('#btn-desp-hoy').addEventListener('click', () => { despachoFiltroFecha = hoyISO(); renderListaDespachos(); });
+  $('#btn-desp-todos').addEventListener('click', () => { despachoFiltroFecha = null; renderListaDespachos(); });
+  $('#btn-desp-imprimir').addEventListener('click', imprimirDespachos);
 
   // Casillas de repartidores del formulario: marcar/desmarcar resalta la fila
   $('#desp-repartidores-check').addEventListener('change', ev => {
