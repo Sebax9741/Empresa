@@ -593,6 +593,12 @@
       </div>
       <form id="desp-form">
         <input type="hidden" id="desp-id">
+        <div class="field-row">
+          <label class="field"><span>N° de nota de venta</span>
+            <input type="text" id="desp-boleta" class="input" inputmode="numeric" placeholder="Ej: 001234"></label>
+          <label class="field"><span>Monto *</span>
+            <input type="number" id="desp-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0" required></label>
+        </div>
         <div class="field">
           <span class="field-label">Cliente *</span>
           <div class="cliente-picker">
@@ -607,12 +613,6 @@
             <button type="button" id="btn-desp-cliente-nuevo" class="btn btn-secondary btn-small" title="Registrar un cliente nuevo">➕ Nuevo</button>
           </div>
           <small id="desp-cliente-ayuda" class="cliente-ayuda"></small>
-        </div>
-        <div class="field-row">
-          <label class="field"><span>N° de nota de venta</span>
-            <input type="text" id="desp-boleta" class="input" inputmode="numeric" placeholder="Ej: 001234"></label>
-          <label class="field"><span>Monto *</span>
-            <input type="number" id="desp-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0" required></label>
         </div>
         <div class="field-row">
           <label class="field"><span>Fecha de emisión *</span>
@@ -673,6 +673,20 @@
         <button type="button" class="btn btn-secondary" data-desp-volver>◀ Volver</button>
       </div>
     </section>
+  </dialog>
+
+  <!-- Modal: agregar un repartidor al vuelo (desde el formulario de despacho) -->
+  <dialog id="modal-rep-nuevo" class="modal modal-mini">
+    <h2>🧍 Nuevo repartidor</h2>
+    <form id="form-rep-nuevo">
+      <label class="field"><span>Nombre del repartidor *</span>
+        <input type="text" id="rep-nuevo-nombre" class="input" placeholder="Ej: Luis Pérez" autocomplete="off" required>
+      </label>
+      <div class="modal-buttons">
+        <button type="button" class="btn btn-secondary" id="btn-rep-nuevo-cancelar">Cancelar</button>
+        <button type="submit" class="btn btn-primary">➕ Agregar</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- Visor de imagen a pantalla completa -->

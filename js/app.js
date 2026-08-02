@@ -3409,25 +3409,55 @@ function renderRepartidores() {
     </div>`).join('');
 }
 
-async function agregarRepartidor(ev) {
-  ev.preventDefault();
-  if (!puede('despachos')) return;
-  const nombre = $('#rep-nombre').value.trim();
-  if (!nombre) { toast('⚠️ Escribe un nombre'); return; }
+/* Alta de un repartidor. Devuelve el repartidor creado, o null si hubo error
+   o el nombre estaba repetido (en ese caso ya se avisó por toast). */
+async function crearRepartidor(nombre) {
+  nombre = (nombre || '').trim();
+  if (!puede('despachos')) return null;
+  if (!nombre) { toast('⚠️ Escribe un nombre'); return null; }
   if (repartidores.some(r => (r.nombre || '').toLowerCase() === nombre.toLowerCase())) {
-    toast('⚠️ Ese repartidor ya está en la lista'); return;
+    toast('⚠️ Ese repartidor ya está en la lista'); return null;
   }
   const r = { id: nuevoId(), nombre, activo: true, creado: Date.now() };
   try {
     await guardarRepartidorEnStore(r);
   } catch (e) {
     toast('❌ No se pudo guardar. Revisa tu conexión.');
-    return;
+    return null;
   }
   if (!repartidores.some(x => x.id === r.id)) repartidores.push(r);
-  $('#rep-form').reset();
   renderRepartidores();
+  return r;
+}
+
+// Alta desde la vista de gestión de repartidores (formulario propio)
+async function agregarRepartidor(ev) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const r = await crearRepartidor($('#rep-nombre').value);
+  if (r) { $('#rep-form').reset(); toast('✅ Repartidor agregado'); }
+}
+
+// Modal bonito para agregar un repartidor al vuelo desde el formulario de despacho
+function abrirModalRepNuevo() {
+  if (!puede('despachos')) { toast('🔒 No tienes permiso para armar despachos'); return; }
+  $('#rep-nuevo-nombre').value = '';
+  $('#modal-rep-nuevo').showModal();
+  $('#rep-nuevo-nombre').focus();
+}
+
+async function guardarRepNuevoForm(ev) {
+  ev.preventDefault();
+  // Si estás armando un despacho, recordamos qué repartidores ya tenías marcados
+  const enForm = $('#modal-despachos').open && !$('#desp-vista-form').hidden;
+  const seleccion = enForm ? repartidoresSeleccionados() : null;
+  const r = await crearRepartidor($('#rep-nuevo-nombre').value);
+  if (!r) return;  // error o repetido: el aviso ya salió, el modal sigue abierto
+  $('#modal-rep-nuevo').close();
   toast('✅ Repartidor agregado');
+  if (seleccion) {
+    if (!seleccion.includes(r.nombre)) seleccion.push(r.nombre);
+    renderRepartidoresCheck(seleccion);
+  }
 }
 
 async function borrarRepartidor(id) {
@@ -3864,16 +3894,10 @@ function inicializarEventos() {
     if (d) abrirFormDespacho(d);
   });
   $('#btn-desp-borrar').addEventListener('click', borrarDespachoActual);
-  // Agregar un repartidor al vuelo desde el formulario, sin perder lo ya elegido
-  $('#btn-desp-rep-rapido').addEventListener('click', async () => {
-    const nombre = (prompt('Nombre del repartidor nuevo:') || '').trim();
-    if (!nombre) return;
-    const sel = repartidoresSeleccionados();
-    $('#rep-nombre').value = nombre;
-    await agregarRepartidor({ preventDefault() {} });
-    if (!sel.includes(nombre)) sel.push(nombre);
-    renderRepartidoresCheck(sel);
-  });
+  // Agregar un repartidor al vuelo desde el formulario (modal bonito)
+  $('#btn-desp-rep-rapido').addEventListener('click', abrirModalRepNuevo);
+  $('#form-rep-nuevo').addEventListener('submit', guardarRepNuevoForm);
+  $('#btn-rep-nuevo-cancelar').addEventListener('click', () => $('#modal-rep-nuevo').close());
 
   // Buscador de clientes del formulario de despacho (igual que en créditos)
   const cajaCliDesp = $('#desp-cliente-buscar');

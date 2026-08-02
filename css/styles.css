@@ -456,6 +456,8 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .cliente-picker .btn { white-space: nowrap; flex-shrink: 0; }
 
 /* Código de seguridad */
+.modal-mini { width: min(400px, calc(100vw - 2rem)); }
+.modal-mini h2 { margin-bottom: 1rem; }
 .modal-pin { width: min(360px, calc(100vw - 2rem)); text-align: center; }
 .modal-pin h2 { margin-top: 0; }
 .pin-motivo { color: var(--muted); font-size: 0.88rem; margin: 0 0 0.9rem; }
