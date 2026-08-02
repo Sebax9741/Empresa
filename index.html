@@ -609,18 +609,14 @@
           <small id="desp-cliente-ayuda" class="cliente-ayuda"></small>
         </div>
         <div class="field-row">
-          <label class="field"><span>Comprobante</span>
-            <select id="desp-tipo" class="input">
-              <option value="boleta">Boleta</option>
-              <option value="factura">Factura</option>
-              <option value="nota">Nota de venta</option>
-            </select></label>
-          <label class="field"><span>N° de boleta</span>
+          <label class="field"><span>N° de nota de venta</span>
             <input type="text" id="desp-boleta" class="input" inputmode="numeric" placeholder="Ej: 001234"></label>
-        </div>
-        <div class="field-row">
           <label class="field"><span>Monto *</span>
             <input type="number" id="desp-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0" required></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>Fecha de emisión *</span>
+            <input type="date" id="desp-emision" class="input" required></label>
           <label class="field"><span>Fecha de despacho *</span>
             <input type="date" id="desp-fecha" class="input" required></label>
         </div>

@@ -2478,6 +2478,11 @@ function abrirFormulario(credito = null, prefill = null) {
       $('#f-boleta').value = prefill.boleta || '';
       if (prefill.monto) $('#f-monto').value = prefill.monto;
       $('#f-fecha-despacho').value = prefill.fechaDespacho || '';
+      // La fecha de emisión del despacho se usa como fecha del crédito
+      if (prefill.fechaEmision) {
+        $('#f-fecha').value = prefill.fechaEmision;
+        $('#f-vencimiento').value = sumarDias(prefill.fechaEmision, settings.dias);
+      }
     }
   }
   modalForm.showModal();
@@ -3203,10 +3208,10 @@ function abrirFormDespacho(despacho = null) {
   }
   llenarComboClienteDespacho(valorCli);
   $('#btn-desp-cliente-nuevo').hidden = !puede('clientes');
-  $('#desp-tipo').value = (despacho && despacho.tipoComprobante) || 'boleta';
   $('#desp-boleta').value = despacho ? (despacho.boleta || '') : '';
   $('#desp-monto').value = despacho ? (despacho.monto || '') : '';
-  $('#desp-fecha').value = despacho ? despacho.fecha : hoyISO();
+  $('#desp-emision').value = despacho ? (despacho.emision || despacho.fecha || hoyISO()) : hoyISO();
+  $('#desp-fecha').value = despacho ? (despacho.fecha || hoyISO()) : hoyISO();
   $('#desp-notas').value = despacho ? (despacho.notas || '') : '';
   renderRepartidoresCheck(despacho ? repartidoresDe(despacho) : []);
   mostrarVistaDespacho('form');
@@ -3238,10 +3243,11 @@ async function guardarDespachoForm(ev) {
   const despacho = {
     id,
     fecha: $('#desp-fecha').value || hoyISO(),
+    emision: $('#desp-emision').value || hoyISO(),
     cliente: clienteNombre,
     clienteId,
     zona: clienteId ? zonaCli : ((existente && existente.zona) || ''),
-    tipoComprobante: $('#desp-tipo').value,
+    tipoComprobante: 'nota',
     boleta: $('#desp-boleta').value.trim(),
     monto: Number($('#desp-monto').value) || 0,
     repartidores: reps,
@@ -3285,7 +3291,8 @@ function renderDetalleDespacho() {
     <div class="desp-det-estado"><span class="ped-chip ${info.clase}">${info.etiqueta}</span></div>
     <div class="desp-det-fila"><span>🧾 Comprobante</span><strong>${comprobante}</strong></div>
     <div class="desp-det-fila"><span>💵 Monto</span><strong>${formatoMonto(Number(d.monto) || 0)}</strong></div>
-    <div class="desp-det-fila"><span>📅 Fecha de salida</span><strong>${formatoFecha(d.fecha)}</strong></div>
+    <div class="desp-det-fila"><span>🗓️ Emisión</span><strong>${formatoFecha(d.emision || d.fecha)}</strong></div>
+    <div class="desp-det-fila"><span>📦 Despacho</span><strong>${formatoFecha(d.fecha)}</strong></div>
     ${d.zona ? `<div class="desp-det-fila"><span>📍 Zona</span><strong>${escapeHtml(d.zona)}</strong></div>` : ''}
     <div class="desp-det-fila"><span>🧍 Repartidores</span><strong>${reps.length ? reps.map(escapeHtml).join(', ') : '—'}</strong></div>
     ${d.notas ? `<div class="desp-det-fila"><span>📝 Nota</span><strong>${escapeHtml(d.notas)}</strong></div>` : ''}
@@ -3358,6 +3365,7 @@ function crearCreditoDesdeDespacho(id) {
     clienteNombre: d.cliente || '',
     zona: d.zona || '',
     monto: Number(d.monto) || 0,
+    fechaEmision: d.emision || d.fecha || '',
     fechaDespacho: d.fecha || '',
   });
 }
