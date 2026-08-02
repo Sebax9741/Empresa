@@ -615,7 +615,8 @@
         <table class="cob-tabla desp-tabla" id="desp-tabla">
           <thead>
             <tr>
-              <th>Cliente</th>
+              <th>N° Boleta</th>
+              <th class="col-num">Monto</th>
               <th>Fecha</th>
               <th>Zona</th>
               <th>Repartidores</th>
@@ -643,12 +644,6 @@
       </div>
       <form id="desp-form">
         <input type="hidden" id="desp-id">
-        <div class="field-row">
-          <label class="field"><span>N° de nota de venta</span>
-            <input type="text" id="desp-boleta" class="input" inputmode="numeric" placeholder="Ej: 001234"></label>
-          <label class="field"><span>Monto *</span>
-            <input type="number" id="desp-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0" required></label>
-        </div>
         <div class="field">
           <span class="field-label">Cliente *</span>
           <div class="cliente-picker">
@@ -663,6 +658,12 @@
             <button type="button" id="btn-desp-cliente-nuevo" class="btn btn-secondary btn-small" title="Registrar un cliente nuevo">➕ Nuevo</button>
           </div>
           <small id="desp-cliente-ayuda" class="cliente-ayuda"></small>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>N° de nota de venta</span>
+            <input type="text" id="desp-boleta" class="input" inputmode="numeric" placeholder="Ej: 001234"></label>
+          <label class="field"><span>Monto *</span>
+            <input type="number" id="desp-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0" required></label>
         </div>
         <div class="field-row">
           <label class="field"><span>Fecha de emisión *</span>

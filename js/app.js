@@ -3217,17 +3217,14 @@ function renderListaDespachos() {
        <div class="desp-resumen-monto">${rotulo} · ${lista.length} despacho${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
     : `<div class="desp-resumen-monto">${rotulo} · sin despachos</div>`;
 
-  // Tabla (escritorio): cliente (con N° boleta y monto debajo), fecha, zona,
-  // repartidores y estado
+  // Tabla (escritorio): N° boleta, monto, fecha, zona, repartidores y estado
   $('#desp-tabla-body').innerHTML = lista.map(d => {
     const info = estadoDespachoInfo(d.estado);
     const reps = repartidoresDe(d);
     return `
       <tr class="desp-fila ${info.clase}" data-abrir-despacho="${d.id}" title="${escapeHtml(info.etiqueta)} — ver detalle">
-        <td>
-          <strong class="desp-cel-cliente">${escapeHtml(d.cliente || '(sin cliente)')}</strong>
-          <span class="desp-cel-sub">N° ${escapeHtml(d.boleta || '—')} · ${formatoMonto(Number(d.monto) || 0)}</span>
-        </td>
+        <td><strong>${escapeHtml(d.boleta || '—')}</strong></td>
+        <td class="col-num">${formatoMonto(Number(d.monto) || 0)}</td>
         <td>${formatoFecha(d.fecha)}</td>
         <td>${d.zona ? escapeHtml(d.zona) : '—'}</td>
         <td>${reps.length ? reps.map(escapeHtml).join(', ') : '—'}</td>
