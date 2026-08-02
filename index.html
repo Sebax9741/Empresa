@@ -721,62 +721,75 @@
   <section id="view-settings" class="vista" hidden>
     <form id="settings-form">
       <h2>⚙️ Configuración</h2>
-      <div class="settings-cuenta" id="settings-cuenta" hidden>
-        <span class="field-label">Mi cuenta</span>
+
+      <!-- ▸ Mi cuenta -->
+      <section class="settings-grupo" id="settings-cuenta" hidden>
+        <h3 class="settings-titulo">👤 Mi cuenta</h3>
         <p class="cuenta-email" id="cuenta-email"></p>
         <div class="cuenta-botones">
           <button type="button" id="btn-cambiar-pass" class="btn btn-secondary btn-small">🔑 Cambiar mi contraseña</button>
           <button type="button" id="btn-logout" class="btn btn-secondary btn-small">🚪 Cerrar sesión</button>
         </div>
-      </div>
-      <!-- Comprobación de que el equipo puede trabajar sin internet -->
-      <div class="settings-offline" id="settings-offline" hidden>
-        <span class="field-label">📴 Uso sin internet</span>
+      </section>
+
+      <!-- ▸ Uso sin internet -->
+      <section class="settings-grupo settings-offline" id="settings-offline" hidden>
+        <h3 class="settings-titulo">📴 Uso sin internet</h3>
         <ul class="offline-lista" id="offline-lista"></ul>
         <button type="button" id="btn-preparar-offline" class="btn btn-secondary btn-small btn-block">
           🔄 Comprobar y preparar para usar sin internet
         </button>
         <small class="offline-ayuda">Hazlo <strong>con internet</strong>. Si tu tablet tiene una app de limpieza o ahorro de batería, dale permiso para que no borre los datos de esta app.</small>
-      </div>
+      </section>
 
-      <p class="settings-nota-admin" id="settings-nota-admin" hidden>
-        🔒 Estos ajustes los define el administrador y valen para todo el equipo.
-      </p>
-      <label class="field">
-        <span>Días de crédito por defecto</span>
-        <input type="number" id="s-dias" class="input" min="1" max="365" required>
-        <small>El vencimiento se calcula automáticamente: fecha de emisión + estos días.</small>
-      </label>
-      <div class="field">
-        <span class="field-label">Atajos de vencimiento rápido</span>
-        <small>Dos botones en el formulario para poner el vencimiento X días después de la fecha de emisión.</small>
-        <div class="atajos-config">
-          <label class="atajo-mini">
-            <span>Atajo 1</span>
-            <input type="number" id="s-atajo1" class="input" min="1" max="365" required>
-            <span class="atajo-unidad">días</span>
-          </label>
-          <label class="atajo-mini">
-            <span>Atajo 2</span>
-            <input type="number" id="s-atajo2" class="input" min="1" max="365" required>
-            <span class="atajo-unidad">días</span>
-          </label>
+      <!-- ▸ Créditos (ajustes del negocio) -->
+      <section class="settings-grupo">
+        <h3 class="settings-titulo">💳 Créditos</h3>
+        <p class="settings-nota-admin" id="settings-nota-admin" hidden>
+          🔒 Estos ajustes los define el administrador y valen para todo el equipo.
+        </p>
+        <label class="field">
+          <span>Días de crédito por defecto</span>
+          <input type="number" id="s-dias" class="input" min="1" max="365" required>
+          <small>El vencimiento se calcula automáticamente: fecha de emisión + estos días.</small>
+        </label>
+        <div class="field">
+          <span class="field-label">Atajos de vencimiento rápido</span>
+          <small>Dos botones en el formulario para poner el vencimiento X días después de la fecha de emisión.</small>
+          <div class="atajos-config">
+            <label class="atajo-mini">
+              <span>Atajo 1</span>
+              <input type="number" id="s-atajo1" class="input" min="1" max="365" required>
+              <span class="atajo-unidad">días</span>
+            </label>
+            <label class="atajo-mini">
+              <span>Atajo 2</span>
+              <input type="number" id="s-atajo2" class="input" min="1" max="365" required>
+              <span class="atajo-unidad">días</span>
+            </label>
+          </div>
         </div>
-      </div>
-      <label class="field">
-        <span>Símbolo de moneda</span>
-        <input type="text" id="s-moneda" class="input" maxlength="6" placeholder="$">
-      </label>
-      <label class="field field-check">
-        <input type="checkbox" id="s-avisos">
-        <span>Avisarme el día que vence un crédito
-          <small>Notificación en tu celular Android, aunque la app esté cerrada. (En iPhone/PC el aviso aparece al abrir la app.)</small>
-        </span>
-      </label>
-      <!-- Solo el administrador: apertura automática de la hoja de cobranza -->
-      <div class="field settings-hoja-auto" id="settings-hoja-auto" hidden>
-        <span class="field-label">🧾 Apertura automática de la hoja de cobranza</span>
-        <small>Cuando está activa, la hoja de cobranza del día se abre sola para <strong>todo el equipo</strong> (administrador y empleados) los días y a la hora que elijas. Nadie necesita crearla a mano.</small>
+        <label class="field">
+          <span>Símbolo de moneda</span>
+          <input type="text" id="s-moneda" class="input" maxlength="6" placeholder="$">
+        </label>
+      </section>
+
+      <!-- ▸ Notificaciones -->
+      <section class="settings-grupo">
+        <h3 class="settings-titulo">🔔 Notificaciones</h3>
+        <label class="field field-check">
+          <input type="checkbox" id="s-avisos">
+          <span>Avisarme el día que vence un crédito
+            <small>Notificación en tu celular Android, aunque la app esté cerrada. (En iPhone/PC el aviso aparece al abrir la app.)</small>
+          </span>
+        </label>
+      </section>
+
+      <!-- ▸ Hoja de cobranza (solo administrador) -->
+      <section class="settings-grupo settings-hoja-auto" id="settings-hoja-auto" hidden>
+        <h3 class="settings-titulo">🧾 Hoja de cobranza</h3>
+        <small class="settings-grupo-desc">Apertura automática: cuando está activa, la hoja de cobranza del día se abre sola para <strong>todo el equipo</strong> (administrador y empleados) los días y a la hora que elijas. Nadie necesita crearla a mano.</small>
         <label class="field-check hoja-auto-activar">
           <input type="checkbox" id="s-hoja-auto">
           <span>Abrir la hoja de cobranza automáticamente</span>
@@ -789,12 +802,12 @@
             <input type="time" id="s-hoja-hora" class="input" value="08:00">
           </label>
         </div>
-      </div>
+      </section>
 
-      <!-- Solo el administrador: código de seguridad para borrar -->
-      <div class="field settings-seguridad" id="settings-seguridad" hidden>
-        <span class="field-label">🔒 Código de seguridad</span>
-        <small>Un código de 4 dígitos que se pedirá para <strong>borrar un crédito</strong> o <strong>borrar una “a cuenta”</strong>.</small>
+      <!-- ▸ Seguridad (solo administrador) -->
+      <section class="settings-grupo settings-seguridad" id="settings-seguridad" hidden>
+        <h3 class="settings-titulo">🔒 Seguridad</h3>
+        <small class="settings-grupo-desc">Código de 4 dígitos que se pedirá para <strong>borrar un crédito</strong> o <strong>borrar una “a cuenta”</strong>.</small>
         <p class="pin-estado" id="pin-estado"></p>
         <div class="pin-config">
           <input type="password" id="s-pin-actual" class="input pin-corto" inputmode="numeric" maxlength="4"
@@ -804,10 +817,11 @@
           <button type="button" id="btn-pin-guardar" class="btn btn-secondary btn-small">Guardar código</button>
           <button type="button" id="btn-pin-quitar" class="btn btn-secondary btn-small" hidden>Quitar</button>
         </div>
-      </div>
+      </section>
 
-      <div class="settings-backup">
-        <span class="field-label">Respaldo de datos</span>
+      <!-- ▸ Respaldo de datos -->
+      <section class="settings-grupo settings-backup">
+        <h3 class="settings-titulo">💾 Respaldo de datos</h3>
         <div class="photo-actions">
           <button type="button" id="btn-exportar" class="btn btn-secondary">⬇️ Exportar respaldo</button>
           <label class="btn btn-secondary photo-btn">
@@ -816,7 +830,8 @@
           </label>
         </div>
         <small>Exporta un archivo con todos tus créditos (incluye fotos) para guardarlo o pasarlo a otro dispositivo.</small>
-      </div>
+      </section>
+
       <div class="modal-buttons">
         <button type="button" id="btn-settings-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
         <button type="submit" class="btn btn-primary">Guardar</button>

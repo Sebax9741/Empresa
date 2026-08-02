@@ -554,7 +554,6 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .modal-pin .modal-buttons { justify-content: center; }
 
-.settings-seguridad { border-top: 1px solid var(--border); padding-top: 0.9rem; }
 .pin-config { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.4rem; }
 .pin-corto { width: 130px; margin: 0; text-align: center; letter-spacing: 0.2rem; }
 .pin-estado { font-size: 0.82rem; color: var(--warning); margin: 0.4rem 0 0; }
@@ -905,8 +904,10 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.7rem 0.8rem;
-  margin-bottom: 0.85rem;
 }
+/* Ya es una caja con borde propio: no lleva la línea divisoria del grupo */
+.settings-offline.settings-grupo { padding-bottom: 0.8rem; border-bottom: none; }
+.settings-offline .settings-titulo { margin-bottom: 0.5rem; }
 .offline-lista { list-style: none; padding: 0; margin: 0.4rem 0 0.6rem; }
 .offline-lista li { font-size: 0.82rem; margin: 0.2rem 0; line-height: 1.35; }
 .offline-lista .offline-ok { color: var(--ok); font-weight: 600; }
@@ -938,12 +939,31 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .btn-sincronizar:disabled { opacity: 0.6; cursor: default; }
 
-/* ====== Cuenta en configuración ====== */
-.settings-cuenta {
-  margin-bottom: 0.85rem;
-  padding-bottom: 0.85rem;
+/* ====== Configuración: grupos con subtítulo ====== */
+.settings-grupo { margin-bottom: 1.4rem; }
+.settings-grupo:not(:last-of-type) {
+  padding-bottom: 1.3rem;
   border-bottom: 1px solid var(--border);
 }
+/* Subtítulo de cada apartado: negrita y un poco más grande que el texto normal */
+.settings-titulo {
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--primary-dark);
+  margin: 0 0 0.75rem;
+}
+/* Texto descriptivo bajo el subtítulo */
+.settings-grupo-desc {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin: -0.35rem 0 0.8rem;
+}
+
+/* ====== Cuenta en configuración ====== */
 .cuenta-email { margin: 0.2rem 0 0.5rem; font-weight: 600; }
 .cuenta-botones { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
