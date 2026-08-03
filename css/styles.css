@@ -1044,9 +1044,11 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 @media (max-width: 760px) {
   .table-wrap { display: none; }
   .cards { display: flex; }
-  /* Despachos: en celular se muestran las tarjetas y se oculta la tabla */
+  /* Despachos: en celular se muestran las tarjetas y se oculta la tabla.
+     Se usa el id (#) para ganarle en especificidad a la regla por defecto
+     ".despachos-list { display:none }" que aparece más abajo en el archivo. */
   .desp-tabla-wrap { display: none; }
-  .despachos-list { display: flex; }
+  #despachos-list { display: flex; }
 
   .app-header h1 { font-size: 0.98rem; }
   /* En móvil el título se acorta a "💳 Créditos" para dejar sitio a los botones */
