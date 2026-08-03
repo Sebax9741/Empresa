@@ -442,6 +442,15 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .badge-vencido { background: var(--danger-light); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 25%, transparent); }
 .badge-pagado { background: var(--ok-light); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 25%, transparent); }
 .badge-parcial { background: color-mix(in srgb, #6366f1 14%, transparent); color: #6366f1; border-color: color-mix(in srgb, #6366f1 28%, transparent); }
+.badge-faltante { background: var(--bg-tint); color: var(--muted); border-color: var(--border); }
+
+/* Filas / tarjetas "hueco": una nota de venta que falta crear */
+.credito-faltante { background: repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(0,0,0,0.02) 8px, rgba(0,0,0,0.02) 16px); cursor: pointer; }
+.credito-faltante:hover { background: var(--primary-light); }
+.credito-faltante td { color: var(--muted); }
+.faltante-msg { color: var(--muted); font-style: italic; font-size: 0.85rem; }
+.card-faltante { cursor: pointer; border-style: dashed; opacity: 0.9; }
+.card-faltante:hover { border-color: var(--primary); }
 
 .venc-alerta { color: var(--danger); font-weight: 700; }
 .venc-pronto { color: var(--warning); font-weight: 600; }

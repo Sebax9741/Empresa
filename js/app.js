@@ -1342,6 +1342,38 @@ function marcados(clase) {
   return [...document.querySelectorAll('.' + clase + ':checked')].map(el => el.value);
 }
 
+/* N° de boleta como entero (ignora ceros/letras), o null si no es numérico. */
+function boletaEntera(c) {
+  const n = parseInt(String((c && c.boleta) || '').replace(/\D/g, ''), 10);
+  return isNaN(n) ? null : n;
+}
+
+/* Rellena los números de boleta salteados con filas "hueco" (solo el número),
+   para que se vea la correlatividad de las notas de venta. Tope de seguridad
+   por si hay una boleta muy fuera de rango (no se llenan miles de huecos). */
+const MAX_FALTANTES = 400;
+function inyectarFaltantes(lista, dir) {
+  const nums = lista.map(boletaEntera).filter(n => n != null);
+  if (nums.length < 2) return lista;
+  const min = Math.min(...nums), max = Math.max(...nums);
+  if (max - min > MAX_FALTANTES * 3) return lista;   // rango disparatado: no llenar
+  const existentes = new Set(nums);
+  const faltantes = [];
+  for (let n = min + 1; n < max; n++) {
+    if (!existentes.has(n)) {
+      faltantes.push({ __faltante: true, boleta: String(n) });
+      if (faltantes.length > MAX_FALTANTES) return lista;
+    }
+  }
+  if (!faltantes.length) return lista;
+  const mult = dir === 'desc' ? -1 : 1;
+  return [...lista, ...faltantes].sort((a, b) => {
+    const na = boletaEntera(a), nb = boletaEntera(b);
+    if (na == null || nb == null) return 0;
+    return (na - nb) * mult;
+  });
+}
+
 function creditosVisibles() {
   const busqueda = $('#search').value.trim().toLowerCase();
   const estados = marcados('fil-estado');
@@ -1378,6 +1410,7 @@ function creditosVisibles() {
       case 'monto': va = Number(a.monto); vb = Number(b.monto); break;
       case 'saldo': va = saldoDe(a); vb = saldoDe(b); break;
       case 'fecha': va = a.fecha; vb = b.fecha; break;
+      case 'despacho': va = a.fechaDespacho || ''; vb = b.fechaDespacho || ''; break;
       // "creado": orden por el momento real en que se registró el crédito
       case 'creado': va = a.creado || 0; vb = b.creado || 0; break;
       case 'vencimiento': default: va = a.vencimiento; vb = b.vencimiento; break;
@@ -1387,6 +1420,12 @@ function creditosVisibles() {
     // Desempate estable: a igualdad, el creado más reciente primero
     return (b.creado || 0) - (a.creado || 0);
   });
+
+  // Filas "hueco": cuando se ordena por N° de boleta y no hay filtros ni
+  // búsqueda, se muestran las notas de venta que faltan crear (los números
+  // salteados) como filas vacías, para no perder la correlatividad.
+  const sinFiltros = !busqueda && !estados.length && !zonas.length && !meses.length && !desde && !hasta;
+  if (campo === 'boleta' && sinFiltros) lista = inyectarFaltantes(lista, dir);
 
   return lista;
 }
@@ -1419,9 +1458,10 @@ function render() {
 
 /* Total que deben y cantidad de créditos según lo que está filtrado ahora mismo */
 function renderResumenFiltro(lista) {
+  const reales = lista.filter(c => !c.__faltante);   // sin las filas "hueco"
   let debe = 0;
-  for (const c of lista) debe += saldoDe(c);
-  $('#filtro-resumen-cantidad').textContent = String(lista.length);
+  for (const c of reales) debe += saldoDe(c);
+  $('#filtro-resumen-cantidad').textContent = String(reales.length);
   $('#filtro-resumen-debe').textContent = formatoMonto(debe);
 }
 
@@ -1484,6 +1524,19 @@ function celdaFoto(c) {
 function renderTabla(lista) {
   const tbody = $('#table-body');
   tbody.innerHTML = lista.map(c => {
+    // Fila "hueco": una nota de venta cuyo número falta crear todavía.
+    if (c.__faltante) {
+      const crear = puede('crear')
+        ? `<button class="btn btn-secondary btn-small" data-crear-boleta="${escapeHtml(c.boleta)}" title="Crear esta nota de venta">➕ Crear</button>`
+        : '';
+      return `
+      <tr class="credito-faltante" ${puede('crear') ? `data-crear-boleta="${escapeHtml(c.boleta)}"` : ''} title="Falta crear esta nota de venta">
+        <td><strong>${escapeHtml(c.boleta)}</strong></td>
+        <td class="faltante-msg" colspan="7">— nota de venta sin crear —</td>
+        <td><span class="badge badge-faltante">⛳ Falta</span></td>
+        <td colspan="2">${crear}</td>
+      </tr>`;
+    }
     const saldo = saldoDe(c);
     return `
     <tr>
@@ -1492,6 +1545,8 @@ function renderTabla(lista) {
       <td>${c.zona ? escapeHtml(c.zona) : '—'}</td>
       <td class="col-num">${formatoMonto(c.monto)}</td>
       <td class="col-num ${saldo > 0 ? 'saldo-pend' : 'saldo-ok'}">${saldo > 0 ? formatoMonto(saldo) : '✓'}</td>
+      <td>${c.fecha ? formatoFecha(c.fecha) : '—'}</td>
+      <td>${c.fechaDespacho ? formatoFecha(c.fechaDespacho) : '—'}</td>
       <td>${textoVencimiento(c)}</td>
       <td>${badgeEstado(c)}</td>
       <td>${celdaFoto(c)}</td>
@@ -1529,6 +1584,17 @@ function abonosResumenHtml(c) {
 function renderTarjetas(lista) {
   const cont = $('#cards');
   cont.innerHTML = lista.map(c => {
+    if (c.__faltante) {
+      return `
+      <article class="card card-faltante" ${puede('crear') ? `data-crear-boleta="${escapeHtml(c.boleta)}"` : ''}>
+        <div class="card-main">
+          <p class="card-title">Boleta Nº ${escapeHtml(c.boleta)}</p>
+          <p class="card-sub faltante-msg">— nota de venta sin crear —</p>
+        </div>
+        <div class="card-side"><span class="badge badge-faltante">⛳ Falta</span></div>
+        ${puede('crear') ? `<div class="card-actions"><button class="btn btn-secondary btn-small" data-crear-boleta="${escapeHtml(c.boleta)}">➕ Crear</button></div>` : ''}
+      </article>`;
+    }
     const debe = saldoDe(c);
     const pagado = totalAbonado(c);
     const lineas = debe > 0
@@ -1539,7 +1605,7 @@ function renderTarjetas(lista) {
     <article class="card">
       <div class="card-main">
         <p class="card-title">${escapeHtml(c.cliente)}</p>
-        <p class="card-sub">Boleta Nº ${escapeHtml(c.boleta)} · ${formatoFecha(c.fecha)}</p>
+        <p class="card-sub">Boleta Nº ${escapeHtml(c.boleta)} · Emisión ${formatoFecha(c.fecha)}${c.fechaDespacho ? ` · Despacho ${formatoFecha(c.fechaDespacho)}` : ''}</p>
         ${c.zona ? `<span class="card-zona">📍 ${escapeHtml(c.zona)}</span>` : ''}
         <p class="card-monto">${formatoMonto(c.monto)}</p>
         ${lineas}
@@ -2599,7 +2665,7 @@ function abrirFormulario(credito = null, prefill = null) {
     // Vuelve a bloquear la zona si el cliente elegido ya la define
     if (soloEditarCampos) aplicarClienteSeleccionado();
   } else {
-    $('#form-title').textContent = prefill ? 'Nuevo crédito (desde despacho)' : 'Nuevo crédito';
+    $('#form-title').textContent = (prefill && prefill.desdeDespacho) ? 'Nuevo crédito (desde despacho)' : 'Nuevo crédito';
     $('#f-id').value = '';
     $('#f-fecha').value = hoyISO();
     $('#f-vencimiento').value = sumarDias(hoyISO(), settings.dias);
@@ -3609,6 +3675,7 @@ function crearCreditoDesdeDespacho(id) {
   if (!d) return;
   despachoOrigen = d.id;
   abrirFormulario(null, {
+    desdeDespacho: true,
     boleta: d.boleta || '',
     clienteId: d.clienteId || '',
     clienteNombre: d.cliente || '',
@@ -4055,6 +4122,7 @@ function inicializarEventos() {
     const info = ev.target.closest('[data-info]');
     const editar = ev.target.closest('[data-editar]');
     const borrar = ev.target.closest('[data-borrar]');
+    const crearBoleta = ev.target.closest('[data-crear-boleta]');
     const verFoto = ev.target.closest('[data-ver-foto]');
     const verFirma = ev.target.closest('[data-ver-firma]');
     const verFotoInfo = ev.target.closest('[data-ver-foto-info]');
@@ -4085,6 +4153,9 @@ function inicializarEventos() {
     } else if (verFotoInfo) {
       const c = creditos.find(x => x.id === infoCreditoId);
       if (c && c.foto) abrirVisorImagen(c);
+    } else if (crearBoleta) {
+      // Fila "hueco": crear la nota de venta que falta, con el N° ya puesto
+      if (puede('crear')) abrirFormulario(null, { boleta: crearBoleta.dataset.crearBoleta });
     } else if (editar) {
       const c = creditos.find(x => x.id === editar.dataset.editar);
       if (c) abrirFormulario(c);
