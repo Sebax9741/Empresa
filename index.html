@@ -443,10 +443,12 @@
         <div class="firma-preview-wrap" id="firma-preview-wrap" hidden>
           <img id="firma-preview" class="firma-preview" alt="Firma del cliente">
         </div>
-        <button type="button" id="btn-firma" class="btn btn-secondary btn-block">✍️ Agregar firma</button>
+        <button type="button" id="btn-firma" class="btn btn-primary btn-block">✍️ Firmar y registrar cobro</button>
+        <small class="firma-nota">Al firmar se registra el cobro. Después de firmar ya no se puede cambiar el monto ni el método.</small>
       </div>
 
-      <button type="button" id="btn-registrar-cobro" class="btn btn-primary btn-block">✅ Registrar cobro</button>
+      <!-- Respaldo: solo aparece si el registro falló y hay que reintentar -->
+      <button type="button" id="btn-registrar-cobro" class="btn btn-primary btn-block" hidden>✅ Registrar cobro</button>
       </div>
     </div>
 

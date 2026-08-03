@@ -483,6 +483,8 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .card-faltante { cursor: pointer; border-style: dashed; opacity: 0.9; }
 .card-faltante:hover { border-color: var(--primary); }
 
+.firma-nota { display: block; margin-top: 0.4rem; color: var(--muted); font-size: 0.78rem; line-height: 1.35; }
+
 .venc-alerta { color: var(--danger); font-weight: 700; }
 .venc-pronto { color: var(--warning); font-weight: 600; }
 

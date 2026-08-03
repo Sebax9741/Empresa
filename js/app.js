@@ -1723,9 +1723,12 @@ function firmaComoImagen() {
   return salida.toDataURL('image/png');
 }
 
-/* Abre el recuadro de firma. Devuelve la imagen, o null si se cancela. */
-function abrirFirma() {
+/* Abre el recuadro de firma. Devuelve la imagen, o null si se cancela.
+   En modo cobro, el botón de confirmar dice "Registrar cobro" (al firmar se
+   guarda la firma y se registra el cobro de una sola vez). */
+function abrirFirma(modoCobro = false) {
   const dlg = $('#modal-firma');
+  $('#btn-firma-ok').textContent = modoCobro ? '✅ Registrar cobro' : 'Guardar firma';
   dlg.showModal();
   prepararCanvasFirma();
   return new Promise(resolve => {
@@ -2393,7 +2396,9 @@ function abrirInfo(credito) {
   $('#cobro-monto').value = '';
   $('#cobro-metodo').value = 'efectivo';
   $('#firma-preview-wrap').hidden = true;
-  $('#btn-firma').textContent = '✍️ Agregar firma';
+  $('#btn-firma').textContent = '✍️ Firmar y registrar cobro';
+  bloquearCamposCobro(false);
+  $('#btn-registrar-cobro').hidden = true;   // el cobro se registra al firmar; este queda de respaldo
   renderInfo();
   $('#modal-info').showModal();
 }
@@ -2533,13 +2538,48 @@ function renderInfo() {
   }
 }
 
+/* Motivo por el que NO se puede registrar el cobro ahora mismo, o null si
+   todo está listo. Se usa antes de pedir la firma (para no hacer firmar en
+   vano) y también como control final al registrar. */
+function problemaParaCobrar(c) {
+  if (!c) return '⚠️ No se encontró el crédito';
+  if (!puede('pagos')) return '🔒 No tienes permiso para registrar pagos';
+  const hoy = hoyISO();
+  if (!esAdmin() && !hojaExiste(hoy)) {
+    return puede('hojaCrear')
+      ? '📋 Primero crea la hoja de cobranza de hoy'
+      : '📋 La hoja de cobranza de hoy aún no existe. Pide que la creen.';
+  }
+  if (hojaCerrada(hoy) && !esAdmin()) return '🔒 La hoja de cobranza de hoy ya está cerrada';
+  const monto = Number($('#cobro-monto').value);
+  const debe = saldoDe(c);
+  if (!monto || monto <= 0) return '⚠️ Escribe el monto cobrado';
+  if (monto > debe + 0.005) return `⚠️ El cliente solo debe ${formatoMonto(debe)}`;
+  if (abonosDe(c).length >= MAX_ABONOS) return `⚠️ Este crédito ya tiene ${MAX_ABONOS} pagos a cuenta`;
+  return null;
+}
+
+/* Bloquea/desbloquea el monto y el método (la fecha ya está fija). Se bloquean
+   cuando el cliente ya firmó, para que no se puedan cambiar después. */
+function bloquearCamposCobro(bloq) {
+  $('#cobro-monto').disabled = bloq;
+  $('#cobro-metodo').disabled = bloq;
+  $('#btn-cobro-todo').disabled = bloq;
+}
+
 async function pedirFirmaCobro() {
-  const firma = await abrirFirma();
-  if (!firma) return;
+  const c = creditos.find(x => x.id === infoCreditoId);
+  // Validar TODO antes de pedir la firma: no hacer firmar al cliente en vano
+  const problema = problemaParaCobrar(c);
+  if (problema) { toast(problema); return; }
+  const firma = await abrirFirma(true);   // botón "✅ Registrar cobro"
+  if (!firma) return;                      // el cliente/empleado canceló
   firmaPendiente = firma;
   $('#firma-preview').src = firma;
   $('#firma-preview-wrap').hidden = false;
   $('#btn-firma').textContent = '✍️ Repetir firma';
+  bloquearCamposCobro(true);               // ya firmó: no se puede cambiar monto ni método
+  await registrarCobro();                  // guarda la firma y registra el cobro
 }
 
 async function registrarCobro() {
@@ -2591,17 +2631,23 @@ async function registrarCobro() {
     console.error(e);
     toast('❌ No se pudo registrar el cobro. Revisa tu conexión.');
     boton.disabled = false;
+    // La firma quedó guardada: se muestra el botón para reintentar sin volver
+    // a firmar (con el monto/método ya bloqueados, no se pueden cambiar).
+    boton.hidden = false;
     return;
   }
   boton.disabled = false;
+  boton.hidden = true;
 
   const i = creditos.findIndex(x => x.id === c.id);
   if (i >= 0) creditos[i] = actualizado;
 
   firmaPendiente = null;
   $('#cobro-monto').value = '';
+  $('#cobro-metodo').value = 'efectivo';
   $('#firma-preview-wrap').hidden = true;
-  $('#btn-firma').textContent = '✍️ Agregar firma';
+  $('#btn-firma').textContent = '✍️ Firmar y registrar cobro';
+  bloquearCamposCobro(false);   // listo el cobro: se desbloquea para el siguiente
   render();
   renderInfo();
   toast(saldoDe(actualizado) <= 0 ? '✅ Crédito saldado por completo' : '✅ Cobro registrado con firma');
