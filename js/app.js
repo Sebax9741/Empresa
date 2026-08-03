@@ -115,6 +115,7 @@ const TIPOS_COMPROBANTE = { boleta: 'Boleta', factura: 'Factura', nota: 'Nota de
 const ESTADOS_DESPACHO = {
   reparto:  { etiqueta: '🚚 En reparto', clase: 'pedido-pendiente' },
   credito:  { etiqueta: '📄 A crédito', clase: 'pedido-credito' },
+  pagado:   { etiqueta: '✅ Pagado', clase: 'pedido-pagado' },
   contado:  { etiqueta: '💵 Al contado', clase: 'pedido-contado' },
   devuelto: { etiqueta: '↩️ Devuelto', clase: 'pedido-devuelto' },
 };
@@ -131,17 +132,37 @@ function repartidoresActivos() {
     .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
 }
 
-/* Ordena los despachos-pedido del más reciente al más antiguo (por fecha y creación) */
+/* Estado que se MUESTRA de un despacho: si ya se pasó a crédito y ese crédito
+   quedó saldado (se pagó al volver al almacén), se marca como "pagado". */
+function estadoDespachoEfectivo(d) {
+  if (d && d.estado === 'credito' && d.creditoId) {
+    const c = creditos.find(x => x.id === d.creditoId);
+    if (c && estadoEfectivo(c) === 'pagado') return 'pagado';
+  }
+  return (d && ESTADOS_DESPACHO[d.estado]) ? d.estado : 'reparto';
+}
+
+/* N° de boleta como número, para ordenar de menor a mayor. Los que no tienen
+   número (vacío o texto) van al final. */
+function boletaNumero(d) {
+  const n = parseInt(String((d && d.boleta) || '').replace(/\D/g, ''), 10);
+  return isNaN(n) ? Infinity : n;
+}
+
+/* Ordena los despachos-pedido por N° de boleta de menor a mayor
+   (3969, 3970, 3971…). Si falta uno intermedio, sigue con el siguiente. */
 function despachosOrdenados() {
   return despachos.filter(esDespachoPedido).sort((a, b) =>
-    (b.fecha || '').localeCompare(a.fecha || '') || (b.creado || 0) - (a.creado || 0));
+    boletaNumero(a) - boletaNumero(b)
+    || (a.fecha || '').localeCompare(b.fecha || '')
+    || (a.creado || 0) - (b.creado || 0));
 }
 
 /* Resumen de una lista de despachos: cuántos hay en cada estado y el monto total */
 function resumenDespachos(lista) {
-  const r = { total: lista.length, reparto: 0, credito: 0, contado: 0, devuelto: 0, monto: 0 };
+  const r = { total: lista.length, reparto: 0, credito: 0, pagado: 0, contado: 0, devuelto: 0, monto: 0 };
   for (const d of lista) {
-    const e = ESTADOS_DESPACHO[d.estado] ? d.estado : 'reparto';
+    const e = estadoDespachoEfectivo(d);
     r[e] = (r[e] || 0) + 1;
     r.monto += Number(d.monto) || 0;
   }
@@ -1389,6 +1410,9 @@ function render() {
   renderFlechas();
   actualizarContadorFiltro();
   if ($('#modal-info').open) renderInfo();   // la ficha se mantiene al día
+  // Si un crédito enlazado se pagó, el estado del despacho pasa a "pagado":
+  // mantén la vista de despachos al día si está abierta.
+  if (!$('#view-despachos').hidden) renderDespachos();
   $('#empty-state').hidden = creditos.length > 0;
   sincronizarAvisos();
 }
@@ -3194,6 +3218,7 @@ function chipDespachos(res) {
   const partes = [];
   if (res.reparto) partes.push(`<span class="ped-chip pedido-pendiente">${res.reparto} en reparto</span>`);
   if (res.credito) partes.push(`<span class="ped-chip pedido-credito">${res.credito} a crédito</span>`);
+  if (res.pagado) partes.push(`<span class="ped-chip pedido-pagado">${res.pagado} pagado${res.pagado === 1 ? '' : 's'}</span>`);
   if (res.contado) partes.push(`<span class="ped-chip pedido-contado">${res.contado} al contado</span>`);
   if (res.devuelto) partes.push(`<span class="ped-chip pedido-devuelto">${res.devuelto} devuelto</span>`);
   return partes.join(' ');
@@ -3217,13 +3242,14 @@ function renderListaDespachos() {
        <div class="desp-resumen-monto">${rotulo} · ${lista.length} despacho${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
     : `<div class="desp-resumen-monto">${rotulo} · sin despachos</div>`;
 
-  // Tabla (escritorio): N° boleta, monto, fecha, zona, repartidores y estado
+  // Tabla (escritorio): N° boleta, cliente, monto, fecha, zona, repartidores y estado
   $('#desp-tabla-body').innerHTML = lista.map(d => {
-    const info = estadoDespachoInfo(d.estado);
+    const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
     const reps = repartidoresDe(d);
     return `
       <tr class="desp-fila ${info.clase}" data-abrir-despacho="${d.id}" title="${escapeHtml(info.etiqueta)} — ver detalle">
         <td><strong>${escapeHtml(d.boleta || '—')}</strong></td>
+        <td>${escapeHtml(d.cliente || '(sin cliente)')}</td>
         <td class="col-num">${formatoMonto(Number(d.monto) || 0)}</td>
         <td>${formatoFecha(d.fecha)}</td>
         <td>${d.zona ? escapeHtml(d.zona) : '—'}</td>
@@ -3234,7 +3260,7 @@ function renderListaDespachos() {
 
   // Tarjetas (celular): misma información en formato compacto
   $('#despachos-list').innerHTML = lista.map(d => {
-    const info = estadoDespachoInfo(d.estado);
+    const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
     const reps = repartidoresDe(d);
     return `
       <button type="button" class="despacho-card ${info.clase}" data-abrir-despacho="${d.id}">
@@ -3288,7 +3314,7 @@ function imprimirDespachos() {
   const titulo = despachoFiltroFecha ? `del ${formatoFecha(despachoFiltroFecha)}` : '(todos)';
   const filasHtml = lista.map(d => {
     const reps = repartidoresDe(d);
-    const info = estadoDespachoInfo(d.estado);
+    const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
     return `<tr>
       <td>${escapeHtml(d.cliente || '—')}</td>
       <td>${escapeHtml(d.boleta || '—')}</td>
@@ -3316,7 +3342,7 @@ function imprimirDespachos() {
     <div class="tot">
       <div><strong>Total de despachos:</strong> ${lista.length}</div>
       <div><strong>Monto total:</strong> ${formatoMonto(res.monto)}</div>
-      <div><strong>En reparto:</strong> ${res.reparto} · <strong style="min-width:0">A crédito:</strong> ${res.credito} · <strong style="min-width:0">Al contado:</strong> ${res.contado} · <strong style="min-width:0">Devueltos:</strong> ${res.devuelto}</div>
+      <div><strong>En reparto:</strong> ${res.reparto} · <strong style="min-width:0">A crédito:</strong> ${res.credito} · <strong style="min-width:0">Pagados:</strong> ${res.pagado}</div>
     </div>
     <script>window.onload=function(){window.print();}<\/script>
     </body></html>`;
@@ -3508,7 +3534,7 @@ function abrirDetalleDespacho(id) {
 function renderDetalleDespacho() {
   const d = despachoPorId(despachoActivoId);
   if (!d) { mostrarVistaDespacho('lista'); renderListaDespachos(); return; }
-  const info = estadoDespachoInfo(d.estado);
+  const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
   const reps = repartidoresDe(d);
   const comprobante = d.boleta
     ? `${tipoComprobanteLabel(d.tipoComprobante)} N° ${escapeHtml(d.boleta)}`
