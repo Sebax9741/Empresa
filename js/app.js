@@ -1349,20 +1349,23 @@ function boletaEntera(c) {
 }
 
 /* Números de boleta salteados (las notas de venta que faltan crear), en base
-   a TODOS los créditos. Tope de seguridad por si hay una boleta muy fuera de
-   rango, para no generar miles de huecos. */
+   a TODOS los créditos. Solo se rellenan los saltos "chicos" entre boletas
+   consecutivas (guías salteadas dentro de la misma secuencia). Un salto muy
+   grande se toma como corte entre lotes/fechas distintos —por ejemplo un
+   crédito viejo aislado— y NO se rellena, para no generar cientos de huecos. */
 const MAX_FALTANTES = 400;
+const MAX_SALTO_FALTANTE = 100;
 function listaFaltantes() {
-  const nums = creditos.map(boletaEntera).filter(n => n != null);
+  const nums = [...new Set(creditos.map(boletaEntera).filter(n => n != null))].sort((a, b) => a - b);
   if (nums.length < 2) return [];
-  const min = Math.min(...nums), max = Math.max(...nums);
-  if (max - min > MAX_FALTANTES * 3) return [];   // rango disparatado: no llenar
-  const existentes = new Set(nums);
   const faltantes = [];
-  for (let n = min + 1; n < max; n++) {
-    if (!existentes.has(n)) {
+  for (let i = 1; i < nums.length; i++) {
+    const prev = nums[i - 1], cur = nums[i];
+    const salto = cur - prev - 1;                 // cuántos números faltan en medio
+    if (salto < 1 || salto > MAX_SALTO_FALTANTE) continue;   // sin hueco o salto grande
+    for (let n = prev + 1; n < cur; n++) {
       faltantes.push(n);
-      if (faltantes.length > MAX_FALTANTES) break;
+      if (faltantes.length > MAX_FALTANTES) return faltantes;
     }
   }
   return faltantes;
