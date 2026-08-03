@@ -262,6 +262,37 @@ body {
   gap: 0.7rem;
   margin: -0.3rem 0 1rem;
 }
+
+/* Aviso de notas de venta (guías) faltantes: banda clicable */
+.faltantes-aviso {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  background: var(--warning-light);
+  color: #92400e;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.9rem;
+  margin: 0 0 1rem;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.faltantes-aviso:hover { filter: brightness(0.97); }
+.faltantes-aviso-txt { font-weight: 600; font-size: 0.9rem; }
+.faltantes-aviso-btn {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .filtro-resumen-item {
   display: flex;
   align-items: center;

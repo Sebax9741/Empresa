@@ -1348,23 +1348,30 @@ function boletaEntera(c) {
   return isNaN(n) ? null : n;
 }
 
-/* Rellena los números de boleta salteados con filas "hueco" (solo el número),
-   para que se vea la correlatividad de las notas de venta. Tope de seguridad
-   por si hay una boleta muy fuera de rango (no se llenan miles de huecos). */
+/* Números de boleta salteados (las notas de venta que faltan crear), en base
+   a TODOS los créditos. Tope de seguridad por si hay una boleta muy fuera de
+   rango, para no generar miles de huecos. */
 const MAX_FALTANTES = 400;
-function inyectarFaltantes(lista, dir) {
-  const nums = lista.map(boletaEntera).filter(n => n != null);
-  if (nums.length < 2) return lista;
+function listaFaltantes() {
+  const nums = creditos.map(boletaEntera).filter(n => n != null);
+  if (nums.length < 2) return [];
   const min = Math.min(...nums), max = Math.max(...nums);
-  if (max - min > MAX_FALTANTES * 3) return lista;   // rango disparatado: no llenar
+  if (max - min > MAX_FALTANTES * 3) return [];   // rango disparatado: no llenar
   const existentes = new Set(nums);
   const faltantes = [];
   for (let n = min + 1; n < max; n++) {
     if (!existentes.has(n)) {
-      faltantes.push({ __faltante: true, boleta: String(n) });
-      if (faltantes.length > MAX_FALTANTES) return lista;
+      faltantes.push(n);
+      if (faltantes.length > MAX_FALTANTES) break;
     }
   }
+  return faltantes;
+}
+
+/* Mezcla las filas "hueco" con la lista de créditos, ordenadas por N° de boleta,
+   para que se vea la correlatividad de las notas de venta. */
+function inyectarFaltantes(lista, dir) {
+  const faltantes = listaFaltantes().map(n => ({ __faltante: true, boleta: String(n) }));
   if (!faltantes.length) return lista;
   const mult = dir === 'desc' ? -1 : 1;
   return [...lista, ...faltantes].sort((a, b) => {
@@ -1372,6 +1379,33 @@ function inyectarFaltantes(lista, dir) {
     if (na == null || nb == null) return 0;
     return (na - nb) * mult;
   });
+}
+
+/* Aviso siempre visible: cuántas notas de venta faltan crear (en cualquier
+   orden). Al tocarlo, ordena por N° de boleta y muestra las filas "hueco". */
+function renderAvisoFaltantes() {
+  const el = $('#faltantes-aviso');
+  if (!el) return;
+  const falt = listaFaltantes();
+  if (!falt.length) { el.hidden = true; return; }
+  el.hidden = false;
+  const muestra = falt.slice(0, 10).join(', ') + (falt.length > 10 ? '…' : '');
+  $('#faltantes-texto').textContent =
+    `⛳ Falta${falt.length === 1 ? '' : 'n'} ${falt.length} nota${falt.length === 1 ? '' : 's'} de venta por crear: ${muestra}`;
+}
+
+/* Deja la vista lista para revisar los huecos: sin filtros ni búsqueda y
+   ordenada por N° de boleta ascendente. */
+function revisarFaltantes() {
+  $('#search').value = '';
+  ['fil-estado', 'fil-zona', 'fil-mes'].forEach(clase =>
+    document.querySelectorAll('.' + clase + ':checked').forEach(el => { el.checked = false; }));
+  $('#fil-desde').value = '';
+  $('#fil-hasta').value = '';
+  $('#sort-by').value = 'boleta-asc';
+  render();
+  const tabla = $('.table-wrap');
+  if (tabla) tabla.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function creditosVisibles() {
@@ -1449,6 +1483,7 @@ function render() {
   renderFlechas();
   actualizarContadorFiltro();
   if ($('#modal-info').open) renderInfo();   // la ficha se mantiene al día
+  renderAvisoFaltantes();
   // Si un crédito enlazado se pagó, el estado del despacho pasa a "pagado":
   // mantén la vista de despachos al día si está abierta.
   if (!$('#view-despachos').hidden) renderDespachos();
@@ -4153,6 +4188,8 @@ function inicializarEventos() {
     } else if (verFotoInfo) {
       const c = creditos.find(x => x.id === infoCreditoId);
       if (c && c.foto) abrirVisorImagen(c);
+    } else if (ev.target.closest('#faltantes-aviso')) {
+      revisarFaltantes();
     } else if (crearBoleta) {
       // Fila "hueco": crear la nota de venta que falta, con el N° ya puesto
       if (puede('crear')) abrirFormulario(null, { boleta: crearBoleta.dataset.crearBoleta });
