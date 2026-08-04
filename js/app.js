@@ -473,6 +473,13 @@ let toastTimer = null;
 function toast(msg) {
   const el = $('#toast');
   el.textContent = msg;
+  // Los formularios se abren con showModal(): el navegador los pinta en su
+  // "capa superior", por encima de todo lo demás. Si el aviso se queda en el
+  // <body> queda TAPADO por el formulario y el usuario no ve el motivo por el
+  // que no se pudo guardar. Por eso se mete dentro del cuadro abierto.
+  const abierto = document.querySelector('dialog[open]');
+  const destino = abierto || document.body;
+  if (el.parentElement !== destino) destino.appendChild(el);
   el.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
@@ -2694,6 +2701,7 @@ function abrirFormulario(credito = null, prefill = null) {
   if (!credito && !puede('crear')) { toast('🔒 No tienes permiso para crear créditos'); return; }
   if (credito) prefill = null;   // el prellenado solo aplica a créditos nuevos
   $('#credit-form').reset();
+  limpiarErrorFormulario();
   fotoActual = null;
   abonosActuales = [];
   abonoFechaEditando = null;
@@ -3934,8 +3942,24 @@ async function borrarRepartidor(id) {
   toast('🗑️ Repartidor quitado');
 }
 
+/* Muestra dentro del formulario el motivo por el que no se pudo guardar y
+   lleva la vista hasta ahí (el aviso flotante se va solo en 2,6 s). */
+function errorFormulario(msg, campoId) {
+  const el = $('#form-error');
+  el.textContent = msg;
+  el.hidden = false;
+  toast(msg);
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (campoId) { const c = $('#' + campoId); if (c && !c.disabled) c.focus({ preventScroll: true }); }
+}
+function limpiarErrorFormulario() {
+  const el = $('#form-error');
+  if (el) { el.textContent = ''; el.hidden = true; }
+}
+
 async function guardarCredito(ev) {
   ev.preventDefault();
+  limpiarErrorFormulario();
 
   const id = $('#f-id').value || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
   const boleta = $('#f-boleta').value.trim();
@@ -3943,7 +3967,9 @@ async function guardarCredito(ev) {
   // Evita boletas duplicadas (excepto al editar la misma)
   const duplicado = creditos.find(c => c.boleta.toLowerCase() === boleta.toLowerCase() && c.id !== id);
   if (duplicado) {
-    toast(`⚠️ Ya existe la boleta Nº ${boleta} (${duplicado.cliente})`);
+    errorFormulario(
+      `⚠️ Ya existe un crédito con la boleta Nº ${boleta} (cliente: ${duplicado.cliente}). Cambia el número o abre ese crédito.`,
+      'f-boleta');
     return;
   }
 
@@ -3954,7 +3980,10 @@ async function guardarCredito(ev) {
     clienteNombre = valorCliente.slice(6);
   } else {
     const cli = clientePorId(valorCliente);
-    if (!cli) { toast('⚠️ Elige un cliente de la lista (o registra uno nuevo)'); return; }
+    if (!cli) {
+      errorFormulario('⚠️ Elige un cliente de la lista (o toca “➕ Nuevo” para registrarlo).', 'f-cliente-buscar');
+      return;
+    }
     clienteNombre = cli.nombre;
     clienteId = cli.id;
     zona = cli.zona || '';
@@ -4001,7 +4030,11 @@ async function guardarCredito(ev) {
     await guardarEnStore(credito);
   } catch (e) {
     console.error(e);
-    toast('❌ Error al guardar. Revisa tu conexión o el espacio disponible.');
+    // Causa más común: la foto hace que el registro pase del límite de 1 MB
+    const pesada = credito.foto && credito.foto.length > 700000;
+    errorFormulario(pesada
+      ? '❌ No se pudo guardar: la foto es demasiado pesada. Quítala y toma otra más de cerca (o guarda el crédito sin foto).'
+      : '❌ No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.');
     return;
   }
 

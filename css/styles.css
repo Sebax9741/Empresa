@@ -485,6 +485,19 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 .firma-nota { display: block; margin-top: 0.4rem; color: var(--muted); font-size: 0.78rem; line-height: 1.35; }
 
+/* Motivo por el que no se pudo guardar, dentro del formulario */
+.form-error {
+  background: var(--danger-light);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.8rem;
+  margin: 0 0 0.8rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .venc-alerta { color: var(--danger); font-weight: 700; }
 .venc-pronto { color: var(--warning); font-weight: 600; }
 
