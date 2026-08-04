@@ -429,6 +429,22 @@ function hojaCobranza(lista, fechaISO, codigoHoja = '') {
   return { filas, totales, codigoHoja };
 }
 
+/* Reparte los cobros del día por usuario: cuánto cobró cada uno en efectivo,
+   Yape y BCP, y su total. Se ordena de mayor a menor total; los cobros sin
+   usuario (créditos antiguos) se agrupan al final como "sin registrar". */
+function cobrosPorUsuario(filas) {
+  const mapa = new Map();
+  for (const f of filas) {
+    const quien = f.cobradoPor || '(sin registrar)';
+    const u = mapa.get(quien) || { usuario: quien, efectivo: 0, yape: 0, bcp: 0, total: 0 };
+    u[f.metodo] = (u[f.metodo] || 0) + f.monto;
+    u.total += f.monto;
+    mapa.set(quien, u);
+  }
+  return [...mapa.values()].sort((a, b) => b.total - a.total
+    || a.usuario.localeCompare(b.usuario, 'es'));
+}
+
 /* Todos los días que tienen cobros, del más reciente al más antiguo.
    Incluye también las hojas ya creadas aunque todavía no tengan cobros. */
 function diasConCobros(lista) {
@@ -3108,11 +3124,40 @@ function renderCobranza() {
   const { filas, totales } = hojaCobranza(creditos, fecha, diaInfo.codigo);
   renderEstadoHoja(fecha);
 
-  $('#cob-totales').innerHTML = `
-    <div class="cob-total-card"><span class="et">💵 Efectivo</span><span class="val">${formatoMonto(totales.efectivo)}</span></div>
-    <div class="cob-total-card"><span class="et">📱 Yape</span><span class="val">${formatoMonto(totales.yape)}</span></div>
-    <div class="cob-total-card"><span class="et">🏦 BCP</span><span class="val">${formatoMonto(totales.bcp)}</span></div>
-    <div class="cob-total-card total"><span class="et">Total del día</span><span class="val">${formatoMonto(totales.total)}</span></div>`;
+  // Cuadro de cobranza por usuario: una fila por quien cobró ese día
+  // (efectivo / Yape / BCP / total) y la fila final con los totales.
+  const porUsuario = cobrosPorUsuario(filas);
+  $('#cob-totales').innerHTML = porUsuario.length ? `
+    <table class="cob-usuarios">
+      <thead>
+        <tr>
+          <th>Usuario</th>
+          <th class="col-num">💵 Efectivo</th>
+          <th class="col-num">📱 Yape</th>
+          <th class="col-num">🏦 BCP</th>
+          <th class="col-num">Total del día</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${porUsuario.map(u => `
+          <tr>
+            <td class="cob-usuario-nom">${escapeHtml(u.usuario)}</td>
+            <td class="col-num">${formatoMonto(u.efectivo)}</td>
+            <td class="col-num">${formatoMonto(u.yape)}</td>
+            <td class="col-num">${formatoMonto(u.bcp)}</td>
+            <td class="col-num"><strong>${formatoMonto(u.total)}</strong></td>
+          </tr>`).join('')}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>Total</td>
+          <td class="col-num">${formatoMonto(totales.efectivo)}</td>
+          <td class="col-num">${formatoMonto(totales.yape)}</td>
+          <td class="col-num">${formatoMonto(totales.bcp)}</td>
+          <td class="col-num cob-ganancias">${formatoMonto(totales.total)}</td>
+        </tr>
+      </tfoot>
+    </table>` : '';
 
   $('#cob-body').innerHTML = filas.map(f => `
     <tr class="cob-fila" data-info="${escapeHtml(f.creditoId)}" title="Ver el crédito completo">
@@ -3292,6 +3337,8 @@ function imprimirCobranza() {
       th{background:#f0f0f0}
       .tot{margin-top:16px;font-size:14px} .tot div{margin:2px 0}
       .tot strong{display:inline-block;min-width:110px}
+      .tit2{font-size:15px;margin:18px 0 6px}
+      .usuarios{width:auto;min-width:60%} .usuarios tfoot td{background:#f0f0f0}
     </style></head><body>
     <h1>🧾 Hoja de cobranza</h1>
     <p class="sub">Fecha: ${formatoFecha(fecha)} — ${filas.length} cobro(s)</p>
@@ -3301,12 +3348,24 @@ function imprimirCobranza() {
     <th style="text-align:right">Cobrado</th><th style="text-align:right">Queda debiendo</th>
     <th>Pago</th><th>Cobró</th><th>Hora</th><th>Firma</th></tr></thead>
     <tbody>${filasHtml || '<tr><td colspan="12" style="text-align:center">Sin cobros este día</td></tr>'}</tbody></table>
-    <div class="tot">
-      <div><strong>💵 Efectivo:</strong> ${formatoMonto(totales.efectivo)}</div>
-      <div><strong>📱 Yape:</strong> ${formatoMonto(totales.yape)}</div>
-      <div><strong>🏦 BCP:</strong> ${formatoMonto(totales.bcp)}</div>
-      <div><strong>Total del día:</strong> ${formatoMonto(totales.total)}</div>
-    </div>
+    <h2 class="tit2">💰 Cobranza por usuario</h2>
+    <table class="usuarios"><thead><tr><th>Usuario</th>
+      <th style="text-align:right">Efectivo</th><th style="text-align:right">Yape</th>
+      <th style="text-align:right">BCP</th><th style="text-align:right">Total del día</th></tr></thead>
+    <tbody>${cobrosPorUsuario(filas).map(u => `<tr>
+      <td>${escapeHtml(u.usuario)}</td>
+      <td style="text-align:right">${formatoMonto(u.efectivo)}</td>
+      <td style="text-align:right">${formatoMonto(u.yape)}</td>
+      <td style="text-align:right">${formatoMonto(u.bcp)}</td>
+      <td style="text-align:right"><b>${formatoMonto(u.total)}</b></td></tr>`).join('')
+      || '<tr><td colspan="5" style="text-align:center">Sin cobros este día</td></tr>'}</tbody>
+    <tfoot><tr>
+      <td><b>Total</b></td>
+      <td style="text-align:right"><b>${formatoMonto(totales.efectivo)}</b></td>
+      <td style="text-align:right"><b>${formatoMonto(totales.yape)}</b></td>
+      <td style="text-align:right"><b>${formatoMonto(totales.bcp)}</b></td>
+      <td style="text-align:right"><b>${formatoMonto(totales.total)}</b></td>
+    </tr></tfoot></table>
     <script>window.onload=function(){window.print();}<\/script>
     </body></html>`;
   const w = window.open('', '_blank');
