@@ -1214,9 +1214,11 @@ const PERMISOS_LISTA = [
   ['cobranza', 'Ver/exportar cobranza'],
   ['clientes', 'Registrar/editar clientes'],
   ['hojaCrear', 'Crear la hoja de cobranza del día'],
-  ['vencimiento', 'Cambiar la fecha de vencimiento'],
   ['despachos', 'Armar despachos de reparto'],
 ];
+// Nota: el permiso 'vencimiento' ya no se ofrece. Cambiar la fecha de
+// vencimiento es solo del administrador; los empleados anotan la fecha de
+// compromiso de pago, que no altera el vencimiento real del crédito.
 
 async function abrirUsuarios() {
   if (!esAdmin()) return;
@@ -2431,8 +2433,13 @@ function abrirInfo(credito) {
 /* Fila "Vence" de la ficha: con permiso, se puede cambiar la fecha ahí
    mismo (sin entrar al formulario completo de edición). Queda constancia
    de quién y cuándo la cambió por última vez. */
+/* La fecha de vencimiento es SOLO del administrador: los empleados anotan la
+   fecha de compromiso de pago, que no altera el vencimiento real del crédito.
+   (En modo local hay un solo dueño, que puede todo.) */
+function puedeCambiarVencimiento() { return !modoNube || esAdmin(); }
+
 function filaVencimiento(c) {
-  const puedeCambiar = puede('vencimiento') || puede('editar');
+  const puedeCambiar = puedeCambiarVencimiento();
   const constancia = c.vencimientoCambiadoPor
     ? `<span class="venc-constancia">🖊️ ${escapeHtml(c.vencimientoCambiadoPor)}${
         fechaHoraDeTimestamp(c.vencimientoCambiadoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(c.vencimientoCambiadoEn)) : ''}</span>`
@@ -2524,7 +2531,10 @@ async function guardarCompromiso(nuevaFecha) {
 }
 
 function iniciarEdicionVencimiento() {
-  if (!puede('vencimiento') && !puede('editar')) { toast('🔒 No tienes permiso para cambiar el vencimiento'); return; }
+  if (!puedeCambiarVencimiento()) {
+    toast('🔒 Solo el administrador cambia el vencimiento. Usa “Compromiso” para anotar cuándo pagará.');
+    return;
+  }
   editandoVencimiento = true;
   renderInfo();
 }
@@ -2842,8 +2852,12 @@ function abrirFormulario(credito = null, prefill = null) {
     ['f-boleta', 'f-cliente-buscar', 'f-zona', 'f-monto', 'f-fecha', 'f-fecha-despacho', 'f-vencimiento', 'f-notas'].forEach(id => {
       $('#' + id).disabled = !soloEditarCampos;
     });
-    $('#btn-atajo-1').disabled = !soloEditarCampos;
-    $('#btn-atajo-2').disabled = !soloEditarCampos;
+    // El vencimiento solo lo cambia el administrador, aunque el empleado
+    // tenga permiso de editar el resto del crédito
+    const vencEditable = soloEditarCampos && puedeCambiarVencimiento();
+    $('#f-vencimiento').disabled = !vencEditable;
+    $('#btn-atajo-1').disabled = !vencEditable;
+    $('#btn-atajo-2').disabled = !vencEditable;
     $('#btn-cliente-nuevo').disabled = !soloEditarCampos;
     $('#foto-acciones-wrap').style.display = soloEditarCampos ? '' : 'none';
     // Vuelve a bloquear la zona si el cliente elegido ya la define
@@ -4131,11 +4145,20 @@ async function guardarCredito(ev) {
     monto: Number($('#f-monto').value),
     fecha,
     fechaDespacho: $('#f-fecha-despacho').value || null,
-    vencimiento: $('#f-vencimiento').value,
+    // Resguardo: si no es el administrador, el vencimiento del crédito que ya
+    // existe no se toca (aunque el campo se hubiera desbloqueado a la fuerza)
+    vencimiento: (existente && !puedeCambiarVencimiento())
+      ? existente.vencimiento
+      : $('#f-vencimiento').value,
     abonos,
     notas: $('#f-notas').value.trim(),
     foto: fotoActual,
     creado: existente ? existente.creado : Date.now(),
+    // Se conserva el compromiso de pago anotado por quien cobra (editar el
+    // crédito no debe borrarlo), junto con su constancia
+    compromiso: existente ? (existente.compromiso || null) : null,
+    compromisoPor: existente ? (existente.compromisoPor || null) : null,
+    compromisoEn: existente ? (existente.compromisoEn || null) : null,
   };
   credito.estado = estadoCalculado(credito);  // pagado / parcial / pendiente automático
 
