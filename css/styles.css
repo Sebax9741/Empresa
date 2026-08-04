@@ -497,6 +497,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-weight: 600;
   line-height: 1.4;
 }
+.form-error-btn { display: block; margin-top: 0.6rem; }
 
 .venc-alerta { color: var(--danger); font-weight: 700; }
 .venc-pronto { color: var(--warning); font-weight: 600; }

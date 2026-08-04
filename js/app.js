@@ -3943,11 +3943,20 @@ async function borrarRepartidor(id) {
 }
 
 /* Muestra dentro del formulario el motivo por el que no se pudo guardar y
-   lleva la vista hasta ahí (el aviso flotante se va solo en 2,6 s). */
-function errorFormulario(msg, campoId) {
+   lleva la vista hasta ahí (el aviso flotante se va solo en 2,6 s).
+   `accion` opcional: { texto, alTocar } agrega un botón para resolverlo. */
+function errorFormulario(msg, campoId, accion = null) {
   const el = $('#form-error');
   el.textContent = msg;
   el.hidden = false;
+  if (accion) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-primary btn-small form-error-btn';
+    btn.textContent = accion.texto;
+    btn.addEventListener('click', accion.alTocar);
+    el.appendChild(btn);
+  }
   toast(msg);
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   if (campoId) { const c = $('#' + campoId); if (c && !c.disabled) c.focus({ preventScroll: true }); }
@@ -3957,6 +3966,24 @@ function limpiarErrorFormulario() {
   if (el) { el.textContent = ''; el.hidden = true; }
 }
 
+/* La boleta ya tenía su crédito: se enlaza el despacho con ese crédito que ya
+   existe (en vez de crear uno repetido) y el despacho pasa a "a crédito". */
+async function vincularDespachoACreditoExistente(credito) {
+  const origen = despachoOrigen;
+  if (!origen) { toast('⚠️ No hay un despacho por enlazar'); return; }
+  const d = despachoPorId(origen);
+  if (d && d.cliente && credito.cliente
+      && d.cliente.trim().toLowerCase() !== credito.cliente.trim().toLowerCase()) {
+    if (!confirm(`El despacho es de "${d.cliente}" y el crédito Nº ${credito.boleta} es de "${credito.cliente}".\n\n¿Enlazarlos de todos modos?`)) return;
+  }
+  await vincularDespachoConCredito(origen, credito);
+  despachoOrigen = null;
+  limpiarErrorFormulario();
+  modalForm.close();
+  render();   // ya refresca la vista de despachos si está abierta
+  toast(`🔗 Despacho enlazado con el crédito Nº ${credito.boleta}`);
+}
+
 async function guardarCredito(ev) {
   ev.preventDefault();
   limpiarErrorFormulario();
@@ -3964,12 +3991,21 @@ async function guardarCredito(ev) {
   const id = $('#f-id').value || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
   const boleta = $('#f-boleta').value.trim();
 
-  // Evita boletas duplicadas (excepto al editar la misma)
+  // Evita boletas duplicadas (excepto al editar la misma). Si el crédito venía
+  // de un despacho, ese crédito ya existe: se ofrece enlazarlo en vez de crear
+  // uno repetido.
   const duplicado = creditos.find(c => c.boleta.toLowerCase() === boleta.toLowerCase() && c.id !== id);
   if (duplicado) {
+    const desdeDespacho = !$('#f-id').value && despachoOrigen;
     errorFormulario(
-      `⚠️ Ya existe un crédito con la boleta Nº ${boleta} (cliente: ${duplicado.cliente}). Cambia el número o abre ese crédito.`,
-      'f-boleta');
+      `⚠️ Ya existe un crédito con la boleta Nº ${boleta} (cliente: ${duplicado.cliente}).`
+        + (desdeDespacho
+          ? ' Puedes enlazar este despacho con ese crédito.'
+          : ' Cambia el número o abre ese crédito.'),
+      'f-boleta',
+      desdeDespacho
+        ? { texto: '🔗 Vincular con ese crédito', alTocar: () => vincularDespachoACreditoExistente(duplicado) }
+        : null);
     return;
   }
 
