@@ -2411,11 +2411,13 @@ async function importarClientesDesdeCreditos() {
 let infoCreditoId = null;
 let firmaPendiente = null;
 let editandoVencimiento = false;
+let editandoCompromiso = false;
 
 function abrirInfo(credito) {
   infoCreditoId = credito.id;
   firmaPendiente = null;
   editandoVencimiento = false;
+  editandoCompromiso = false;
   $('#cobro-monto').value = '';
   $('#cobro-metodo').value = 'efectivo';
   $('#firma-preview-wrap').hidden = true;
@@ -2446,6 +2448,79 @@ function filaVencimiento(c) {
   return `${textoVencimiento(c)}${puedeCambiar
     ? ` <button type="button" class="btn-fecha-editar" data-editar-venc title="Cambiar la fecha de vencimiento">✏️</button>`
     : ''}${constancia}`;
+}
+
+/* Fila "Compromiso de pago": la fecha en que el cliente quedó en pagar lo que
+   falta. La pone quien cobra (no cambia el vencimiento real del crédito), y
+   queda constancia de quién la anotó y cuándo. */
+function puedeCambiarCompromiso() { return puede('pagos') || puede('editar'); }
+
+function textoCompromiso(c) {
+  if (!c.compromiso) return '<span class="compromiso-vacio">— sin compromiso —</span>';
+  const dias = diasHastaVencimiento(c.compromiso);
+  let detalle = '';
+  if (saldoDe(c) <= 0) detalle = '';
+  else if (dias < 0) detalle = ` <span class="venc-alerta">(incumplido hace ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'})</span>`;
+  else if (dias === 0) detalle = ' <span class="venc-pronto">(hoy)</span>';
+  else detalle = ` <span class="venc-pronto">(en ${dias} día${dias === 1 ? '' : 's'})</span>`;
+  return `<strong>${formatoFecha(c.compromiso)}</strong>${detalle}`;
+}
+
+function filaCompromiso(c) {
+  const constancia = c.compromisoPor
+    ? `<span class="venc-constancia">🖊️ ${escapeHtml(c.compromisoPor)}${
+        fechaHoraDeTimestamp(c.compromisoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(c.compromisoEn)) : ''}</span>`
+    : '';
+  if (editandoCompromiso) {
+    return `<span class="venc-edit">
+      <input type="date" id="compromiso-edit-input" class="input input-mini" value="${c.compromiso || hoyISO()}">
+      <button type="button" data-confirmar-compromiso title="Guardar">✓</button>
+      <button type="button" data-cancelar-compromiso title="Cancelar">✕</button>
+      ${c.compromiso ? '<button type="button" data-quitar-compromiso title="Quitar el compromiso">🗑️</button>' : ''}
+    </span>`;
+  }
+  return `${textoCompromiso(c)}${puedeCambiarCompromiso()
+    ? ` <button type="button" class="btn-fecha-editar" data-editar-compromiso title="Anotar la fecha en que quedó en pagar">✏️</button>`
+    : ''}${constancia}`;
+}
+
+function iniciarEdicionCompromiso() {
+  if (!puedeCambiarCompromiso()) { toast('🔒 No tienes permiso para anotar el compromiso de pago'); return; }
+  editandoCompromiso = true;
+  renderInfo();
+}
+
+function cancelarEdicionCompromiso() {
+  editandoCompromiso = false;
+  renderInfo();
+}
+
+async function guardarCompromiso(nuevaFecha) {
+  const c = creditos.find(x => x.id === infoCreditoId);
+  if (!c) { cancelarEdicionCompromiso(); return; }
+  if ((nuevaFecha || '') === (c.compromiso || '')) { cancelarEdicionCompromiso(); return; }
+
+  const actualizado = { ...c, compromiso: nuevaFecha || null };
+  if (nuevaFecha) {
+    actualizado.compromisoPor = quienSoy();
+    actualizado.compromisoEn = marcaDeTiempo();
+  } else {
+    actualizado.compromisoPor = null;
+    actualizado.compromisoEn = null;
+  }
+  try {
+    await guardarEnStore(actualizado);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar el compromiso de pago');
+    return;
+  }
+  const i = creditos.findIndex(x => x.id === c.id);
+  if (i >= 0) creditos[i] = actualizado;
+  editandoCompromiso = false;
+  render();
+  renderInfo();
+  toast(nuevaFecha ? '🤝 Compromiso de pago anotado' : '🗑️ Compromiso de pago quitado');
 }
 
 function iniciarEdicionVencimiento() {
@@ -2504,6 +2579,7 @@ function renderInfo() {
   const filas = [
     ['Zona', c.zona || '—'],
     ['Vence', filaVencimiento(c)],
+    ['Compromiso', filaCompromiso(c)],
     cli && cli.direccion ? ['Dirección', escapeHtml(cli.direccion)] : null,
     cli && cli.telefono ? ['Teléfono', escapeHtml(cli.telefono)] : null,
     c.notas ? ['Notas', escapeHtml(c.notas)] : null,
@@ -3419,6 +3495,7 @@ function mostrarVistaDespacho(nombre) {
 
 function abrirDespachos() {
   if (!puede('despachos')) { toast('🔒 No tienes permiso para armar despachos'); return; }
+  despachoFiltroFecha = hoyISO();   // al entrar se ven los despachos de hoy
   mostrarVistaDespacho('lista');
   renderListaDespachos();
   mostrarSeccion('despachos');
@@ -4345,6 +4422,10 @@ function inicializarEventos() {
     const editarVenc = ev.target.closest('[data-editar-venc]');
     const confirmarVenc = ev.target.closest('[data-confirmar-venc]');
     const cancelarVenc = ev.target.closest('[data-cancelar-venc]');
+    const editarComp = ev.target.closest('[data-editar-compromiso]');
+    const confirmarComp = ev.target.closest('[data-confirmar-compromiso]');
+    const cancelarComp = ev.target.closest('[data-cancelar-compromiso]');
+    const quitarComp = ev.target.closest('[data-quitar-compromiso]');
     if (info) {
       const c = creditos.find(x => x.id === info.dataset.info);
       if (c) abrirInfo(c);
@@ -4389,6 +4470,14 @@ function inicializarEventos() {
       confirmarEdicionVencimiento();
     } else if (cancelarVenc) {
       cancelarEdicionVencimiento();
+    } else if (editarComp) {
+      iniciarEdicionCompromiso();
+    } else if (confirmarComp) {
+      guardarCompromiso($('#compromiso-edit-input').value);
+    } else if (quitarComp) {
+      guardarCompromiso('');
+    } else if (cancelarComp) {
+      cancelarEdicionCompromiso();
     } else if (verFoto) {
       const c = creditos.find(x => x.id === verFoto.dataset.verFoto);
       if (c && c.foto) abrirVisorImagen(c);

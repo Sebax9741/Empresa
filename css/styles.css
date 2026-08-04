@@ -499,6 +499,9 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .form-error-btn { display: block; margin-top: 0.6rem; }
 
+/* Compromiso de pago: fecha en que el cliente quedó en pagar lo que falta */
+.compromiso-vacio { color: var(--gray); font-style: italic; }
+
 .venc-alerta { color: var(--danger); font-weight: 700; }
 .venc-pronto { color: var(--warning); font-weight: 600; }
 
