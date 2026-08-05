@@ -757,10 +757,12 @@
   <!-- Visor de imagen a pantalla completa -->
   <dialog id="modal-imagen" class="modal-imagen">
     <div class="imagen-view">
-      <div class="imagen-scroll">
+      <div class="imagen-scroll" id="imagen-scroll">
         <img id="imagen-grande" alt="Boleta">
       </div>
       <div class="imagen-barra">
+        <button type="button" id="btn-zoom-menos" class="btn btn-secondary" title="Alejar">➖</button>
+        <button type="button" id="btn-zoom-mas" class="btn btn-secondary" title="Acercar">➕</button>
         <button type="button" id="btn-rotar-imagen" class="btn btn-secondary" hidden>↺ Rotar</button>
         <button type="button" id="btn-guardar-rotacion" class="btn btn-primary" hidden disabled>💾 Guardar cambios</button>
         <a id="btn-descargar-imagen" class="btn btn-primary" download>⬇️ Descargar</a>

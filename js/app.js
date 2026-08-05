@@ -6,6 +6,7 @@ let clientes = [];        // base de datos de clientes: { id, nombre, zona, dire
 let hojas = [];           // hojas de cobranza creadas: { fecha, creada, creadaPor, creadaEn, cerrada, cerradaPor, cerradaEn }
 let despachos = [];       // despachos (viajes de reparto): { id, fecha, repartidor, carguero, notas, cerrado, creado, creadoPor, pedidos: [...] }
 let repartidores = [];    // lista de repartidores (solo nombres): { id, nombre, activo, creado }
+let anulados = [];        // notas de venta anuladas: { id (nº boleta), boleta, motivo, anuladoPor, anuladoEn }
 let settings = {
   dias: 30,
   moneda: '$',
@@ -30,6 +31,7 @@ let unsubSeguridad = null; // suscripción al código de seguridad
 let unsubHojas = null;    // suscripción a las hojas de cobranza creadas
 let unsubDespachos = null; // suscripción a los despachos (viajes de reparto)
 let unsubRepartidores = null; // suscripción a la lista de repartidores
+let unsubAnulados = null;     // suscripción a las notas de venta anuladas
 let migracionRevisada = false;
 let ownerUid = null;      // dónde viven los datos del negocio (dueño)
 let yo = null;            // membresía del usuario actual: { usuario, nombre, rol, permisos }
@@ -840,6 +842,27 @@ async function guardarRepartidorEnStore(r) {
   }
 }
 
+/* Notas de venta anuladas (no llegaron a ser crédito) */
+async function guardarAnuladoEnStore(a) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'anulados', a.id), a),
+      `anulación de la nota ${a.boleta}`);
+  } else {
+    await DB.putAnulado(a);
+  }
+}
+
+async function eliminarAnuladoDeStore(id) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'anulados', id)),
+      'anulación quitada');
+  } else {
+    await DB.deleteAnulado(id);
+  }
+}
+
 async function eliminarRepartidorDeStore(id) {
   if (modoNube) {
     await escrituraNube(
@@ -1017,11 +1040,13 @@ function sesionCerrada() {
   if (unsubHojas) { unsubHojas(); unsubHojas = null; }
   if (unsubDespachos) { unsubDespachos(); unsubDespachos = null; }
   if (unsubRepartidores) { unsubRepartidores(); unsubRepartidores = null; }
+  if (unsubAnulados) { unsubAnulados(); unsubAnulados = null; }
   creditos = [];
   clientes = [];
   hojas = [];
   despachos = [];
   repartidores = [];
+  anulados = [];
   ownerUid = null;
   yo = null;
   migracionRevisada = false;
@@ -1097,6 +1122,14 @@ function suscribirNube() {
     if (!$('#view-despachos').hidden) renderDespachos();
   }, err => {
     console.error('Error al sincronizar los repartidores:', err);
+  });
+
+  if (unsubAnulados) unsubAnulados();
+  unsubAnulados = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'anulados'), snap => {
+    anulados = snap.docs.map(d => d.data());
+    render();
+  }, err => {
+    console.error('Error al sincronizar las notas anuladas:', err);
   });
 }
 
@@ -1373,13 +1406,12 @@ function boletaEntera(c) {
   return isNaN(n) ? null : n;
 }
 
-/* Números de boleta salteados (las notas de venta que faltan crear), en base
-   a TODOS los créditos. Solo se rellenan los saltos "chicos" entre boletas
-   consecutivas (guías salteadas dentro de la misma secuencia). Un salto muy
-   grande se toma como corte entre lotes/fechas distintos —por ejemplo un
-   crédito viejo aislado— y NO se rellena, para no generar cientos de huecos. */
+/* Números de boleta salteados (las notas de venta que faltan crear).
+   Solo se muestran los huecos CORTOS: hasta 7 números seguidos. Un salto más
+   largo (por ejemplo del 3562 al 3589) es un tramo que no corresponde a esta
+   secuencia y llenaría la pantalla, así que no se muestra. */
 const MAX_FALTANTES = 400;
-const MAX_SALTO_FALTANTE = 100;
+const MAX_SALTO_FALTANTE = 7;
 function listaFaltantes() {
   const nums = [...new Set(creditos.map(boletaEntera).filter(n => n != null))].sort((a, b) => a - b);
   if (nums.length < 2) return [];
@@ -1387,13 +1419,65 @@ function listaFaltantes() {
   for (let i = 1; i < nums.length; i++) {
     const prev = nums[i - 1], cur = nums[i];
     const salto = cur - prev - 1;                 // cuántos números faltan en medio
-    if (salto < 1 || salto > MAX_SALTO_FALTANTE) continue;   // sin hueco o salto grande
+    if (salto < 1 || salto > MAX_SALTO_FALTANTE) continue;   // sin hueco o tramo largo
     for (let n = prev + 1; n < cur; n++) {
       faltantes.push(n);
       if (faltantes.length > MAX_FALTANTES) return faltantes;
     }
   }
   return faltantes;
+}
+
+/* Anulaciones: una nota de venta que no llegó a ser crédito porque se anuló */
+function anuladoDe(boleta) {
+  return anulados.find(a => String(a.boleta) === String(boleta)) || null;
+}
+
+/* Marca una nota de venta como anulada, con el motivo escrito por el usuario */
+async function anularBoleta(boleta) {
+  if (!puede('crear') && !puede('editar')) { toast('🔒 No tienes permiso para anular notas de venta'); return; }
+  const previo = anuladoDe(boleta);
+  const motivo = prompt(
+    `Anular la nota de venta Nº ${boleta}\n\n¿Por qué se anuló? (queda registrado)`,
+    previo ? (previo.motivo || '') : '');
+  if (motivo === null) return;                       // canceló
+  const texto = motivo.trim();
+  if (!texto) { toast('⚠️ Escribe el motivo de la anulación'); return; }
+
+  const registro = {
+    id: String(boleta),
+    boleta: String(boleta),
+    motivo: texto,
+    anuladoPor: quienSoy(),
+    anuladoEn: marcaDeTiempo(),
+  };
+  try {
+    await guardarAnuladoEnStore(registro);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar la anulación. Revisa tu conexión.');
+    return;
+  }
+  const i = anulados.findIndex(a => String(a.boleta) === String(boleta));
+  if (i >= 0) anulados[i] = registro; else anulados.push(registro);
+  render();
+  toast(`🚫 Nota de venta Nº ${boleta} anulada`);
+}
+
+/* Deshace la anulación (la nota vuelve a figurar como pendiente de crear) */
+async function quitarAnulacion(boleta) {
+  if (!puede('crear') && !puede('editar')) { toast('🔒 No tienes permiso'); return; }
+  if (!confirm(`¿Quitar la anulación de la nota Nº ${boleta}?\n\nVolverá a aparecer como pendiente de crear.`)) return;
+  try {
+    await eliminarAnuladoDeStore(String(boleta));
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo quitar la anulación');
+    return;
+  }
+  anulados = anulados.filter(a => String(a.boleta) !== String(boleta));
+  render();
+  toast('↩️ Anulación quitada');
 }
 
 /* Mezcla las filas "hueco" con la lista de créditos, ordenadas por N° de boleta,
@@ -1414,7 +1498,8 @@ function inyectarFaltantes(lista, dir) {
 function renderAvisoFaltantes() {
   const el = $('#faltantes-aviso');
   if (!el) return;
-  const falt = listaFaltantes();
+  // Las que ya se anularon no cuentan como pendientes
+  const falt = listaFaltantes().filter(n => !anuladoDe(n));
   if (!falt.length) { el.hidden = true; return; }
   el.hidden = false;
   const muestra = falt.slice(0, 10).join(', ') + (falt.length > 10 ? '…' : '');
@@ -1589,15 +1674,42 @@ function renderTabla(lista) {
   tbody.innerHTML = lista.map(c => {
     // Fila "hueco": una nota de venta cuyo número falta crear todavía.
     if (c.__faltante) {
-      const crear = puede('crear')
-        ? `<button class="btn btn-secondary btn-small" data-crear-boleta="${escapeHtml(c.boleta)}" title="Crear esta nota de venta">➕ Crear</button>`
-        : '';
+      const anul = anuladoDe(c.boleta);
+      const puedeAnular = puede('crear') || puede('editar');
+      // Nota de venta anulada: fila tachada, con el motivo a la vista
+      if (anul) {
+        const quien = anul.anuladoPor
+          ? `${escapeHtml(anul.anuladoPor)}${fechaHoraDeTimestamp(anul.anuladoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(anul.anuladoEn)) : ''}`
+          : '';
+        return `
+        <tr class="credito-anulado" title="Nota de venta anulada">
+          <td><strong>${escapeHtml(c.boleta)}</strong></td>
+          <td colspan="10">
+            <div class="fila-especial">
+              <span class="badge badge-anulado">🚫 Anulado</span>
+              <span class="anulado-motivo">📝 ${escapeHtml(anul.motivo || '')}</span>
+              ${quien ? `<span class="anulado-quien">🖊️ ${quien}</span>` : ''}
+              ${puedeAnular ? `<span class="row-actions">
+                 <button class="btn btn-secondary btn-small" data-anular="${escapeHtml(c.boleta)}" title="Cambiar el motivo">✏️</button>
+                 <button class="btn btn-secondary btn-small" data-desanular="${escapeHtml(c.boleta)}" title="Quitar la anulación">↩️</button>
+               </span>` : ''}
+            </div>
+          </td>
+        </tr>`;
+      }
       return `
-      <tr class="credito-faltante" ${puede('crear') ? `data-crear-boleta="${escapeHtml(c.boleta)}"` : ''} title="Falta crear esta nota de venta">
+      <tr class="credito-faltante" title="Falta crear esta nota de venta">
         <td><strong>${escapeHtml(c.boleta)}</strong></td>
-        <td class="faltante-msg" colspan="7">— nota de venta sin crear —</td>
-        <td><span class="badge badge-faltante">⛳ Falta</span></td>
-        <td colspan="2">${crear}</td>
+        <td colspan="10">
+          <div class="fila-especial">
+            <span class="badge badge-faltante">⛳ Falta</span>
+            <span class="faltante-msg">— nota de venta sin crear —</span>
+            <span class="row-actions">
+              ${puede('crear') ? `<button class="btn btn-secondary btn-small" data-crear-boleta="${escapeHtml(c.boleta)}" title="Crear esta nota de venta">➕ Crear</button>` : ''}
+              ${puedeAnular ? `<button class="btn btn-secondary btn-small" data-anular="${escapeHtml(c.boleta)}" title="Marcar esta nota como anulada">🚫 Anulado</button>` : ''}
+            </span>
+          </div>
+        </td>
       </tr>`;
     }
     const saldo = saldoDe(c);
@@ -1648,14 +1760,37 @@ function renderTarjetas(lista) {
   const cont = $('#cards');
   cont.innerHTML = lista.map(c => {
     if (c.__faltante) {
+      const anul = anuladoDe(c.boleta);
+      const puedeAnular = puede('crear') || puede('editar');
+      if (anul) {
+        const quien = anul.anuladoPor
+          ? `${escapeHtml(anul.anuladoPor)}${fechaHoraDeTimestamp(anul.anuladoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(anul.anuladoEn)) : ''}`
+          : '';
+        return `
+        <article class="card card-anulado">
+          <div class="card-main">
+            <p class="card-title">Boleta Nº ${escapeHtml(c.boleta)}</p>
+            <p class="card-sub anulado-motivo">📝 ${escapeHtml(anul.motivo || '')}</p>
+            ${quien ? `<p class="card-sub anulado-quien">🖊️ ${quien}</p>` : ''}
+          </div>
+          <div class="card-side"><span class="badge badge-anulado">🚫 Anulado</span></div>
+          ${puedeAnular ? `<div class="card-actions">
+            <button class="btn btn-secondary btn-small" data-anular="${escapeHtml(c.boleta)}">✏️ Motivo</button>
+            <button class="btn btn-secondary btn-small" data-desanular="${escapeHtml(c.boleta)}">↩️ Quitar</button>
+          </div>` : ''}
+        </article>`;
+      }
       return `
-      <article class="card card-faltante" ${puede('crear') ? `data-crear-boleta="${escapeHtml(c.boleta)}"` : ''}>
+      <article class="card card-faltante">
         <div class="card-main">
           <p class="card-title">Boleta Nº ${escapeHtml(c.boleta)}</p>
           <p class="card-sub faltante-msg">— nota de venta sin crear —</p>
         </div>
         <div class="card-side"><span class="badge badge-faltante">⛳ Falta</span></div>
-        ${puede('crear') ? `<div class="card-actions"><button class="btn btn-secondary btn-small" data-crear-boleta="${escapeHtml(c.boleta)}">➕ Crear</button></div>` : ''}
+        <div class="card-actions">
+          ${puede('crear') ? `<button class="btn btn-secondary btn-small" data-crear-boleta="${escapeHtml(c.boleta)}">➕ Crear</button>` : ''}
+          ${puedeAnular ? `<button class="btn btn-secondary btn-small" data-anular="${escapeHtml(c.boleta)}">🚫 Anulado</button>` : ''}
+        </div>
       </article>`;
     }
     const debe = saldoDe(c);
@@ -3052,7 +3187,131 @@ function mostrarImagenGrande(dataUrl, nombreArchivo) {
   const enlace = $('#btn-descargar-imagen');
   enlace.href = dataUrl;
   enlace.download = String(nombreArchivo).replace(/[^\w.-]/g, '_');
+  reiniciarZoomImagen();
   $('#modal-imagen').showModal();
+}
+
+/* ====== Zoom del visor de fotos ======
+   Pellizcar con dos dedos para acercar/alejar, arrastrar para moverse y
+   doble toque para acercar/alejar de golpe. En computadora: Ctrl + rueda. */
+const ZOOM_MAX = 6;
+let zoomEscala = 1, zoomX = 0, zoomY = 0;
+const zoomPunteros = new Map();
+let zoomDistIni = 0, zoomEscalaIni = 1, zoomXIni = 0, zoomYIni = 0;
+let zoomCentroIni = null, zoomArrastreIni = null, zoomUltimoToque = 0;
+
+function aplicarZoomImagen() {
+  const img = $('#imagen-grande');
+  if (!img) return;
+  // No dejar que la foto se escape de la pantalla al arrastrarla
+  const caja = img.getBoundingClientRect();
+  const anchoBase = caja.width / zoomEscala, altoBase = caja.height / zoomEscala;
+  const maxX = Math.max(0, (anchoBase * zoomEscala - anchoBase) / 2);
+  const maxY = Math.max(0, (altoBase * zoomEscala - altoBase) / 2);
+  zoomX = Math.min(maxX, Math.max(-maxX, zoomX));
+  zoomY = Math.min(maxY, Math.max(-maxY, zoomY));
+  img.style.transform = `translate(${zoomX}px, ${zoomY}px) scale(${zoomEscala})`;
+  img.classList.toggle('con-zoom', zoomEscala > 1);
+}
+
+function reiniciarZoomImagen() {
+  zoomEscala = 1; zoomX = 0; zoomY = 0;
+  zoomPunteros.clear();
+  aplicarZoomImagen();
+}
+
+/* Acerca/aleja manteniendo fijo el punto de la foto que se está tocando */
+function zoomHacia(nuevaEscala, puntoX, puntoY) {
+  const img = $('#imagen-grande');
+  if (!img) return;
+  const caja = img.getBoundingClientRect();
+  const centroX = caja.left + caja.width / 2;
+  const centroY = caja.top + caja.height / 2;
+  const escala = Math.min(ZOOM_MAX, Math.max(1, nuevaEscala));
+  const factor = escala / zoomEscala;
+  zoomX = puntoX - centroX - (puntoX - centroX - zoomX) * factor;
+  zoomY = puntoY - centroY - (puntoY - centroY - zoomY) * factor;
+  zoomEscala = escala;
+  if (zoomEscala === 1) { zoomX = 0; zoomY = 0; }
+  aplicarZoomImagen();
+}
+
+function distanciaPunteros() {
+  const [a, b] = [...zoomPunteros.values()];
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+function centroPunteros() {
+  const [a, b] = [...zoomPunteros.values()];
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function prepararZoomImagen() {
+  const zona = $('#imagen-scroll');
+  const img = $('#imagen-grande');
+  if (!zona || !img) return;
+
+  zona.addEventListener('pointerdown', ev => {
+    // Si el navegador no deja capturar el puntero, seguimos igual: lo importante
+    // es registrar el dedo para el pellizco.
+    try { zona.setPointerCapture(ev.pointerId); } catch (e) { /* sin captura */ }
+    zoomPunteros.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (zoomPunteros.size === 2) {
+      zoomDistIni = distanciaPunteros();
+      zoomEscalaIni = zoomEscala;
+      zoomCentroIni = centroPunteros();
+      zoomXIni = zoomX; zoomYIni = zoomY;
+      zoomArrastreIni = null;
+    } else if (zoomPunteros.size === 1) {
+      zoomArrastreIni = { x: ev.clientX, y: ev.clientY, zx: zoomX, zy: zoomY };
+      // Doble toque: acercar o volver al tamaño normal
+      const ahora = Date.now();
+      if (ahora - zoomUltimoToque < 300) {
+        zoomHacia(zoomEscala > 1 ? 1 : 2.5, ev.clientX, ev.clientY);
+        zoomUltimoToque = 0;
+      } else {
+        zoomUltimoToque = ahora;
+      }
+    }
+  });
+
+  zona.addEventListener('pointermove', ev => {
+    if (!zoomPunteros.has(ev.pointerId)) return;
+    zoomPunteros.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+    if (zoomPunteros.size === 2 && zoomDistIni > 0) {
+      ev.preventDefault();
+      const escala = Math.min(ZOOM_MAX, Math.max(1, zoomEscalaIni * (distanciaPunteros() / zoomDistIni)));
+      const centro = centroPunteros();
+      const caja = img.getBoundingClientRect();
+      const cx = caja.left + caja.width / 2, cy = caja.top + caja.height / 2;
+      const factor = escala / zoomEscalaIni;
+      // Mantiene bajo los dedos el punto donde empezó el pellizco y sigue su arrastre
+      zoomX = zoomCentroIni.x - cx - (zoomCentroIni.x - cx - zoomXIni) * factor + (centro.x - zoomCentroIni.x);
+      zoomY = zoomCentroIni.y - cy - (zoomCentroIni.y - cy - zoomYIni) * factor + (centro.y - zoomCentroIni.y);
+      zoomEscala = escala;
+      if (zoomEscala === 1) { zoomX = 0; zoomY = 0; }
+      aplicarZoomImagen();
+    } else if (zoomPunteros.size === 1 && zoomEscala > 1 && zoomArrastreIni) {
+      ev.preventDefault();
+      zoomX = zoomArrastreIni.zx + (ev.clientX - zoomArrastreIni.x);
+      zoomY = zoomArrastreIni.zy + (ev.clientY - zoomArrastreIni.y);
+      aplicarZoomImagen();
+    }
+  });
+
+  const soltar = ev => {
+    zoomPunteros.delete(ev.pointerId);
+    if (zoomPunteros.size < 2) zoomDistIni = 0;
+    if (zoomPunteros.size === 0) zoomArrastreIni = null;
+  };
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => zona.addEventListener(t, soltar));
+
+  // Computadora: Ctrl + rueda (o gesto del trackpad)
+  zona.addEventListener('wheel', ev => {
+    if (!ev.ctrlKey) return;
+    ev.preventDefault();
+    zoomHacia(zoomEscala * (ev.deltaY < 0 ? 1.15 : 0.87), ev.clientX, ev.clientY);
+  }, { passive: false });
 }
 
 /* Foto de la boleta: permite rotar (sentido antihorario) y guardar el cambio */
@@ -3087,6 +3346,7 @@ function rotarImagenVisor() {
     $('#imagen-grande').src = visorImagenActual;
     $('#btn-descargar-imagen').href = visorImagenActual;
     $('#btn-guardar-rotacion').disabled = false;
+    reiniciarZoomImagen();
   };
   img.src = visorImagenActual;
 }
@@ -4435,6 +4695,8 @@ function inicializarEventos() {
     const editar = ev.target.closest('[data-editar]');
     const borrar = ev.target.closest('[data-borrar]');
     const crearBoleta = ev.target.closest('[data-crear-boleta]');
+    const anular = ev.target.closest('[data-anular]');
+    const desanular = ev.target.closest('[data-desanular]');
     const verFoto = ev.target.closest('[data-ver-foto]');
     const verFirma = ev.target.closest('[data-ver-firma]');
     const verFotoInfo = ev.target.closest('[data-ver-foto-info]');
@@ -4471,6 +4733,10 @@ function inicializarEventos() {
       if (c && c.foto) abrirVisorImagen(c);
     } else if (ev.target.closest('#faltantes-aviso')) {
       revisarFaltantes();
+    } else if (anular) {
+      anularBoleta(anular.dataset.anular);
+    } else if (desanular) {
+      quitarAnulacion(desanular.dataset.desanular);
     } else if (crearBoleta) {
       // Fila "hueco": crear la nota de venta que falta, con el N° ya puesto
       if (puede('crear')) abrirFormulario(null, { boleta: crearBoleta.dataset.crearBoleta });
@@ -4507,6 +4773,19 @@ function inicializarEventos() {
     }
   });
   $('#btn-cerrar-imagen').addEventListener('click', () => $('#modal-imagen').close());
+  // Zoom del visor: pellizco, doble toque, arrastre y botones ➕ / ➖
+  prepararZoomImagen();
+  const centroPantalla = () => {
+    const c = $('#imagen-scroll').getBoundingClientRect();
+    return { x: c.left + c.width / 2, y: c.top + c.height / 2 };
+  };
+  $('#btn-zoom-mas').addEventListener('click', () => {
+    const p = centroPantalla(); zoomHacia(zoomEscala * 1.5, p.x, p.y);
+  });
+  $('#btn-zoom-menos').addEventListener('click', () => {
+    const p = centroPantalla(); zoomHacia(zoomEscala / 1.5, p.x, p.y);
+  });
+  $('#modal-imagen').addEventListener('close', reiniciarZoomImagen);
   $('#btn-rotar-imagen').addEventListener('click', rotarImagenVisor);
   $('#btn-guardar-rotacion').addEventListener('click', guardarRotacionImagen);
 
@@ -4784,6 +5063,7 @@ async function iniciarLocal() {
     clientes = await DB.getAllClientes();
     despachos = await DB.getAllDespachos();
     repartidores = await DB.getAllRepartidores();
+    anulados = await DB.getAllAnulados();
     ordenarClientes();
   } catch (e) {
     toast('❌ No se pudo abrir la base de datos local');
@@ -4791,6 +5071,7 @@ async function iniciarLocal() {
     clientes = [];
     despachos = [];
     repartidores = [];
+    anulados = [];
   }
   cargarSeguridad();
   llenarSelectClientes();

@@ -7,12 +7,13 @@ const DB = (() => {
   const STORE_CLI = 'clientes';
   const STORE_DESP = 'despachos';
   const STORE_REP = 'repartidores';
+  const STORE_ANUL = 'anulados';
   let dbPromise = null;
 
   function open() {
     if (!dbPromise) {
       dbPromise = new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 3);
+        const req = indexedDB.open(DB_NAME, 4);
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains(STORE)) {
@@ -26,6 +27,9 @@ const DB = (() => {
           }
           if (!db.objectStoreNames.contains(STORE_REP)) {
             db.createObjectStore(STORE_REP, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(STORE_ANUL)) {
+            db.createObjectStore(STORE_ANUL, { keyPath: 'id' });
           }
         };
         req.onsuccess = () => resolve(req.result);
@@ -69,5 +73,10 @@ const DB = (() => {
     getAllRepartidores() { return leerTodo(STORE_REP); },
     putRepartidor(r) { return tx(STORE_REP, 'readwrite', s => s.put(r)); },
     deleteRepartidor(id) { return tx(STORE_REP, 'readwrite', s => s.delete(id)); },
+
+    /* Notas de venta anuladas: { id (nº de boleta), boleta, motivo, anuladoPor, anuladoEn } */
+    getAllAnulados() { return leerTodo(STORE_ANUL); },
+    putAnulado(a) { return tx(STORE_ANUL, 'readwrite', s => s.put(a)); },
+    deleteAnulado(id) { return tx(STORE_ANUL, 'readwrite', s => s.delete(id)); },
   };
 })();

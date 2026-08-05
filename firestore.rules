@@ -57,6 +57,14 @@ service cloud.firestore {
         allow update, delete: if esAdmin();
       }
 
+      // Notas de venta anuladas (el número existe pero no llegó a ser crédito).
+      // Quien puede crear o editar créditos las anula; borrarlas (deshacer la
+      // anulación) también.
+      match /anulados/{docId} {
+        allow read: if esMiembro();
+        allow create, update, delete: if permiso('crear') || permiso('editar');
+      }
+
       // Despachos (viajes de reparto) y sus pedidos, y la lista de repartidores.
       // Quien tenga el permiso "despachos" (o el administrador) los arma y edita.
       match /despachos/{docId} {
