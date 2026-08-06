@@ -1,8 +1,19 @@
+# Dependencias
 node_modules/
+
+# Carpeta que se arma sola para publicar la web
 www/
+
+# Proyecto Android generado por Capacitor
 android/
-assets/
-*.apk
-# Registros que deja el emulador de Firebase al probar en local
-*-debug.log
-.firebase/
+
+# NUNCA subir la clave de firma del APK: va en los secretos de GitHub
+# (ANDROID_KEYSTORE_BASE64 y ANDROID_KEYSTORE_PASSWORD)
+android-keys/
+*.keystore
+*.jks
+
+# Credenciales
+*service-account*.json
+.env
+.env.*

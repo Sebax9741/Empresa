@@ -59,13 +59,31 @@ jobs:
       - name: Compilar APK
         run: cd android && ./gradlew assembleRelease
 
+      # La clave de firma NO vive en el repositorio: se guarda en los secretos
+      # de GitHub (Settings → Secrets and variables → Actions).
+      - name: Preparar la clave de firma
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Falta el secreto ANDROID_KEYSTORE_BASE64. Mira el README (sección 'Clave de firma del APK')."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+
       - name: Firmar APK
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           "$BT/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk apk-alineada.apk
-          "$BT/apksigner" sign --ks android-keys/release.keystore \
-            --ks-pass pass:creditos2026 --ks-key-alias creditos --key-pass pass:creditos2026 \
+          "$BT/apksigner" sign --ks release.keystore \
+            --ks-pass env:KS_PASS --ks-key-alias creditos --key-pass env:KS_PASS \
             --out control-creditos.apk apk-alineada.apk
+
+      - name: Borrar la clave del disco
+        if: always()
+        run: rm -f release.keystore
 
       - name: Publicar APK en Releases
         uses: softprops/action-gh-release@v2

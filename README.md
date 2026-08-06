@@ -92,6 +92,21 @@ Este paso es manual a propósito (no se dispara solo en cada cambio de código) 
 
 > **La web se publica sola** con cada cambio. El **APK se genera a pedido**, para no gastar los minutos gratis de GitHub: entra a **Actions → "Compilar APK de Android" → "Run workflow"** y, cuando termine, descarga el APK desde *Releases*. Se instala encima del anterior, sin perder nada (tus datos están en la nube).
 
+## Clave de firma del APK (seguridad)
+
+La clave que firma el APK **no está en este repositorio**: vive en los **secretos de GitHub**,
+así el repositorio puede ser público sin exponerla. Son dos secretos, en
+**Settings → Secrets and variables → Actions**:
+
+| Nombre del secreto | Qué contiene |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | El archivo `release.keystore` convertido a texto (base64) |
+| `ANDROID_KEYSTORE_PASSWORD` | La contraseña de esa clave |
+
+> ⚠️ Guarda una copia del archivo `release.keystore` y de su contraseña en un lugar seguro
+> (fuera de GitHub). Si se pierden, no se pueden generar actualizaciones del APK que se
+> instalen encima de la app ya instalada: habría que desinstalar y volver a instalar.
+
 ## Instalar en iPhone / iPad (y en la computadora)
 
 En iPhone no se usa el APK (eso es solo de Android). La app se instala desde **Safari** y queda igual que una app normal. Para eso primero hay que publicar la web en **Firebase Hosting** (gratis, usa tu mismo proyecto). Se hace **una sola vez**:
