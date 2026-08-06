@@ -1161,8 +1161,8 @@ function sincronizarNavLateral() {
 }
 
 /* ====== Router de apartados (cada uno es una sección de página, no un modal) ====== */
-const SECCIONES = ['creditos', 'despachos', 'clientes', 'cobranza', 'usuarios', 'settings'];
-let seccionActual = 'creditos';
+const SECCIONES = ['dashboard', 'creditos', 'despachos', 'clientes', 'cobranza', 'usuarios', 'settings'];
+let seccionActual = 'dashboard';
 
 function mostrarSeccion(nombre) {
   if (!SECCIONES.includes(nombre)) nombre = 'creditos';
@@ -1171,11 +1171,20 @@ function mostrarSeccion(nombre) {
     const el = $('#view-' + s);
     if (el) el.hidden = (s !== nombre);
   });
+  if (nombre === 'dashboard') renderDashboard();
+  // Entrada suave al cambiar de sección
+  const vista = $('#view-' + nombre);
+  if (vista && !prefiereMenosMovimiento()) {
+    vista.classList.remove('entrando');
+    void vista.offsetWidth;          // reinicia la animación
+    vista.classList.add('entrando');
+  }
   // El botón "＋ Nuevo crédito" solo aplica en Créditos
   const btnNew = $('#btn-new');
   if (btnNew) btnNew.hidden = (nombre !== 'creditos') || !puede('crear');
   // Resaltar el destino activo en el panel lateral y en la cabecera
   const navId = nombre === 'creditos' ? 'nav-inicio' : 'nav-' + nombre;
+  if (nombre === 'dashboard' && btnNew) btnNew.hidden = true;
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('activo', b.id === navId));
   const btnId = { despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
   document.querySelectorAll('.header-actions .btn-icon').forEach(b => b.classList.toggle('activo', b.id === btnId));
@@ -1597,6 +1606,7 @@ function render() {
   actualizarContadorFiltro();
   if ($('#modal-info').open) renderInfo();   // la ficha se mantiene al día
   renderAvisoFaltantes();
+  if (!$('#view-dashboard').hidden) renderDashboard();
   // Si un crédito enlazado se pagó, el estado del despacho pasa a "pagado":
   // mantén la vista de despachos al día si está abierta.
   if (!$('#view-despachos').hidden) renderDespachos();
@@ -3421,6 +3431,305 @@ async function manejarFoto(input) {
   input.value = '';
 }
 
+/* ====== Dashboard ======
+   Gráficos hechos a mano con SVG: sin librerías externas, así la app sigue
+   funcionando sin internet y pesa lo mismo. */
+function prefiereMenosMovimiento() {
+  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+const COLORES_GRAFICO = ['#e0714a', '#2a9d8f', '#e9b949', '#3b7dd8', '#8b6fc4', '#5c6b7f', '#d1483a'];
+
+/* Monto corto para los ejes: 1.2k, 15k, 1.3M */
+function montoCorto(n) {
+  const v = Math.abs(n);
+  if (v >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (v >= 1000) return Math.round(n / 1000) + 'k';
+  return String(Math.round(n));
+}
+
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+/* Curva suave (Catmull-Rom convertida a Bézier) que pasa por todos los puntos */
+function curvaSuave(pts) {
+  if (pts.length < 2) return '';
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x} ${p2.y}`;
+  }
+  return d;
+}
+
+/* Gráfico de área: cuánto se cobró cada mes */
+function graficoArea(datos) {
+  if (!datos.length || datos.every(d => !d.valor)) return '<p class="chart-vacio">Todavía no hay cobros registrados.</p>';
+  const An = 720, Al = 240, mIzq = 52, mDer = 12, mSup = 14, mInf = 30;
+  const anchoUtil = An - mIzq - mDer, altoUtil = Al - mSup - mInf;
+  const max = Math.max(...datos.map(d => d.valor)) * 1.15 || 1;
+  const paso = datos.length > 1 ? anchoUtil / (datos.length - 1) : 0;
+  const pts = datos.map((d, i) => ({
+    x: +(mIzq + i * paso).toFixed(1),
+    y: +(mSup + altoUtil - (d.valor / max) * altoUtil).toFixed(1),
+  }));
+  const linea = curvaSuave(pts);
+  const area = `${linea} L ${pts[pts.length - 1].x} ${mSup + altoUtil} L ${pts[0].x} ${mSup + altoUtil} Z`;
+  // Rejilla horizontal con sus valores
+  const guias = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const y = +(mSup + altoUtil - f * altoUtil).toFixed(1);
+    return `<line x1="${mIzq}" y1="${y}" x2="${An - mDer}" y2="${y}" stroke="var(--border)" stroke-width="1"/>
+            <text x="${mIzq - 8}" y="${y + 4}" text-anchor="end" class="eje">${montoCorto(max * f)}</text>`;
+  }).join('');
+  const etiquetas = datos.map((d, i) =>
+    `<text x="${pts[i].x}" y="${Al - 8}" text-anchor="middle" class="eje">${escapeHtml(d.etiqueta)}</text>`).join('');
+  const puntos = datos.map((d, i) => `
+    <g class="punto">
+      <circle cx="${pts[i].x}" cy="${pts[i].y}" r="4.5" fill="#fff" stroke="var(--primary)" stroke-width="2.5"/>
+      <title>${escapeHtml(d.etiqueta)}: ${formatoMonto(d.valor)}</title>
+    </g>`).join('');
+  return `<svg viewBox="0 0 ${An} ${Al}" role="img" aria-label="Cobranza por mes">
+    <defs>
+      <linearGradient id="gradArea" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--primary)" stop-opacity="0.28"/>
+        <stop offset="100%" stop-color="var(--primary)" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    ${guias}
+    <path d="${area}" fill="url(#gradArea)" class="area-relleno"/>
+    <path d="${linea}" fill="none" stroke="var(--primary)" stroke-width="3"
+          stroke-linecap="round" stroke-linejoin="round" class="area-linea"/>
+    ${puntos}${etiquetas}
+  </svg>`;
+}
+
+/* Gráfico de dona con leyenda */
+function graficoDona(datos, textoCentro) {
+  const total = datos.reduce((s, d) => s + d.valor, 0);
+  if (!total) return '<p class="chart-vacio">Sin datos para mostrar.</p>';
+  const R = 78, r = 50, cx = 100, cy = 100;
+  let ang = -Math.PI / 2;   // empieza arriba
+  const arcos = datos.map((d, i) => {
+    const porcion = d.valor / total;
+    const fin = ang + porcion * Math.PI * 2;
+    const grande = porcion > 0.5 ? 1 : 0;
+    const x1 = cx + R * Math.cos(ang), y1 = cy + R * Math.sin(ang);
+    const x2 = cx + R * Math.cos(fin), y2 = cy + R * Math.sin(fin);
+    const x3 = cx + r * Math.cos(fin), y3 = cy + r * Math.sin(fin);
+    const x4 = cx + r * Math.cos(ang), y4 = cy + r * Math.sin(ang);
+    // Una sola porción: se dibuja el anillo completo
+    const d2 = porcion >= 0.999
+      ? `M ${cx - R} ${cy} A ${R} ${R} 0 1 1 ${cx + R} ${cy} A ${R} ${R} 0 1 1 ${cx - R} ${cy}
+         M ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy} A ${r} ${r} 0 1 0 ${cx - r} ${cy}`
+      : `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${grande} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}
+         L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${grande} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+    ang = fin;
+    const color = COLORES_GRAFICO[i % COLORES_GRAFICO.length];
+    return `<path d="${d2}" fill="${color}" class="porcion" style="--i:${i}">
+      <title>${escapeHtml(d.etiqueta)}: ${formatoMonto(d.valor)} (${Math.round(porcion * 100)}%)</title></path>`;
+  }).join('');
+  const leyenda = datos.map((d, i) => `
+    <span class="leyenda-item">
+      <span class="leyenda-punto" style="background:${COLORES_GRAFICO[i % COLORES_GRAFICO.length]}"></span>
+      ${escapeHtml(d.etiqueta)} <span class="leyenda-val">${formatoMonto(d.valor)}</span>
+    </span>`).join('');
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="Distribución">
+      ${arcos}
+      <text x="100" y="94" text-anchor="middle" class="dona-et">TOTAL</text>
+      <text x="100" y="118" text-anchor="middle" class="dona-val">${escapeHtml(textoCentro)}</text>
+    </svg>
+    <div class="leyenda">${leyenda}</div>`;
+}
+
+/* Barras horizontales */
+function graficoBarras(datos, formato = formatoMonto) {
+  if (!datos.length || datos.every(d => !d.valor)) return '<p class="chart-vacio">Sin datos para mostrar.</p>';
+  const max = Math.max(...datos.map(d => d.valor)) || 1;
+  return `<div class="barras">${datos.map((d, i) => `
+    <div class="barra-fila">
+      <span class="barra-et">${escapeHtml(d.etiqueta)}</span>
+      <span class="barra-pista">
+        <span class="barra-valor" style="--w:${(d.valor / max * 100).toFixed(1)}%; --c:${d.color || COLORES_GRAFICO[i % COLORES_GRAFICO.length]}; --i:${i}"></span>
+      </span>
+      <span class="barra-num">${formato(d.valor)}</span>
+    </div>`).join('')}</div>`;
+}
+
+/* ---- Datos del dashboard ---- */
+function datosCobranzaPorMes(meses = 6) {
+  const hoy = new Date();
+  const serie = [];
+  for (let i = meses - 1; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const clave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    serie.push({ clave, etiqueta: MESES_CORTOS[d.getMonth()], valor: 0 });
+  }
+  const indice = new Map(serie.map(s => [s.clave, s]));
+  for (const c of creditos) {
+    for (const a of abonosDe(c)) {
+      if (!a.fecha) continue;
+      const s = indice.get(String(a.fecha).slice(0, 7));
+      if (s) s.valor += Number(a.monto) || 0;
+    }
+  }
+  return serie;
+}
+
+function datosDeudaPorZona() {
+  const mapa = new Map();
+  for (const c of creditos) {
+    const saldo = saldoDe(c);
+    if (saldo <= 0) continue;
+    const z = c.zona || 'Sin zona';
+    mapa.set(z, (mapa.get(z) || 0) + saldo);
+  }
+  return [...mapa.entries()]
+    .map(([etiqueta, valor]) => ({ etiqueta, valor }))
+    .sort((a, b) => b.valor - a.valor)
+    .slice(0, 6);
+}
+
+function datosEstados() {
+  const cuenta = { pendiente: 0, parcial: 0, vencido: 0, pagado: 0 };
+  for (const c of creditos) cuenta[estadoEfectivo(c)] = (cuenta[estadoEfectivo(c)] || 0) + 1;
+  return [
+    { etiqueta: '🕐 Pendientes', valor: cuenta.pendiente, color: '#3b7dd8' },
+    { etiqueta: '🪙 Pago parcial', valor: cuenta.parcial, color: '#e9b949' },
+    { etiqueta: '⚠️ Vencidos', valor: cuenta.vencido, color: '#d1483a' },
+    { etiqueta: '✅ Pagados', valor: cuenta.pagado, color: '#2a9d8f' },
+  ];
+}
+
+function datosMetodosPago(dias = 30) {
+  const desde = new Date();
+  desde.setDate(desde.getDate() - dias);
+  const limite = desde.toISOString().slice(0, 10);
+  const tot = { efectivo: 0, yape: 0, bcp: 0 };
+  for (const c of creditos) {
+    for (const a of abonosDe(c)) {
+      if (!a.fecha || a.fecha < limite) continue;
+      tot[metodoDe(a)] = (tot[metodoDe(a)] || 0) + (Number(a.monto) || 0);
+    }
+  }
+  return [
+    { etiqueta: '💵 Efectivo', valor: tot.efectivo, color: '#2a9d8f' },
+    { etiqueta: '📱 Yape', valor: tot.yape, color: '#8b6fc4' },
+    { etiqueta: '🏦 BCP', valor: tot.bcp, color: '#3b7dd8' },
+  ];
+}
+
+/* Créditos que necesitan atención: vencidos y compromisos incumplidos o de hoy */
+function datosAtencion() {
+  const hoy = hoyISO();
+  return creditos
+    .filter(c => saldoDe(c) > 0)
+    .map(c => {
+      const dv = diasHastaVencimiento(c.vencimiento);
+      if (c.compromiso && c.compromiso <= hoy) {
+        const dc = diasHastaVencimiento(c.compromiso);
+        return { c, orden: dc, tipo: 'compromiso',
+          texto: dc === 0 ? 'Prometió pagar hoy' : `Prometió pagar hace ${Math.abs(dc)} día${Math.abs(dc) === 1 ? '' : 's'}` };
+      }
+      if (dv < 0) return { c, orden: dv, tipo: 'vencido', texto: `Venció hace ${Math.abs(dv)} día${Math.abs(dv) === 1 ? '' : 's'}` };
+      if (dv === 0) return { c, orden: 0, tipo: 'hoy', texto: 'Vence hoy' };
+      return null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.orden - b.orden)
+    .slice(0, 6);
+}
+
+/* Últimos cobros registrados, del más reciente al más antiguo */
+function datosActividad() {
+  const lista = [];
+  for (const c of creditos) {
+    abonosDe(c).forEach(a => lista.push({
+      credito: c, monto: Number(a.monto) || 0, fecha: a.fecha,
+      metodo: metodoDe(a), quien: a.registradoPor || '', cuando: a.registrado || 0,
+    }));
+  }
+  return lista.sort((x, y) => (y.cuando - x.cuando) || String(y.fecha).localeCompare(String(x.fecha))).slice(0, 6);
+}
+
+/* ---- Dibujado del dashboard ---- */
+function renderDashboard() {
+  if ($('#view-dashboard').hidden) return;
+
+  const hoy = new Date();
+  $('#dash-fecha').textContent = `Resumen general del negocio · ${hoy.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })}`;
+
+  // --- Indicadores ---
+  let porCobrar = 0, vencidos = 0, cobrado = 0, activos = 0, cobradoHoy = 0;
+  const iso = hoyISO();
+  for (const c of creditos) {
+    const e = estadoEfectivo(c);
+    if (abonosDe(c).length) cobrado += totalAbonado(c);
+    else if (e === 'pagado') cobrado += Number(c.monto) || 0;
+    for (const a of abonosDe(c)) if (a.fecha === iso) cobradoHoy += Number(a.monto) || 0;
+    if (e !== 'pagado') { porCobrar += saldoDe(c); activos++; if (e === 'vencido') vencidos++; }
+  }
+  const despHoy = despachos.filter(d => esDespachoPedido(d) && d.fecha === iso).length;
+
+  const kpis = [
+    { et: 'Por cobrar', val: formatoMonto(porCobrar), pie: 'saldo pendiente', ico: '💰', color: 'var(--primary)', bg: 'var(--primary-light)' },
+    { et: 'Cobrado hoy', val: formatoMonto(cobradoHoy), pie: 'ingresos del día', ico: '📈', color: 'var(--accent)', bg: 'var(--accent-light)' },
+    { et: 'Vencidos', val: String(vencidos), pie: 'requieren atención', ico: '⚠️', color: 'var(--danger)', bg: 'var(--danger-light)' },
+    { et: 'Créditos activos', val: String(activos), pie: 'en seguimiento', ico: '📋', color: 'var(--azul)', bg: '#e6efFB' },
+    { et: 'Cobrado total', val: formatoMonto(cobrado), pie: 'histórico', ico: '✅', color: 'var(--accent)', bg: 'var(--accent-light)' },
+    { et: 'Despachos hoy', val: String(despHoy), pie: 'salieron a reparto', ico: '📦', color: 'var(--amber)', bg: 'var(--amber-light)' },
+  ];
+  $('#dash-kpis').innerHTML = kpis.map((k, i) => `
+    <article class="kpi" style="--kpi:${k.color}; --kpi-bg:${k.bg}; --i:${i}">
+      <div>
+        <span class="kpi-et">${k.et}</span>
+        <span class="kpi-val">${escapeHtml(k.val)}</span>
+        <span class="kpi-pie">${k.pie}</span>
+      </div>
+      <span class="kpi-ico">${k.ico}</span>
+    </article>`).join('');
+
+  // --- Gráficos ---
+  const serie = datosCobranzaPorMes(6);
+  $('#dash-chart-cobranza').innerHTML = graficoArea(serie);
+  const totalSerie = serie.reduce((s, d) => s + d.valor, 0);
+  $('#dash-cobranza-chip').textContent = `Total: ${formatoMonto(totalSerie)}`;
+
+  const zonas = datosDeudaPorZona();
+  $('#dash-chart-zonas').innerHTML = graficoDona(zonas, montoCorto(zonas.reduce((s, d) => s + d.valor, 0)));
+
+  $('#dash-chart-estados').innerHTML = graficoBarras(datosEstados(), n => String(n));
+  $('#dash-chart-metodos').innerHTML = graficoBarras(datosMetodosPago(30));
+
+  // --- Requieren atención ---
+  const atencion = datosAtencion();
+  $('#dash-atencion').innerHTML = atencion.length
+    ? atencion.map(a => `
+      <button type="button" class="dash-fila" data-info="${escapeHtml(a.c.id)}">
+        <span class="dash-fila-ico">${a.tipo === 'compromiso' ? '🤝' : a.tipo === 'hoy' ? '🔔' : '⚠️'}</span>
+        <span class="dash-fila-txt">
+          <span class="dash-fila-nom">${escapeHtml(a.c.cliente)}</span>
+          <span class="dash-fila-meta">Nº ${escapeHtml(a.c.boleta)} · ${escapeHtml(a.texto)}</span>
+        </span>
+        <span class="dash-fila-monto" style="color:var(--danger)">${formatoMonto(saldoDe(a.c))}</span>
+      </button>`).join('')
+    : '<p class="dash-vacio">🎉 Nada pendiente de atención.</p>';
+
+  // --- Últimos cobros ---
+  const act = datosActividad();
+  $('#dash-actividad').innerHTML = act.length
+    ? act.map(a => `
+      <button type="button" class="dash-fila" data-info="${escapeHtml(a.credito.id)}">
+        <span class="dash-fila-ico">${metodoLabel(a.metodo).slice(0, 2)}</span>
+        <span class="dash-fila-txt">
+          <span class="dash-fila-nom">${escapeHtml(a.credito.cliente)}</span>
+          <span class="dash-fila-meta">${a.fecha ? formatoFecha(a.fecha) : '—'}${a.quien ? ' · ' + escapeHtml(a.quien) : ''}</span>
+        </span>
+        <span class="dash-fila-monto" style="color:var(--accent)">${formatoMonto(a.monto)}</span>
+      </button>`).join('')
+    : '<p class="dash-vacio">Todavía no hay cobros registrados.</p>';
+}
+
 /* ====== Hoja de cobranza (modal) ====== */
 function abrirCobranza() {
   revisarAperturaAutomatica();
@@ -4922,6 +5231,9 @@ function inicializarEventos() {
     document.querySelectorAll('dialog[open]').forEach(d => d.close());
     mostrarSeccion('creditos');
   });
+  $('#nav-dashboard').addEventListener('click', () => mostrarSeccion('dashboard'));
+  $('#btn-dash-nuevo').addEventListener('click', () => abrirFormulario());
+  $('#btn-dash-cobranza').addEventListener('click', () => { if (puede('cobranza')) abrirCobranza(); else toast('🔒 No tienes permiso'); });
   $('#nav-despachos').addEventListener('click', abrirDespachos);
   $('#nav-clientes').addEventListener('click', abrirClientes);
   $('#nav-cobranza').addEventListener('click', () => { if (puede('cobranza')) abrirCobranza(); });
@@ -5083,7 +5395,7 @@ async function iniciarLocal() {
 async function iniciar() {
   cargarSettings();
   inicializarEventos();
-  mostrarSeccion('creditos');
+  mostrarSeccion('dashboard');   // la app abre en el resumen general
   render();
 
   // Avisa cuando se va y cuando vuelve el internet (la app sigue funcionando igual)

@@ -17,7 +17,9 @@
 <body>
   <!-- Panel lateral de navegación (solo en pantallas anchas: PC/tablet horizontal) -->
   <nav id="nav-lateral" class="nav-lateral" aria-label="Menú principal">
-    <div class="nav-marca">💳 <span>Créditos</span></div>
+    <div class="nav-marca">💳 <span>Créditos<small>Control de cobranzas</small></span></div>
+    <div class="nav-titulo">Menú principal</div>
+    <button type="button" class="nav-item" id="nav-dashboard"><span class="nav-ico">📊</span> Dashboard</button>
     <button type="button" class="nav-item" id="nav-inicio"><span class="nav-ico">📋</span> Créditos</button>
     <button type="button" class="nav-item" id="nav-despachos"><span class="nav-ico">📦</span> Despachos</button>
     <button type="button" class="nav-item" id="nav-clientes"><span class="nav-ico">🧑‍🤝‍🧑</span> Clientes</button>
@@ -73,6 +75,90 @@
     <span id="banner-conexion-texto"></span>
     <button type="button" id="btn-sincronizar" class="btn-sincronizar">🔄 Sincronizar ahora</button>
   </div>
+
+  <!-- Sección: Dashboard (resumen general del negocio) -->
+  <section id="view-dashboard" class="container" hidden>
+    <div class="dash-cab">
+      <div>
+        <h2 class="dash-titulo">Dashboard</h2>
+        <p class="dash-sub" id="dash-fecha">Resumen general del negocio</p>
+      </div>
+      <div class="dash-cab-botones">
+        <button type="button" id="btn-dash-cobranza" class="btn btn-secondary">🧾 Hoja de hoy</button>
+        <button type="button" id="btn-dash-nuevo" class="btn btn-primary">＋ Nuevo crédito</button>
+      </div>
+    </div>
+
+    <!-- Indicadores principales -->
+    <div class="kpis" id="dash-kpis"></div>
+
+    <!-- Gráficos -->
+    <div class="dash-grid">
+      <section class="panel panel-ancho">
+        <div class="panel-cab">
+          <div>
+            <h3 class="panel-titulo">Cobranza de los últimos 6 meses</h3>
+            <p class="panel-sub">Lo que se cobró cada mes</p>
+          </div>
+          <span class="panel-chip" id="dash-cobranza-chip"></span>
+        </div>
+        <div id="dash-chart-cobranza" class="chart"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-cab">
+          <div>
+            <h3 class="panel-titulo">Deuda por zona</h3>
+            <p class="panel-sub">Lo que falta cobrar</p>
+          </div>
+        </div>
+        <div id="dash-chart-zonas" class="chart"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-cab">
+          <div>
+            <h3 class="panel-titulo">Estado de los créditos</h3>
+            <p class="panel-sub">Cuántos hay de cada tipo</p>
+          </div>
+        </div>
+        <div id="dash-chart-estados" class="chart"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-cab">
+          <div>
+            <h3 class="panel-titulo">Cómo pagan los clientes</h3>
+            <p class="panel-sub">Efectivo, Yape y BCP · últimos 30 días</p>
+          </div>
+        </div>
+        <div id="dash-chart-metodos" class="chart"></div>
+      </section>
+    </div>
+
+    <!-- Atención y actividad -->
+    <div class="dash-grid">
+      <section class="panel">
+        <div class="panel-cab">
+          <div>
+            <h3 class="panel-titulo">⚠️ Requieren atención</h3>
+            <p class="panel-sub">Vencidos y compromisos de pago</p>
+          </div>
+        </div>
+        <div id="dash-atencion" class="dash-lista"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-cab">
+          <div>
+            <h3 class="panel-titulo">🕐 Últimos cobros</h3>
+            <p class="panel-sub">Movimientos más recientes</p>
+          </div>
+        </div>
+        <div id="dash-actividad" class="dash-lista"></div>
+      </section>
+    </div>
+  </section>
 
   <main class="container" id="view-creditos">
     <!-- Resumen -->
