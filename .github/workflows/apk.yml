@@ -1,9 +1,14 @@
 name: Compilar APK de Android
 
+# MANUAL a propósito: compilar el APK consume muchos minutos de GitHub Actions
+# (varios por compilación) y en un repositorio privado esos minutos son limitados.
+# La web se sigue publicando sola en cada cambio; el APK se genera cuando hace
+# falta instalarlo o actualizarlo en los celulares y tablets.
+#
+# Cómo generarlo: GitHub → pestaña "Actions" → "Compilar APK de Android"
+#                 → botón "Run workflow" → elegir la rama → "Run workflow".
+# Al terminar, el archivo queda en Releases (etiqueta "apk").
 on:
-  push:
-    branches: [ main, master, 'claude/**' ]
-    paths-ignore: [ '**.md' ]
   workflow_dispatch:
 
 permissions:
@@ -73,5 +78,6 @@ jobs:
             2. Ábrelo. Si Android pregunta, permite "instalar apps de origen desconocido".
             3. ¡Listo! La app aparece como "Control de Créditos".
 
-            Este archivo se actualiza automáticamente con cada cambio en el código.
+            Este archivo se genera a pedido. Para actualizarlo con los últimos
+            cambios: GitHub → *Actions* → *Compilar APK de Android* → *Run workflow*.
           files: control-creditos.apk

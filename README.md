@@ -59,7 +59,8 @@ Se usa **Firebase** de Google (el plan gratuito sobra para este uso).
 2. Reemplaza cada `"PEGA_AQUI_..."` con los valores que copiaste de Firebase (respeta las comillas).
 3. Guarda con **"Commit changes"**.
 
-Al guardar, **el APK se recompila solo** con tu configuración (tarda ~5-10 minutos).
+Al guardar, **la web se publica sola** con tu configuración (tarda ~2 minutos).
+Para actualizar también el APK de Android, ve a **Actions → "Compilar APK de Android" → "Run workflow"** (tarda ~5-10 minutos).
 
 ## Usuarios y permisos (multiusuario)
 
@@ -89,7 +90,7 @@ Este paso es manual a propósito (no se dispara solo en cada cambio de código) 
 4. Abre la app, toca **"Crear cuenta nueva"** la primera vez (correo + contraseña de mínimo 6 caracteres).
 5. En tus otros dispositivos instala el mismo APK y entra con **el mismo correo y contraseña**: verás los mismos datos, sincronizados al instante.
 
-> Cada vez que se cambia algo del código, GitHub recompila el APK automáticamente. Para actualizar la app, vuelve a descargar e instalar el APK desde Releases (se instala encima, sin perder nada: tus datos están en la nube).
+> **La web se publica sola** con cada cambio. El **APK se genera a pedido**, para no gastar los minutos gratis de GitHub: entra a **Actions → "Compilar APK de Android" → "Run workflow"** y, cuando termine, descarga el APK desde *Releases*. Se instala encima del anterior, sin perder nada (tus datos están en la nube).
 
 ## Instalar en iPhone / iPad (y en la computadora)
 
@@ -135,6 +136,6 @@ Opciones (la app es la misma):
 
 ## Tecnología
 
-HTML, CSS y JavaScript sin frameworks. Firebase (Authentication + Firestore con caché local) empaquetado dentro de la app. PWA con Service Worker. APK generado con Capacitor y firmado automáticamente en GitHub Actions.
+HTML, CSS y JavaScript sin frameworks. Firebase (Authentication + Firestore con caché local) empaquetado dentro de la app. PWA con Service Worker. APK generado con Capacitor y firmado en GitHub Actions (a pedido).
 
 Para desarrollar localmente: `python3 -m http.server 8080` y abrir `http://localhost:8080`.
