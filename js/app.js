@@ -3551,10 +3551,14 @@ function graficoDona(datos, textoCentro) {
          M ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy} A ${r} ${r} 0 1 0 ${cx - r} ${cy}`
       : `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${grande} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}
          L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${grande} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+    // Vector unitario hacia el punto medio de la porción: al pasar el cursor
+    // encima (solo en PC), la porción se desplaza un poco hacia afuera del anillo.
+    const medio = (ang + fin) / 2;
+    const ux = Math.cos(medio).toFixed(3), uy = Math.sin(medio).toFixed(3);
     ang = fin;
     const color = COLORES_GRAFICO[i % COLORES_GRAFICO.length];
     const valorTexto = `${formatoMonto(d.valor)} · ${Math.round(porcion * 100)}%`;
-    return `<path d="${d2}" fill="${color}" class="porcion" style="--i:${i}"
+    return `<path d="${d2}" fill="${color}" class="porcion" style="--i:${i}; --ux:${ux}; --uy:${uy}"
       data-tip-color="${color}" data-tip-label="${escapeHtml(d.etiqueta)}" data-tip-value="${escapeHtml(valorTexto)}"></path>`;
   }).join('');
   const leyenda = datos.map((d, i) => `
@@ -5455,6 +5459,9 @@ function inicializarEventos() {
   // Tooltip de los gráficos del Dashboard (dona, barras, línea): se delega
   // porque los gráficos se vuelven a dibujar en cada actualización.
   $('#view-dashboard').addEventListener('pointermove', ev => {
+    // En celulares/tablets (dedo) no se muestran tooltips: evita que se
+    // queden "pegados" en pantalla tras un toque y trabajo innecesario al hacer scroll.
+    if (ev.pointerType && ev.pointerType !== 'mouse') { ocultarTooltipGrafico(); return; }
     const el = ev.target.closest('[data-tip-label]');
     if (!el) { ocultarTooltipGrafico(); return; }
     mostrarTooltipGrafico(ev, el.dataset.tipColor, el.dataset.tipLabel, el.dataset.tipValue);

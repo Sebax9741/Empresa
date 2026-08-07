@@ -266,7 +266,6 @@ body {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem;
   transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
 }
-.kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
 .kpi-et {
   display: block;
   font-size: 0.64rem; font-weight: 700; letter-spacing: 0.07em;
@@ -310,7 +309,6 @@ body {
   padding: 0.85rem 0.95rem 0.95rem;
   min-width: 0;
 }
-.panel:hover { box-shadow: var(--shadow-lg); }
 .panel-cab {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 0.7rem; margin-bottom: 0.6rem;
@@ -364,7 +362,6 @@ body {
   transition: background 0.15s var(--ease);
 }
 .dash-fila:last-child { border-bottom: none; }
-.dash-fila:hover { background: var(--bg-tint); }
 .dash-fila-ico {
   width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
   display: grid; place-items: center; font-size: 0.95rem;
@@ -390,9 +387,10 @@ body {
 .dona-et { font-size: 11px; fill: var(--gray); font-weight: 700; letter-spacing: 0.08em; }
 .dona-val { font-size: 24px; fill: var(--text); font-weight: 800; }
 .chart .punto circle { transition: r 0.15s var(--ease); cursor: pointer; }
-.chart .punto:hover circle { r: 7; }
-.chart .porcion { transition: opacity 0.15s var(--ease); cursor: pointer; transform-origin: 100px 100px; }
-.chart .porcion:hover { opacity: 0.82; }
+.chart .porcion {
+  transition: opacity 0.15s var(--ease), transform 0.15s var(--ease), filter 0.15s var(--ease);
+  cursor: pointer; transform-origin: 100px 100px;
+}
 
 /* Barras horizontales */
 .barras { display: flex; flex-direction: column; gap: 0.2rem; }
@@ -401,7 +399,6 @@ body {
   padding: 0.2rem 0.35rem; margin: 0 -0.35rem; border-radius: 8px;
   transition: background 0.15s var(--ease);
 }
-.barra-fila:hover { background: var(--bg-tint); }
 .barra-et { font-size: 0.82rem; color: var(--muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .barra-pista { background: var(--bg-tint); border-radius: 999px; height: 11px; overflow: hidden; }
 .barra-valor { display: block; height: 100%; border-radius: 999px; background: var(--c); width: var(--w); }
@@ -420,15 +417,35 @@ body {
 
 /* Entrada de cada sección */
 .entrando { animation: entrarArriba 0.34s var(--ease) both; }
-/* Las tarjetas de indicadores entran en cascada */
-.kpi { animation: entrarArriba 0.42s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms); }
-/* Gráficos */
-.area-linea { stroke-dasharray: 2400; --largo: 2400; animation: dibujarLinea 1.1s var(--ease) both; }
-.area-relleno { animation: aparecer 0.9s 0.25s var(--ease) both; }
-.chart .punto { animation: aparecer 0.4s var(--ease) both; animation-delay: 0.7s; }
-.chart .porcion { animation: brotarDona 0.5s var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
-.barra-valor { animation: crecerBarra 0.75s var(--ease) both; animation-delay: calc(var(--i, 0) * 80ms); }
-.dash-fila { animation: aparecer 0.4s var(--ease) both; }
+
+/*
+ * Los efectos de hover (levantar tarjetas, resaltar gráficos) y las animaciones
+ * de entrada del Dashboard solo se activan en computadoras con mouse de verdad.
+ * En celulares y tablets (pantalla táctil) se omiten: evitan el "lag" percibido
+ * al redibujar seguido y el hover que se queda "pegado" tras un toque.
+ */
+@media (hover: hover) and (pointer: fine) {
+  .kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+  .panel:hover { box-shadow: var(--shadow-lg); }
+  .chart .punto:hover circle { r: 7; }
+  .barra-fila:hover { background: var(--bg-tint); }
+  .dash-fila:hover { background: var(--bg-tint); }
+  /* La porción de la dona bajo el cursor sobresale un poco del anillo */
+  .chart .porcion:hover {
+    transform: translate(calc(var(--ux, 0) * 7px), calc(var(--uy, 0) * 7px));
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.28));
+  }
+
+  /* Las tarjetas de indicadores entran en cascada */
+  .kpi { animation: entrarArriba 0.42s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms); }
+  /* Gráficos */
+  .area-linea { stroke-dasharray: 2400; --largo: 2400; animation: dibujarLinea 1.1s var(--ease) both; }
+  .area-relleno { animation: aparecer 0.9s 0.25s var(--ease) both; }
+  .chart .punto { animation: aparecer 0.4s var(--ease) both; animation-delay: 0.7s; }
+  .chart .porcion { animation: brotarDona 0.5s var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
+  .barra-valor { animation: crecerBarra 0.75s var(--ease) both; animation-delay: calc(var(--i, 0) * 80ms); }
+  .dash-fila { animation: aparecer 0.4s var(--ease) both; }
+}
 
 /* Quien pida menos movimiento, no ve animaciones */
 @media (prefers-reduced-motion: reduce) {
