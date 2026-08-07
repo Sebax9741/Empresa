@@ -784,6 +784,17 @@ function aplicarAjustesNube(datos) {
    equipo); a los empleados se lo muestra solo si el admin activó el ajuste. */
 function puedeVerDashboard() { return !modoNube || esAdmin() || !!settings.dashboardEmpleados; }
 
+/* Apartado con el que abre la app. En computadora arranca en el Dashboard
+   (resumen general); en celular arranca directo en los créditos, que es lo que
+   se usa en la calle: el Dashboard queda a un toque, pero es lo secundario.
+   Se usa el mismo corte que el panel lateral (1000px). */
+function esPantallaDeCelular() {
+  return window.matchMedia('(max-width: 999px)').matches;
+}
+function seccionDeInicio() {
+  return (esPantallaDeCelular() || !puedeVerDashboard()) ? 'creditos' : 'dashboard';
+}
+
 /* Días de la semana para la apertura automática (Lun primero; 0=Dom … 6=Sáb) */
 const DIAS_SEMANA = [[1, 'Lun'], [2, 'Mar'], [3, 'Mié'], [4, 'Jue'], [5, 'Vie'], [6, 'Sáb'], [0, 'Dom']];
 
@@ -1222,6 +1233,7 @@ function suscribirNube() {
 /* Muestra/oculta botones según los permisos del usuario actual */
 function aplicarPermisos() {
   $('#btn-new').hidden = !puede('crear');
+  $('#btn-dashboard').hidden = !puedeVerDashboard();
   $('#btn-cobranza').hidden = !puede('cobranza');
   $('#btn-despachos').hidden = !puede('despachos');
   $('#btn-usuarios').hidden = !esAdmin();
@@ -1281,7 +1293,7 @@ function mostrarSeccion(nombre) {
   const navId = nombre === 'creditos' ? 'nav-inicio' : 'nav-' + nombre;
   if (nombre === 'dashboard' && btnNew) btnNew.hidden = true;
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('activo', b.id === navId));
-  const btnId = { despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
+  const btnId = { dashboard: 'btn-dashboard', creditos: 'btn-creditos', despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
   document.querySelectorAll('.header-actions .btn-icon').forEach(b => b.classList.toggle('activo', b.id === btnId));
   window.scrollTo(0, 0);
   // La tabla solo se puede medir cuando su sección ya está visible
@@ -5407,6 +5419,16 @@ function inicializarEventos() {
     mostrarSeccion('creditos');
   });
   $('#nav-dashboard').addEventListener('click', () => mostrarSeccion('dashboard'));
+  // Cabecera (celular): en el teléfono no hay panel lateral, así que Dashboard
+  // y Créditos también necesitan su botón arriba para poder ir y volver.
+  $('#btn-dashboard').addEventListener('click', () => {
+    document.querySelectorAll('dialog[open]').forEach(d => d.close());
+    mostrarSeccion('dashboard');
+  });
+  $('#btn-creditos').addEventListener('click', () => {
+    document.querySelectorAll('dialog[open]').forEach(d => d.close());
+    mostrarSeccion('creditos');
+  });
   $('#btn-dash-nuevo').addEventListener('click', () => abrirFormulario());
   $('#btn-dash-cobranza').addEventListener('click', () => { if (puede('cobranza')) abrirCobranza(); else toast('🔒 No tienes permiso'); });
   $('#nav-despachos').addEventListener('click', abrirDespachos);
@@ -5617,7 +5639,7 @@ async function iniciarLocal() {
 async function iniciar() {
   cargarSettings();
   inicializarEventos();
-  mostrarSeccion('dashboard');   // la app abre en el resumen general
+  mostrarSeccion(seccionDeInicio());
   render();
 
   // Avisa cuando se va y cuando vuelve el internet (la app sigue funcionando igual)
