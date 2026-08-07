@@ -780,6 +780,8 @@ select.input { cursor: pointer; }
   .credit-table { font-size: 0.83rem; }
   .credit-table th, .credit-table td { padding: 0.55rem 0.38rem; }
 }
+.sin-compromiso-celda { color: var(--muted); }
+
 /* Aprieto de la tabla de Créditos cuando no entra a lo ancho (tablet de pie,
    o pantalla mediana con el panel lateral abierto). Los pone el guion después
    de medir; ver ajustarCorrimiento(). La idea es no llegar nunca al
@@ -800,7 +802,8 @@ select.input { cursor: pointer; }
 .table-wrap.compacta-2 .col-foto { display: none; }
 
 /* Nivel 3: las fechas de emisión y despacho quedan en la ficha (ℹ️). Lo que no
-   puede faltar de un vistazo es cuánto debe, cuándo vence y cómo está. */
+   puede faltar de un vistazo es cuánto debe, cuándo vence, cuándo quedó en
+   pagar y cómo está. */
 .table-wrap.compacta-3 .credit-table th,
 .table-wrap.compacta-3 .credit-table td { padding: 0.45rem 0.25rem; }
 .table-wrap.compacta-3 .col-emision,
@@ -811,6 +814,15 @@ select.input { cursor: pointer; }
 .table-wrap.compacta-3 .row-actions { gap: 0.15rem; }
 .table-wrap.compacta-3 .row-actions .btn-small { padding: 0.28rem 0.3rem; }
 .table-wrap.compacta-3 .badge { padding: 0.18rem 0.4rem; font-size: 0.7rem; }
+
+/* Nivel 4: última parada antes de rendirse y correr la tabla de lado. Se
+   achica la letra de toda la tabla en vez de quitar otra columna: con la de
+   compromiso ya son doce y todas hacen falta de un vistazo. */
+.table-wrap.compacta-4 .credit-table { font-size: 0.75rem; }
+.table-wrap.compacta-4 .credit-table th,
+.table-wrap.compacta-4 .credit-table td { padding: 0.4rem 0.2rem; }
+.table-wrap.compacta-4 .row-actions .btn-small { padding: 0.25rem 0.26rem; }
+.table-wrap.compacta-4 .badge { font-size: 0.66rem; padding: 0.15rem 0.35rem; }
 
 .col-num, td.col-num { text-align: right; }
 /* Los montos no se parten en dos líneas */

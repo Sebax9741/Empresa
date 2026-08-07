@@ -275,6 +275,8 @@
         <option value="monto-asc">Total menor</option>
         <option value="saldo-desc">Debe: mayor</option>
         <option value="saldo-asc">Debe: menor</option>
+        <option value="compromiso-asc">Compromiso ↑ (más próximo)</option>
+        <option value="compromiso-desc">Compromiso ↓</option>
         <option value="fecha-desc">Más recientes</option>
         <option value="fecha-asc">Más antiguos</option>
       </select>
@@ -311,6 +313,7 @@
             <th data-sort="fecha" class="col-emision">Emisión <span class="sort-arrow"></span></th>
             <th data-sort="despacho" class="col-despacho">Despacho <span class="sort-arrow"></span></th>
             <th data-sort="vencimiento">Vencimiento <span class="sort-arrow"></span></th>
+            <th data-sort="compromiso" class="col-compromiso">Compromiso <span class="sort-arrow"></span></th>
             <th>Estado</th>
             <th class="col-foto">Boleta</th>
             <th></th>
@@ -950,11 +953,11 @@
         <label class="field">
           <span>Días de crédito por defecto</span>
           <input type="number" id="s-dias" class="input" min="1" max="365" required>
-          <small>El vencimiento se calcula automáticamente: fecha de emisión + estos días.</small>
+          <small>El vencimiento se calcula automáticamente: <strong>fecha de despacho</strong> + estos días. Si el crédito todavía no tiene despacho anotado, se cuenta desde la fecha de emisión. Los créditos ya registrados no se tocan.</small>
         </label>
         <div class="field">
           <span class="field-label">Atajos de vencimiento rápido</span>
-          <small>Dos botones en el formulario para poner el vencimiento X días después de la fecha de emisión.</small>
+          <small>Dos botones en el formulario para poner el vencimiento X días después de la fecha de despacho.</small>
           <div class="atajos-config">
             <label class="atajo-mini">
               <span>Atajo 1</span>

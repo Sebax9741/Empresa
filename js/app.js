@@ -239,6 +239,20 @@ function textoVencimiento(c) {
   return fecha;
 }
 
+/* La fecha en que el cliente quedó en pagar, para la columna de la lista.
+   Se avisa igual que el vencimiento (hoy o pasada, en rojo) porque un
+   compromiso incumplido es justo lo que hay que salir a cobrar. */
+function textoCompromisoTabla(c) {
+  if (!c.compromiso) return '<span class="sin-compromiso-celda">—</span>';
+  const fecha = formatoFecha(c.compromiso);
+  if (saldoDe(c) <= 0) return fecha;
+  const dias = diasHastaVencimiento(c.compromiso);
+  if (dias < 0) return `<span class="venc-alerta">${fecha}<br><small>(no cumplió)</small></span>`;
+  if (dias === 0) return `<span class="venc-alerta">${fecha}<br><small>(¡es hoy!)</small></span>`;
+  if (dias <= 5) return `<span class="venc-pronto">${fecha}<br><small>(en ${dias} día${dias === 1 ? '' : 's'})</small></span>`;
+  return fecha;
+}
+
 /* ====== Hojas de cobranza: crear / cerrar ======
    La hoja de un día no existe sola: alguien con permiso tiene que crearla
    (normalmente el empleado, al empezar su día). Al terminar el día, el
@@ -1679,6 +1693,8 @@ function creditosVisibles() {
       case 'saldo': va = saldoDe(a); vb = saldoDe(b); break;
       case 'fecha': va = a.fecha; vb = b.fecha; break;
       case 'despacho': va = a.fechaDespacho || ''; vb = b.fechaDespacho || ''; break;
+      // Sin compromiso anotado va al final, no al principio
+      case 'compromiso': va = a.compromiso || '9999-12-31'; vb = b.compromiso || '9999-12-31'; break;
       // "creado": orden por el momento real en que se registró el crédito
       case 'creado': va = a.creado || 0; vb = b.creado || 0; break;
       case 'vencimiento': default: va = a.vencimiento; vb = b.vencimiento; break;
@@ -1748,18 +1764,19 @@ function ajustarTablasFijas() {
      nivel 2 → en Créditos se va la foto de la boleta (se sigue viendo en la
                ficha ℹ️); en la hoja se estrechan cliente y "cobró"
      nivel 3 → en Créditos se van también las fechas de emisión y despacho
+     nivel 4 → letra más chica en toda la tabla, antes que quitar otra columna
 
-   Solo si ni con el nivel 3 entra se le devuelve el corrimiento lateral. Se
+   Solo si ni con el nivel 4 entra se le devuelve el corrimiento lateral. Se
    mide en vez de mirar el ancho de la pantalla porque el sitio de verdad
    depende también del panel lateral: en una pantalla de 1024px el panel se
    lleva casi 300px y a la tabla le quedan 730. */
-const APRIETOS = 3;
+const APRIETOS = 4;
 function ajustarCorrimiento(selector) {
   const wrap = document.querySelector(selector);
   if (!wrap || wrap.offsetParent === null) return;   // oculta (celular u otra sección)
   const tabla = wrap.querySelector('table');
   if (!tabla) return;
-  wrap.classList.remove('tabla-corre', 'compacta-1', 'compacta-2', 'compacta-3');
+  wrap.classList.remove('tabla-corre', 'compacta-1', 'compacta-2', 'compacta-3', 'compacta-4');
   for (let n = 0; n <= APRIETOS; n++) {
     if (n > 0) wrap.classList.add('compacta-' + n);
     if (tabla.scrollWidth <= wrap.clientWidth + 1) return;   // así ya entra
@@ -1954,7 +1971,7 @@ function renderTabla(lista) {
         return `
         <tr class="credito-anulado" title="Nota de venta anulada">
           <td><strong>${escapeHtml(c.boleta)}</strong></td>
-          <td colspan="10">
+          <td colspan="11">
             <div class="fila-especial">
               <span class="badge badge-anulado">🚫 Anulado</span>
               <span class="anulado-motivo">📝 ${escapeHtml(anul.motivo || '')}</span>
@@ -1970,7 +1987,7 @@ function renderTabla(lista) {
       return `
       <tr class="credito-faltante" title="Falta crear esta nota de venta">
         <td><strong>${escapeHtml(c.boleta)}</strong></td>
-        <td colspan="10">
+        <td colspan="11">
           <div class="fila-especial">
             <span class="badge badge-faltante">⛳ Falta</span>
             <span class="faltante-msg">— nota de venta sin crear —</span>
@@ -1993,6 +2010,7 @@ function renderTabla(lista) {
       <td class="col-emision">${c.fecha ? formatoFecha(c.fecha) : '—'}</td>
       <td class="col-despacho">${c.fechaDespacho ? formatoFecha(c.fechaDespacho) : '—'}</td>
       <td>${textoVencimiento(c)}</td>
+      <td class="col-compromiso">${textoCompromisoTabla(c)}</td>
       <td>${badgeEstado(c)}</td>
       <td class="col-foto">${celdaFoto(c)}</td>
       <td>
@@ -2079,6 +2097,7 @@ function renderTarjetas(lista) {
         ${lineas}
         ${abonosResumenHtml(c)}
         <p class="card-venc">Vence: ${textoVencimiento(c)}</p>
+        ${c.compromiso ? `<p class="card-venc">Quedó en pagar: ${textoCompromisoTabla(c)}</p>` : ''}
       </div>
       <div class="card-side">
         ${badgeEstado(c)}
@@ -3173,9 +3192,23 @@ function actualizarAtajosVenc() {
   if (b2) b2.textContent = `+${settings.atajo2} días`;
 }
 
-/* Aplica un atajo: vencimiento = fecha de emisión + X días */
+/* Desde qué fecha se cuentan los días de crédito. Manda la fecha de DESPACHO:
+   el crédito empieza a correr cuando la mercadería sale, no cuando se emitió
+   el papel. Si el crédito todavía no tiene despacho anotado, se cuenta desde
+   la emisión, que es lo único que hay. */
+function baseVencimiento() {
+  return $('#f-fecha-despacho').value || $('#f-fecha').value || hoyISO();
+}
+
+/* Recalcula el vencimiento salvo que alguien lo haya escrito a mano */
+function recalcularVencimiento() {
+  if (vencimientoEditadoManual) return;
+  $('#f-vencimiento').value = sumarDias(baseVencimiento(), settings.dias);
+}
+
+/* Aplica un atajo: vencimiento = fecha de despacho (o emisión) + X días */
 function aplicarAtajoVenc(dias) {
-  const base = $('#f-fecha').value || hoyISO();
+  const base = baseVencimiento();
   $('#f-vencimiento').value = sumarDias(base, dias);
   vencimientoEditadoManual = true; // respeta la elección del atajo
 }
@@ -3274,10 +3307,9 @@ function abrirFormulario(credito = null, prefill = null) {
       if (prefill.monto) $('#f-monto').value = prefill.monto;
       $('#f-fecha-despacho').value = prefill.fechaDespacho || '';
       // La fecha de emisión del despacho se usa como fecha del crédito
-      if (prefill.fechaEmision) {
-        $('#f-fecha').value = prefill.fechaEmision;
-        $('#f-vencimiento').value = sumarDias(prefill.fechaEmision, settings.dias);
-      }
+      if (prefill.fechaEmision) $('#f-fecha').value = prefill.fechaEmision;
+      // Los días de crédito se cuentan desde el despacho (ver baseVencimiento)
+      recalcularVencimiento();
     }
   }
   modalForm.showModal();
@@ -5187,12 +5219,10 @@ function inicializarEventos() {
   });
   $('#f-monto').addEventListener('input', () => { if (!$('#abonos-box').hidden) renderAbonos(); });
 
-  // Vencimiento automático: emisión + días configurados, salvo que el usuario lo haya tocado
-  $('#f-fecha').addEventListener('change', () => {
-    if (!vencimientoEditadoManual && $('#f-fecha').value) {
-      $('#f-vencimiento').value = sumarDias($('#f-fecha').value, settings.dias);
-    }
-  });
+  // Vencimiento automático: fecha de despacho + días configurados (si aún no
+  // hay despacho, desde la emisión), salvo que el usuario lo haya escrito.
+  $('#f-fecha').addEventListener('change', recalcularVencimiento);
+  $('#f-fecha-despacho').addEventListener('change', recalcularVencimiento);
   $('#f-vencimiento').addEventListener('input', () => { vencimientoEditadoManual = true; });
 
   // Atajos rápidos de vencimiento (X días después de la emisión)
