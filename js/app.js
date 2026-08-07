@@ -336,22 +336,45 @@ async function crearHojaCobranza(fechaISO) {
    constancia de quién la abrió, igual que si la hubiera creado a propósito
    (las reglas de Firestore ya permiten que cualquier miembro del equipo cree
    la hoja del día). Devuelve true si al terminar la hoja ya existe. */
-async function asegurarHojaAbierta(fechaISO) {
+async function asegurarHojaAbierta(fechaISO, quien = quienSoy(), cuando = null) {
   if (!modoNube) return true;               // en modo local la hoja siempre "existe"
   if (hojaExiste(fechaISO)) return true;
+
+  // Antes de escribir se confirma contra la base: si otro dispositivo ya la
+  // abrió (o el administrador ya la cerró) y este equipo todavía no lo sabe,
+  // no se pisa lo que ya existe. Con mala señal la consulta se abandona
+  // enseguida y se sigue con la copia local: cobrar nunca se queda esperando.
+  try {
+    const snap = await Promise.race([
+      fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'hojas', fechaISO)),
+      new Promise((_, rechazar) => setTimeout(() => rechazar(new Error('sin respuesta')), ESPERA_NUBE)),
+    ]);
+    if (snap.exists()) {
+      const yaEsta = { fecha: fechaISO, ...snap.data() };
+      const j = hojas.findIndex(h => h.fecha === fechaISO);
+      if (j >= 0) hojas[j] = yaEsta; else hojas.push(yaEsta);
+      return true;
+    }
+  } catch (e) {
+    console.warn('No se pudo comprobar la hoja en la nube (se sigue sin conexión):', e);
+  }
+
   const hoja = {
     fecha: fechaISO,
     creada: true,
-    creadaPor: quienSoy(),
-    creadaEn: marcaDeTiempo(),               // hora del servidor, no del dispositivo
+    creadaPor: quien,
+    // Hora del servidor cuando la abre el cobro del momento; cuando se está
+    // recuperando un día viejo, la hora real del primer cobro de ese día.
+    creadaEn: cuando || marcaDeTiempo(),
     cerrada: false,
     cerradaPor: null,
     cerradaEn: null,
   };
+  if (cuando) hoja.desdePrimerCobro = true;
   try {
     await guardarHojaEnStore(hoja);
-    // Copia local sin la hora: la suscripción la reemplaza con la del servidor
-    const local = { ...hoja, creadaEn: null };
+    // Copia local: la suscripción la reemplaza con lo que confirme el servidor
+    const local = { ...hoja, creadaEn: cuando || null };
     const i = hojas.findIndex(h => h.fecha === fechaISO);
     if (i >= 0) hojas[i] = local; else hojas.push(local);
     return true;
@@ -359,6 +382,27 @@ async function asegurarHojaAbierta(fechaISO) {
     console.error('No se pudo abrir automáticamente la hoja de cobranza:', e);
     return false;
   }
+}
+
+/* Días que ya se intentaron recuperar en esta sesión (para no reintentar la
+   escritura en cada redibujado de la vista). */
+const hojasRecuperadas = new Set();
+
+/* Recupera la hoja de un día que SÍ tuvo cobros pero quedó sin abrir (cobros
+   registrados antes de que existiera la apertura automática, o una apertura
+   que no llegó a subir). La abre a nombre de quien hizo el primer cobro de
+   ese día y con la hora de ese cobro. */
+function recuperarHojaDeDiaConCobros(fechaISO, filas) {
+  if (!modoNube || !fechaISO || !filas.length) return;
+  if (hojaExiste(fechaISO) || hojasRecuperadas.has(fechaISO)) return;
+  const primero = filas.find(f => f.cobradoPor) || filas[0];
+  if (!primero) return;
+  hojasRecuperadas.add(fechaISO);
+  asegurarHojaAbierta(fechaISO, primero.cobradoPor || 'sin registrar', primero.registrado || null)
+    // Se vuelve a dibujar sí o sí: la hoja recién recuperada (o la que ya
+    // estaba en la nube) tiene que verse sin que el usuario haga nada.
+    .then(ok => { if (ok) renderCobranza(); })
+    .catch(e => console.error('No se pudo recuperar la hoja del día:', e));
 }
 
 /* ¿Toca abrir hoy la hoja automáticamente, según lo que definió el admin? */
@@ -3834,10 +3878,14 @@ function abrirCobranza() {
 
 /* Muestra si la hoja del día está creada, abierta o cerrada, y los
    botones para crearla (según permiso) o cerrarla (solo administrador). */
-function renderEstadoHoja(fecha) {
+function renderEstadoHoja(fecha, filas = []) {
   const cont = $('#cob-estado');
   if (!modoNube) { cont.hidden = true; return; }
   cont.hidden = false;
+
+  // Un día con cobros no puede quedar como "sin abrir": se recupera a nombre
+  // de quien hizo el primer cobro (vuelve a dibujar cuando lo consigue).
+  recuperarHojaDeDiaConCobros(fecha, filas);
 
   const badge = $('#cob-estado-badge');
   const btnCrear = $('#btn-hoja-crear');
@@ -3865,12 +3913,14 @@ function renderEstadoHoja(fecha) {
     btnCerrar.hidden = !esAdmin();
   }
 
-  // Horas de apertura y cierre: siempre las del servidor
+  // Horas de apertura y cierre: siempre las del servidor, salvo la hoja que se
+  // recuperó de un día viejo (ahí la hora es la del primer cobro registrado).
   const abierta = fechaHoraDeTimestamp(h.creadaEn);
-  const cerrada = fechaHoraDeTimestamp(h.cerradaEn);
+  const origen = h.desdePrimerCobro ? ' (con el primer cobro del día)' : '';
   const lineas = [
-    `🕐 Abierta por ${h.creadaPor || '—'} ${abierta ? 'el ' + abierta : '(hora pendiente de confirmar)'}`,
+    `🕐 Abierta por ${h.creadaPor || '—'} ${abierta ? 'el ' + abierta : '(hora pendiente de confirmar)'}${origen}`,
   ];
+  const cerrada = fechaHoraDeTimestamp(h.cerradaEn);
   if (h.cerrada) {
     lineas.push(`🔒 Cerrada por ${h.cerradaPor || '—'} ${cerrada ? 'el ' + cerrada : '(hora pendiente de confirmar)'}`);
   }
@@ -3883,7 +3933,7 @@ function renderCobranza() {
   const dias = diasConCobros(creditos);
   const diaInfo = dias.find(d => d.fecha === fecha) || { codigo: 'HC—' };
   const { filas, totales } = hojaCobranza(creditos, fecha, diaInfo.codigo);
-  renderEstadoHoja(fecha);
+  renderEstadoHoja(fecha, filas);
 
   // Cuadro de cobranza por usuario: una fila por quien cobró ese día
   // (efectivo / Yape / BCP / total) y la fila final con los totales.
