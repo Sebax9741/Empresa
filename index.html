@@ -532,6 +532,11 @@
       <div id="info-estado"></div>
     </div>
 
+    <!-- En tablet y computadora esto se reparte en dos columnas, para que no
+         haya que bajar con el dedo: a la izquierda los datos del crédito, a la
+         derecha la boleta y el cobro. En celular se apila como siempre. -->
+    <div class="info-cuerpo">
+    <div class="info-col info-col-datos">
     <div class="info-montos">
       <div class="info-monto"><span>Total</span><strong id="info-total">—</strong></div>
       <div class="info-monto info-monto-debe"><span>Debe</span><strong id="info-debe">—</strong></div>
@@ -542,12 +547,16 @@
 
     <h3 class="info-titulo">💵 Pagos a cuenta</h3>
     <div id="info-abonos" class="info-abonos"></div>
+    </div>
 
+    <div class="info-col info-col-foto">
     <div id="info-foto-wrap" hidden>
       <h3 class="info-titulo">📷 Boleta física</h3>
       <img id="info-foto" class="info-foto" alt="Boleta" data-ver-foto-info>
     </div>
+    </div>
 
+    <div class="info-col info-col-cobro">
     <!-- Solo para quien tenga permiso de registrar pagos -->
     <div class="info-cobro" id="info-cobro" hidden>
       <h3 class="info-titulo">🧾 Registrar cobro</h3>
@@ -587,6 +596,8 @@
       <!-- Respaldo: solo aparece si el registro falló y hay que reintentar -->
       <button type="button" id="btn-registrar-cobro" class="btn btn-primary btn-block" hidden>✅ Registrar cobro</button>
       </div>
+    </div>
+    </div>
     </div>
 
     <div class="modal-buttons">

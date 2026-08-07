@@ -1670,6 +1670,56 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 /* ====== Ficha de información del crédito ====== */
 .modal-info { width: min(560px, calc(100vw - 1.5rem)); }
+
+/* En tablet y computadora la ficha se reparte en zonas y se abre más ancha:
+   los empleados la usan en la calle y tenían que bajar con el dedo para llegar
+   a la boleta o al cobro. En celular sigue apilado, que es lo que cabe.
+     tablet  → datos a la izquierda; boleta y cobro a la derecha
+     pantalla grande → las tres en fila */
+.info-col-datos { grid-area: datos; }
+.info-col-foto  { grid-area: foto; }
+.info-col-cobro { grid-area: cobro; }
+
+/* La condición de alto evita repartir en columnas un celular puesto de lado,
+   donde no hay altura para nada. */
+@media (min-width: 720px) and (min-height: 600px) {
+  .modal-info { width: min(1040px, calc(100vw - 1.5rem)); }
+  .info-cuerpo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "datos foto"
+      "datos cobro";
+    gap: 0 1.6rem;
+    align-items: start;
+  }
+  /* Las tres zonas arrancan a la misma altura */
+  .info-cuerpo .info-col > *:first-child > .info-titulo:first-child,
+  .info-cuerpo .info-col > .info-titulo:first-child,
+  .info-col-datos > .info-montos { margin-top: 0.9rem; }
+  /* La boleta no se lleva toda la altura: se ve entera, y al tocarla se abre
+     a pantalla completa como siempre */
+  .info-foto { max-height: 260px; width: auto; max-width: 100%; margin: 0 auto; }
+  /* En dos columnas el cobro va debajo de la boleta: sin la línea de arriba
+     quedan pegados */
+  .info-col-cobro .info-cobro { margin-top: 0.9rem; }
+}
+
+/* Desde una tablet de 1000px ya caben las tres en fila, y así no hay que bajar
+   nada: los datos, la boleta y el cobro se ven de una sola mirada. */
+@media (min-width: 1000px) and (min-height: 600px) {
+  .modal-info { width: min(1300px, calc(100vw - 2rem)); }
+  .info-cuerpo {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1fr);
+    grid-template-areas: "datos foto cobro";
+  }
+  .info-foto { max-height: 46vh; }
+  /* En su propia columna el cobro ya se distingue solo: la línea de arriba
+     sobraba y quedaba flotando */
+  .info-col-cobro .info-cobro { margin-top: 0; padding-top: 0; border-top: none; }
+  /* La columna del cobro es angosta: monto y fecha, uno debajo del otro */
+  .info-col-cobro .field-row { grid-template-columns: 1fr; gap: 0; }
+}
 .info-cab { display: flex; align-items: flex-start; gap: 0.7rem; justify-content: space-between; }
 .info-cab-txt { min-width: 0; }
 .info-cab h2 { margin: 0 0 0.15rem; font-size: 1.15rem; word-break: break-word; }
