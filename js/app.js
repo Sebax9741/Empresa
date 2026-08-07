@@ -1284,6 +1284,8 @@ function mostrarSeccion(nombre) {
   const btnId = { despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
   document.querySelectorAll('.header-actions .btn-icon').forEach(b => b.classList.toggle('activo', b.id === btnId));
   window.scrollTo(0, 0);
+  // La tabla solo se puede medir cuando su sección ya está visible
+  if (nombre === 'creditos') requestAnimationFrame(ajustarAltoTabla);
 }
 
 /* Si el dispositivo tenía créditos guardados en modo local, ofrece subirlos a la cuenta */
@@ -1706,7 +1708,23 @@ function render() {
   // mantén la vista de despachos al día si está abierta.
   if (!$('#view-despachos').hidden) renderDespachos();
   $('#empty-state').hidden = creditos.length > 0;
+  ajustarAltoTabla();
   sincronizarAvisos();
+}
+
+/* El recuadro de la tabla de créditos llega justo hasta el borde de abajo de
+   la pantalla. Así todo el recorrido de los créditos ocurre dentro del
+   recuadro (con la fila de títulos clavada arriba) y no hacen falta dos
+   barras de desplazamiento. La altura se mide en vez de fijarla en el CSS
+   porque la barra de filtros ocupa más o menos alto según el ancho. */
+function ajustarAltoTabla() {
+  const wrap = document.querySelector('.table-wrap');
+  if (!wrap || wrap.offsetParent === null) return;   // en celular está oculta
+  // Distancia desde el inicio del documento: no cambia aunque la página
+  // esté desplazada en el momento de medir.
+  const arriba = wrap.getBoundingClientRect().top + window.scrollY;
+  const libre = window.innerHeight - arriba - 24;    // 24px de aire abajo
+  wrap.style.maxHeight = `${Math.max(260, Math.round(libre))}px`;
 }
 
 /* Total que deben y cantidad de créditos según lo que está filtrado ahora mismo */
@@ -5592,6 +5610,8 @@ async function iniciar() {
   // Avisa cuando se va y cuando vuelve el internet (la app sigue funcionando igual)
   window.addEventListener('online', actualizarAvisoConexion);
   window.addEventListener('offline', actualizarAvisoConexion);
+  // Al cambiar el tamaño de la ventana, la tabla vuelve a llegar hasta abajo
+  window.addEventListener('resize', ajustarAltoTabla);
   $('#btn-sincronizar').addEventListener('click', sincronizarAhora);
 
   // Apertura automática de la hoja de cobranza: se revisa cada pocos minutos

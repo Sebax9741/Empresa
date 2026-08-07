@@ -705,11 +705,19 @@ body {
 select.input { cursor: pointer; }
 
 /* ====== Tabla (pantallas grandes) ====== */
+/* La tabla se desplaza dentro de su propio recuadro (no con toda la página):
+   así la fila de títulos puede quedarse pegada arriba mientras se recorren
+   los créditos, y las 11 columnas siguen pudiendo correrse de lado en
+   pantallas angostas. El alto se limita a lo que queda de pantalla. */
 .table-wrap {
   background: var(--card);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  overflow-x: auto;
+  overflow: auto;
+  /* Tope de alto (el definitivo lo mide el guion según la barra de filtros).
+     Es solo un tope: con pocos créditos el recuadro se encoge a su contenido. */
+  max-height: calc(100vh - 15rem);
+  overscroll-behavior: contain;
 }
 
 .credit-table {
@@ -721,18 +729,23 @@ select.input { cursor: pointer; }
 .credit-table th {
   text-align: left;
   padding: 0.75rem 0.9rem;
-  background: var(--bg-tint);
-  border-bottom: 1px solid var(--border);
+  /* Fila de títulos anclada arriba mientras se baja por los créditos */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--side);
+  /* Con border-collapse el borde se pierde al quedar fija: se dibuja dentro */
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.09);
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--muted);
+  color: #c3cede;
   font-weight: 700;
 }
-.credit-table th:hover { color: var(--text); }
+.credit-table th:hover { color: #fff; }
 .credit-table th .sort-arrow { font-size: 0.7rem; color: var(--primary); }
 
 .credit-table td {
