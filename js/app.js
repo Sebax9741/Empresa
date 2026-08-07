@@ -330,6 +330,37 @@ async function crearHojaCobranza(fechaISO) {
   }
 }
 
+/* Si la hoja de cobranza de esa fecha todavía no existe, la abre sola en el
+   momento en que alguien (administrador o empleado) registra el primer cobro
+   del día: nadie tiene que crearla a mano antes de poder cobrar. Queda
+   constancia de quién la abrió, igual que si la hubiera creado a propósito
+   (las reglas de Firestore ya permiten que cualquier miembro del equipo cree
+   la hoja del día). Devuelve true si al terminar la hoja ya existe. */
+async function asegurarHojaAbierta(fechaISO) {
+  if (!modoNube) return true;               // en modo local la hoja siempre "existe"
+  if (hojaExiste(fechaISO)) return true;
+  const hoja = {
+    fecha: fechaISO,
+    creada: true,
+    creadaPor: quienSoy(),
+    creadaEn: marcaDeTiempo(),               // hora del servidor, no del dispositivo
+    cerrada: false,
+    cerradaPor: null,
+    cerradaEn: null,
+  };
+  try {
+    await guardarHojaEnStore(hoja);
+    // Copia local sin la hora: la suscripción la reemplaza con la del servidor
+    const local = { ...hoja, creadaEn: null };
+    const i = hojas.findIndex(h => h.fecha === fechaISO);
+    if (i >= 0) hojas[i] = local; else hojas.push(local);
+    return true;
+  } catch (e) {
+    console.error('No se pudo abrir automáticamente la hoja de cobranza:', e);
+    return false;
+  }
+}
+
 /* ¿Toca abrir hoy la hoja automáticamente, según lo que definió el admin? */
 function debeAbrirHojaHoy() {
   if (!settings.hojaAutoActiva) return false;
@@ -2797,21 +2828,13 @@ function renderInfo() {
     $('#cobro-fecha').value = hoyISO();      // siempre hoy y bloqueada
     $('#btn-cobro-todo').textContent = `Saldar todo lo que debe (${formatoMonto(debe)})`;
 
-    // La hoja de cobranza de hoy tiene que existir (y no estar cerrada) para
-    // que un empleado pueda cobrar. El administrador nunca queda bloqueado
-    // por falta de hoja; solo si ya está cerrada le piden su código.
+    // La hoja de cobranza de hoy no hace falta crearla a mano: se abre sola
+    // con el primer cobro del día (quede quien sea que cobre). Solo si ya
+    // está cerrada se bloquea el cobro (salvo al administrador).
     const hoy = hoyISO();
     const bloqueo = $('#info-cobro-bloqueo');
-    const btnCrearHoja = $('#btn-info-crear-hoja');
-    const existeHoy = hojaExiste(hoy);
     let bloqueado = false;
-    btnCrearHoja.hidden = existeHoy || !puede('hojaCrear');
-    if (!existeHoy && !esAdmin()) {
-      bloqueado = true;
-      bloqueo.textContent = puede('hojaCrear')
-        ? '📋 Todavía no se ha creado la hoja de cobranza de hoy.'
-        : '📋 Todavía no se ha creado la hoja de cobranza de hoy. Pide que la creen.';
-    } else if (existeHoy && hojaCerrada(hoy) && !esAdmin()) {
+    if (hojaExiste(hoy) && hojaCerrada(hoy) && !esAdmin()) {
       bloqueado = true;
       bloqueo.textContent = '🔒 La hoja de cobranza de hoy ya está cerrada.';
     }
@@ -2827,11 +2850,7 @@ function problemaParaCobrar(c) {
   if (!c) return '⚠️ No se encontró el crédito';
   if (!puede('pagos')) return '🔒 No tienes permiso para registrar pagos';
   const hoy = hoyISO();
-  if (!esAdmin() && !hojaExiste(hoy)) {
-    return puede('hojaCrear')
-      ? '📋 Primero crea la hoja de cobranza de hoy'
-      : '📋 La hoja de cobranza de hoy aún no existe. Pide que la creen.';
-  }
+  // Si la hoja de hoy todavía no existe, no bloquea: se abre sola al cobrar.
   if (hojaCerrada(hoy) && !esAdmin()) return '🔒 La hoja de cobranza de hoy ya está cerrada';
   const monto = Number($('#cobro-monto').value);
   const debe = saldoDe(c);
@@ -2869,14 +2888,12 @@ async function registrarCobro() {
   if (!c) return;
   if (!puede('pagos')) { toast('🔒 No tienes permiso para registrar pagos'); return; }
 
-  // El administrador siempre puede registrar (aunque la hoja de hoy no
-  // exista todavía); a los empleados se les exige que ya esté creada.
+  // Si la hoja de cobranza de hoy todavía no existe, se abre sola con este
+  // cobro (quien sea que lo registre queda como quien la abrió).
   const hoy = hoyISO();
-  if (!esAdmin() && !hojaExiste(hoy)) {
-    toast(puede('hojaCrear')
-      ? '📋 Primero crea la hoja de cobranza de hoy'
-      : '📋 La hoja de cobranza de hoy aún no existe. Pide que la creen.');
-    return;
+  if (!hojaExiste(hoy)) {
+    const abierta = await asegurarHojaAbierta(hoy);
+    if (!abierta) { toast('❌ No se pudo abrir la hoja de cobranza de hoy. Intenta de nuevo.'); return; }
   }
   if (hojaCerrada(hoy)) {
     if (!esAdmin()) { toast('🔒 La hoja de cobranza de hoy ya está cerrada'); return; }
@@ -3184,11 +3201,10 @@ async function confirmarNuevoAbono() {
   if (!monto || monto <= 0) { toast('⚠️ Escribe un monto válido para el pago'); return; }
   const fecha = $('#abono-fecha').value || hoyISO();
 
-  if (!esAdmin() && !hojaExiste(fecha)) {
-    toast(puede('hojaCrear')
-      ? `📋 Primero crea la hoja de cobranza del ${formatoFecha(fecha)}`
-      : `📋 La hoja de cobranza del ${formatoFecha(fecha)} aún no existe`);
-    return;
+  // Si la hoja de cobranza de esa fecha todavía no existe, se abre sola.
+  if (!hojaExiste(fecha)) {
+    const abierta = await asegurarHojaAbierta(fecha);
+    if (!abierta) { toast(`❌ No se pudo abrir la hoja de cobranza del ${formatoFecha(fecha)}. Intenta de nuevo.`); return; }
   }
   if (hojaCerrada(fecha)) {
     if (!esAdmin()) { toast('🔒 Esa hoja de cobranza ya está cerrada'); return; }
@@ -5384,11 +5400,6 @@ function inicializarEventos() {
     const c = creditos.find(x => x.id === infoCreditoId);
     if (c) $('#cobro-monto').value = saldoDe(c);
   });
-  $('#btn-info-crear-hoja').addEventListener('click', async () => {
-    await crearHojaCobranza(hoyISO());
-    renderInfo();
-  });
-
   // Lienzo de la firma: lápiz táctil, dedo o mouse
   const lienzo = $('#firma-canvas');
   lienzo.addEventListener('pointerdown', ev => {
