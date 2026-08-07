@@ -1569,6 +1569,17 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .cob-tabla-wrap.compacta-3 .pago-tag { padding: 0.1rem 0.35rem; font-size: 0.7rem; }
 .cob-tabla-wrap.compacta-3 .cob-codigo { font-size: 0.76rem; }
 
+/* Aviso de "quedan más créditos por dibujar" al final de la lista */
+.mas-filas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 1rem 0 0.4rem;
+}
+.mas-filas[hidden] { display: none; }
+.mas-filas-cuenta { color: var(--muted); font-size: 0.85rem; }
+
 .cob-vacio { text-align: center; color: var(--gray); padding: 1.2rem; }
 
 .pago-tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }

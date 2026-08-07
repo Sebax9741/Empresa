@@ -1178,6 +1178,8 @@ function suscribirNube() {
     actualizarAvisoConexion();
     render();
     avisoAlAbrir();
+    // Las fotos que lleguen nuevas también necesitan su copia chica
+    cargarMiniaturas().then(() => { renderListaCreditos(); prepararMiniaturas(); });
     if (esAdmin()) ofrecerMigracionLocal(ownerUid);
   }, err => {
     console.error('Error de sincronización:', err);
@@ -1710,8 +1712,7 @@ function render() {
   const lista = creditosVisibles();
   renderResumen();
   renderResumenFiltro(lista);
-  renderTabla(lista);
-  renderTarjetas(lista);
+  renderListaCreditos(lista);
   renderFlechas();
   actualizarContadorFiltro();
   if ($('#modal-info').open) renderInfo();   // la ficha se mantiene al día
@@ -1825,10 +1826,117 @@ function renderResumen() {
   $('#sum-activos').textContent = String(activos);
 }
 
+/* ====== Miniaturas de las fotos de boleta ======
+   La foto se guarda grande a propósito (hay que poder leer la boleta) y pesa
+   hasta 760 KB. Puesta tal cual en la lista, el navegador la descomprime
+   ENTERA en memoria —unos 17 MB cada una, aunque se vea de 44px— y con
+   muchas fotos la tablet se queda sin memoria y la app se cierra sola. Por
+   eso la lista usa una copia chica (~5 KB) y la foto grande solo se abre al
+   tocarla. Las de los créditos viejos se hacen una vez y quedan guardadas en
+   este dispositivo. */
+const miniaturas = new Map();
+
+function miniDe(c) { return c.fotoMini || miniaturas.get(c.id) || null; }
+
+function hacerMiniatura(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => { try { resolve(comprimirImagen(img, 160, 0.6)); } catch (e) { resolve(null); } };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+let miniaturasCargadas = false;
+async function cargarMiniaturas() {
+  if (miniaturasCargadas) return;
+  miniaturasCargadas = true;
+  try {
+    for (const m of await DB.getAllMiniaturas()) miniaturas.set(m.id, m.mini);
+  } catch (e) { /* si no se pueden leer, se vuelven a hacer */ }
+}
+
+/* Deja respirar a la pantalla entre una miniatura y la siguiente, para que la
+   app siga respondiendo mientras se ponen al día */
+function respiro() {
+  return new Promise(r => {
+    if (window.requestIdleCallback) requestIdleCallback(() => r(), { timeout: 300 });
+    else setTimeout(r, 16);
+  });
+}
+
+let haciendoMiniaturas = false;
+async function prepararMiniaturas() {
+  if (haciendoMiniaturas) return;
+  haciendoMiniaturas = true;
+  try {
+    let hechas = 0;
+    for (const c of creditos) {
+      if (!c.foto || miniDe(c)) continue;
+      const mini = await hacerMiniatura(c.foto);
+      if (!mini) continue;
+      miniaturas.set(c.id, mini);
+      DB.putMiniatura({ id: c.id, mini }).catch(() => {});
+      hechas++;
+      await respiro();
+      if (hechas % 10 === 0) renderListaCreditos();   // se van viendo al momento
+    }
+    if (hechas) renderListaCreditos();
+  } finally {
+    haciendoMiniaturas = false;
+  }
+}
+
+/* En la lista va la copia chica; "loading=lazy" hace que el navegador solo
+   cargue las que se están viendo, y "decoding=async" que no frene el dibujo */
 function celdaFoto(c) {
   return c.foto
-    ? `<img src="${c.foto}" class="thumb" alt="Boleta ${c.boleta}" data-ver-foto="${c.id}">`
+    ? `<img src="${miniDe(c) || c.foto}" class="thumb" alt="Boleta ${c.boleta}" data-ver-foto="${c.id}" loading="lazy" decoding="async">`
     : `<span class="no-photo">Sin foto</span>`;
+}
+
+/* ====== La lista de créditos, por tandas ======
+   Con 300 créditos, dibujar la lista entera en cada cambio deja a la tablet
+   pensando casi un segundo y el desplazamiento se siente pegajoso. Se dibuja
+   una tanda y el resto entra solo al llegar abajo.
+   Además se dibuja SOLO la forma que se está viendo: en celular las tarjetas,
+   en pantalla ancha la tabla. Antes se dibujaban las dos —el doble de trabajo
+   y las fotos cargadas dos veces— para esconder la mitad con CSS. */
+const TANDA = 60;
+let filasVisibles = TANDA;
+let ultimaLista = [];
+const esVistaTarjetas = window.matchMedia('(max-width: 760px)');
+
+let hayListaDibujada = false;
+function renderListaCreditos(lista) {
+  if (lista) { ultimaLista = lista; hayListaDibujada = true; }
+  else if (!hayListaDibujada) return;   // todavía no hubo un render() completo
+  const trozo = ultimaLista.slice(0, filasVisibles);
+  if (esVistaTarjetas.matches) {
+    renderTarjetas(trozo);
+    $('#table-body').innerHTML = '';
+  } else {
+    renderTabla(trozo);
+    $('#cards').innerHTML = '';
+  }
+  const faltan = ultimaLista.length - trozo.length;
+  const aviso = $('#mas-filas');
+  if (aviso) {
+    aviso.hidden = faltan <= 0;
+    $('#mas-filas-cuenta').textContent = faltan > 0 ? `Quedan ${faltan}` : '';
+  }
+}
+
+/* Al buscar, filtrar u ordenar se vuelve a empezar por arriba */
+function renderDesdeArriba() {
+  filasVisibles = TANDA;
+  render();
+}
+
+function verMasFilas() {
+  if (filasVisibles >= ultimaLista.length) return;
+  filasVisibles += TANDA;
+  renderListaCreditos();
 }
 
 function renderTabla(lista) {
@@ -1974,7 +2082,7 @@ function renderTarjetas(lista) {
       </div>
       <div class="card-side">
         ${badgeEstado(c)}
-        ${c.foto ? `<img src="${c.foto}" class="thumb" alt="Boleta ${c.boleta}" data-ver-foto="${c.id}">` : ''}
+        ${c.foto ? celdaFoto(c) : ''}
       </div>
       <div class="card-actions">
         <button class="btn btn-secondary btn-small" data-info="${c.id}">ℹ️ Información</button>
@@ -4924,6 +5032,12 @@ async function guardarCredito(ev) {
     abonos,
     notas: $('#f-notas').value.trim(),
     foto: fotoActual,
+    // Copia chica para las listas: sin ella, cada fila cargaría la foto entera
+    fotoMini: fotoActual
+      ? (existente && existente.foto === fotoActual
+          ? (existente.fotoMini || miniDe(existente) || await hacerMiniatura(fotoActual))
+          : await hacerMiniatura(fotoActual))
+      : null,
     creado: existente ? existente.creado : Date.now(),
     // Se conserva el compromiso de pago anotado por quien cobra (editar el
     // crédito no debe borrarlo), junto con su constancia
@@ -5165,9 +5279,26 @@ function inicializarEventos() {
     $('#foto-preview-wrap').hidden = true;
   });
 
-  // Búsqueda y orden
-  $('#search').addEventListener('input', render);
-  $('#sort-by').addEventListener('change', render);
+  // Búsqueda y orden. La búsqueda espera a que se deje de escribir: redibujar
+  // la lista entera en cada tecla es lo que hacía que se sintiera trabada.
+  let esperaBusqueda = null;
+  $('#search').addEventListener('input', () => {
+    clearTimeout(esperaBusqueda);
+    esperaBusqueda = setTimeout(renderDesdeArriba, 200);
+  });
+  $('#sort-by').addEventListener('change', renderDesdeArriba);
+
+  // La siguiente tanda de créditos entra al llegar abajo (o tocando el botón)
+  $('#btn-mas-filas').addEventListener('click', verMasFilas);
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(entradas => {
+      if (entradas.some(e => e.isIntersecting)) verMasFilas();
+    }, { rootMargin: '400px' }).observe($('#mas-filas'));
+  }
+  // Al pasar de tarjetas a tabla (o al girar la tablet) se dibuja la otra forma
+  const alCambiarForma = () => renderListaCreditos();
+  if (esVistaTarjetas.addEventListener) esVistaTarjetas.addEventListener('change', alCambiarForma);
+  else esVistaTarjetas.addListener(alCambiarForma);
 
   // Panel de filtros (estado + zona + mes + rango de fechas, todos combinados)
   $('#btn-filtrar').addEventListener('click', ev => {
@@ -5175,13 +5306,13 @@ function inicializarEventos() {
     $('#filtro-panel').hidden = !$('#filtro-panel').hidden;
   });
   $('#filtro-panel').addEventListener('click', ev => ev.stopPropagation());
-  $('#filtro-panel').addEventListener('change', render);
+  $('#filtro-panel').addEventListener('change', renderDesdeArriba);
   $('#btn-filtro-cerrar').addEventListener('click', () => { $('#filtro-panel').hidden = true; });
   $('#btn-filtro-limpiar').addEventListener('click', () => {
     document.querySelectorAll('.fil-estado, .fil-zona, .fil-mes').forEach(cb => { cb.checked = false; });
     $('#fil-desde').value = '';
     $('#fil-hasta').value = '';
-    render();
+    renderDesdeArriba();
   });
   // Cerrar el panel al tocar fuera de él
   document.addEventListener('click', () => { $('#filtro-panel').hidden = true; });
@@ -5196,7 +5327,7 @@ function inicializarEventos() {
       if ([...$('#sort-by').options].some(o => o.value === opcion)) {
         $('#sort-by').value = opcion;
       }
-      render();
+      renderDesdeArriba();
     });
   });
 
@@ -5647,8 +5778,11 @@ async function iniciarLocal() {
   cargarSeguridad();
   llenarSelectClientes();
   renderClientes();
+  await cargarMiniaturas();
   render();
   avisoAlAbrir();
+  // Las que falten se van haciendo en segundo plano, sin frenar la app
+  prepararMiniaturas();
 }
 
 async function iniciar() {

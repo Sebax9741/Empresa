@@ -8,12 +8,15 @@ const DB = (() => {
   const STORE_DESP = 'despachos';
   const STORE_REP = 'repartidores';
   const STORE_ANUL = 'anulados';
+  /* Miniaturas de las fotos de boleta. Se quedan SOLO en este dispositivo (no
+     se suben ni se respaldan): son una copia chica que se puede rehacer. */
+  const STORE_MINI = 'miniaturas';
   let dbPromise = null;
 
   function open() {
     if (!dbPromise) {
       dbPromise = new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 4);
+        const req = indexedDB.open(DB_NAME, 5);
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains(STORE)) {
@@ -30,6 +33,9 @@ const DB = (() => {
           }
           if (!db.objectStoreNames.contains(STORE_ANUL)) {
             db.createObjectStore(STORE_ANUL, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(STORE_MINI)) {
+            db.createObjectStore(STORE_MINI, { keyPath: 'id' });
           }
         };
         req.onsuccess = () => resolve(req.result);
@@ -73,6 +79,11 @@ const DB = (() => {
     getAllRepartidores() { return leerTodo(STORE_REP); },
     putRepartidor(r) { return tx(STORE_REP, 'readwrite', s => s.put(r)); },
     deleteRepartidor(id) { return tx(STORE_REP, 'readwrite', s => s.delete(id)); },
+
+    /* Miniaturas: { id (el del crédito), mini (dataURL chico) } */
+    getAllMiniaturas() { return leerTodo(STORE_MINI); },
+    putMiniatura(m) { return tx(STORE_MINI, 'readwrite', s => s.put(m)); },
+    clearMiniaturas() { return tx(STORE_MINI, 'readwrite', s => s.clear()); },
 
     /* Notas de venta anuladas: { id (nº de boleta), boleta, motivo, anuladoPor, anuladoEn } */
     getAllAnulados() { return leerTodo(STORE_ANUL); },
