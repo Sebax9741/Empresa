@@ -92,9 +92,9 @@
     <!-- Indicadores principales -->
     <div class="kpis" id="dash-kpis"></div>
 
-    <!-- Gráficos -->
-    <div class="dash-grid">
-      <section class="panel panel-ancho">
+    <!-- Fila 1: cobranza del mes (línea) + deuda por zona (dona) -->
+    <div class="dash-grid dash-grid-split">
+      <section class="panel">
         <div class="panel-cab">
           <div>
             <h3 class="panel-titulo">Cobranza de los últimos 6 meses</h3>
@@ -112,9 +112,12 @@
             <p class="panel-sub">Lo que falta cobrar</p>
           </div>
         </div>
-        <div id="dash-chart-zonas" class="chart"></div>
+        <div id="dash-chart-zonas" class="chart chart-dona"></div>
       </section>
+    </div>
 
+    <!-- Fila 2: estado de los créditos + cómo pagan (barras, en pareja) -->
+    <div class="dash-grid dash-grid-2">
       <section class="panel">
         <div class="panel-cab">
           <div>
@@ -136,8 +139,8 @@
       </section>
     </div>
 
-    <!-- Atención y actividad -->
-    <div class="dash-grid">
+    <!-- Fila 3: atención y actividad -->
+    <div class="dash-grid dash-grid-2">
       <section class="panel">
         <div class="panel-cab">
           <div>
@@ -923,6 +926,16 @@
           <span>Avisarme el día que vence un crédito
             <small>Notificación en tu celular Android, aunque la app esté cerrada. (En iPhone/PC el aviso aparece al abrir la app.)</small>
           </span>
+        </label>
+      </section>
+
+      <!-- ▸ Dashboard (solo administrador) -->
+      <section class="settings-grupo" id="settings-dashboard" hidden>
+        <h3 class="settings-titulo">📊 Dashboard</h3>
+        <small class="settings-grupo-desc">El Dashboard (resumen del negocio, montos y gráficos) siempre lo ve el administrador. Actívalo aquí si quieres que tus empleados también lo puedan ver.</small>
+        <label class="field-check">
+          <input type="checkbox" id="s-dashboard-empleados">
+          <span>Mostrar el Dashboard a mis empleados</span>
         </label>
       </section>
 

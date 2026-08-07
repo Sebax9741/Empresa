@@ -18,6 +18,9 @@ let settings = {
   hojaAutoActiva: false,
   hojaAutoDias: [1, 2, 3, 4, 5, 6],
   hojaAutoHora: '08:00',
+  // El Dashboard lo ve siempre el administrador; a los empleados se lo
+  // muestra solo si el administrador activa este ajuste.
+  dashboardEmpleados: false,
 };
 let vencimientoEditadoManual = false;
 
@@ -658,7 +661,7 @@ async function sincronizarAhora() {
    todos los usuarios. Además quedan copiados en este dispositivo, para
    que la app funcione igual sin internet.
    El aviso de vencimiento es de cada dispositivo, así que no se sube. */
-const CLAVES_NEGOCIO = ['dias', 'moneda', 'atajo1', 'atajo2', 'hojaAutoActiva', 'hojaAutoDias', 'hojaAutoHora'];
+const CLAVES_NEGOCIO = ['dias', 'moneda', 'atajo1', 'atajo2', 'hojaAutoActiva', 'hojaAutoDias', 'hojaAutoHora', 'dashboardEmpleados'];
 
 function cargarSettings() {
   try {
@@ -696,7 +699,15 @@ function aplicarAjustesNube(datos) {
   // Si el admin acaba de activar/ajustar la apertura automática, revísala ya
   revisarAperturaAutomatica();
   if (!$('#view-settings').hidden) renderConfigHojaAuto();
+  sincronizarNavLateral();
+  // Si el administrador acaba de quitarle el Dashboard a los empleados y un
+  // empleado lo tiene abierto en este momento, se lo saca de ahí.
+  if (seccionActual === 'dashboard' && !puedeVerDashboard()) mostrarSeccion('creditos');
 }
+
+/* El Dashboard lo ve siempre el administrador (o el dueño en modo local, sin
+   equipo); a los empleados se lo muestra solo si el admin activó el ajuste. */
+function puedeVerDashboard() { return !modoNube || esAdmin() || !!settings.dashboardEmpleados; }
 
 /* Días de la semana para la apertura automática (Lun primero; 0=Dom … 6=Sáb) */
 const DIAS_SEMANA = [[1, 'Lun'], [2, 'Mar'], [3, 'Mié'], [4, 'Jue'], [5, 'Vie'], [6, 'Sáb'], [0, 'Dom']];
@@ -1143,12 +1154,15 @@ function aplicarPermisos() {
   $('#usuario-chip').hidden = !modoNube;
   $('#hdr-usuario').textContent = (yo && (yo.nombre || yo.usuario)) || '';
   sincronizarNavLateral();
+  // Un empleado sin acceso al Dashboard no debe quedarse viéndolo tras entrar
+  if (seccionActual === 'dashboard' && !puedeVerDashboard()) mostrarSeccion('creditos');
   render(); // redibuja la tabla para aplicar permisos de editar/borrar
 }
 
 /* El panel lateral (escritorio) refleja los mismos permisos que la cabecera */
 function sincronizarNavLateral() {
   const items = {
+    'nav-dashboard': puedeVerDashboard(),
     'nav-despachos': puede('despachos'),
     'nav-clientes': true,
     'nav-cobranza': puede('cobranza'),
@@ -1166,6 +1180,9 @@ let seccionActual = 'dashboard';
 
 function mostrarSeccion(nombre) {
   if (!SECCIONES.includes(nombre)) nombre = 'creditos';
+  // El Dashboard es solo para el administrador, salvo que lo habilite para
+  // el equipo (⚙️ Configuración → Dashboard)
+  if (nombre === 'dashboard' && !puedeVerDashboard()) nombre = 'creditos';
   seccionActual = nombre;
   SECCIONES.forEach(s => {
     const el = $('#view-' + s);
@@ -5250,6 +5267,8 @@ function inicializarEventos() {
     actualizarEstadoPin();
     renderEstadoOffline();
     renderConfigHojaAuto();
+    $('#settings-dashboard').hidden = !esAdmin();
+    $('#s-dashboard-empleados').checked = !!settings.dashboardEmpleados;
     // Los ajustes del negocio los define el administrador para todos
     const soloAdmin = modoNube && !esAdmin();
     ['s-dias', 's-moneda', 's-atajo1', 's-atajo2'].forEach(id => { $('#' + id).disabled = soloAdmin; });
@@ -5279,10 +5298,12 @@ function inicializarEventos() {
       settings.hojaAutoDias = Array.from(document.querySelectorAll('#s-hoja-dias input:checked'))
         .map(c => Number(c.value)).sort((a, b) => a - b);
       settings.hojaAutoHora = $('#s-hoja-hora').value || '08:00';
+      settings.dashboardEmpleados = $('#s-dashboard-empleados').checked;
     }
     actualizarAtajosVenc();
     mostrarSeccion('creditos');
     render();
+    sincronizarNavLateral();
     revisarAperturaAutomatica();
     try {
       await guardarSettings();

@@ -179,55 +179,63 @@ body {
 .dash-cab {
   display: flex; flex-wrap: wrap; gap: 0.8rem;
   align-items: flex-end; justify-content: space-between;
-  margin: 0.4rem 0 1.2rem;
+  margin: 0.4rem 0 0.9rem;
 }
-.dash-titulo { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
-.dash-sub { color: var(--muted); font-size: 0.88rem; margin: 0.15rem 0 0; }
+.dash-titulo { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+.dash-sub { color: var(--muted); font-size: 0.84rem; margin: 0.15rem 0 0; }
 .dash-cab-botones { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
-/* Tarjetas de indicadores */
+/* Tarjetas de indicadores: 6 en una fila en escritorio, como en la referencia */
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 0.9rem;
-  margin-bottom: 1.1rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 0.9rem;
 }
 .kpi {
   background: var(--card);
   border: 1px solid var(--border);
   border-left: 4px solid var(--kpi, var(--primary));
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
-  padding: 1rem 1.1rem;
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 0.7rem;
+  padding: 0.8rem 0.9rem;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem;
   transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
 }
 .kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
 .kpi-et {
   display: block;
-  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em;
+  font-size: 0.64rem; font-weight: 700; letter-spacing: 0.07em;
   text-transform: uppercase; color: var(--muted);
 }
 .kpi-val {
-  display: block; margin-top: 0.3rem;
-  font-size: 1.65rem; font-weight: 800; letter-spacing: -0.03em;
+  display: block; margin-top: 0.25rem;
+  font-size: 1.32rem; font-weight: 800; letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums; line-height: 1.1;
   color: var(--kpi, var(--text));
 }
-.kpi-pie { display: block; margin-top: 0.15rem; font-size: 0.76rem; color: var(--gray); }
+.kpi-pie { display: block; margin-top: 0.15rem; font-size: 0.72rem; color: var(--gray); }
 .kpi-ico {
   flex-shrink: 0;
-  width: 42px; height: 42px; border-radius: 12px;
-  display: grid; place-items: center; font-size: 1.2rem;
+  width: 34px; height: 34px; border-radius: 10px;
+  display: grid; place-items: center; font-size: 1.02rem;
   background: var(--kpi-bg, var(--primary-light));
 }
 
-/* Rejilla de paneles con gráficos */
+/* Rejillas de paneles con gráficos: por pares, como en el sistema de referencia */
 .dash-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-  gap: 0.9rem;
-  margin-bottom: 1.1rem;
+  grid-template-columns: 1fr;
+  gap: 0.8rem;
+  margin-bottom: 0.8rem;
+}
+/* Fila 1: gráfico de línea (ancho) + dona (angosta) */
+.dash-grid-split { grid-template-columns: 1fr; }
+/* Fila 2 y 3: dos paneles del mismo ancho */
+.dash-grid-2 { grid-template-columns: 1fr; }
+@media (min-width: 860px) {
+  .dash-grid-split { grid-template-columns: 1.8fr 1fr; }
+  .dash-grid-2 { grid-template-columns: 1fr 1fr; }
 }
 .panel {
   transition: box-shadow 0.22s var(--ease);
@@ -235,26 +243,28 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 1.1rem 1.2rem 1.2rem;
+  padding: 0.85rem 0.95rem 0.95rem;
   min-width: 0;
 }
 .panel:hover { box-shadow: var(--shadow-lg); }
-.panel-ancho { grid-column: 1 / -1; }
 .panel-cab {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 0.7rem; margin-bottom: 0.9rem;
+  gap: 0.7rem; margin-bottom: 0.6rem;
 }
-.panel-titulo { font-size: 1rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
-.panel-sub { font-size: 0.78rem; color: var(--muted); margin: 0.1rem 0 0; }
+.panel-titulo { font-size: 0.9rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.panel-sub { font-size: 0.72rem; color: var(--muted); margin: 0.1rem 0 0; }
 .panel-chip {
   flex-shrink: 0;
   background: var(--accent-light); color: var(--accent);
-  font-size: 0.76rem; font-weight: 700;
-  padding: 0.25rem 0.65rem; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700;
+  padding: 0.22rem 0.6rem; border-radius: 999px;
 }
 .chart { width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
-.chart-vacio { color: var(--gray); font-size: 0.86rem; text-align: center; padding: 2rem 0; }
+.chart-vacio { color: var(--gray); font-size: 0.84rem; text-align: center; padding: 1.6rem 0; }
+/* La dona no necesita estirarse a todo el ancho de su columna en pantallas
+   grandes: se centra y se limita, para que no se vea más grande que la línea */
+.chart-dona { max-width: 230px; margin: 0 auto; }
 
 /* Leyenda de los gráficos */
 .leyenda { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; margin-top: 0.8rem; }
