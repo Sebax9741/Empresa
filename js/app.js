@@ -1740,15 +1740,30 @@ function ajustarTablasFijas() {
 
 /* Con el corrimiento lateral puesto, el recuadro pasa a ser su propia zona de
    desplazamiento y los títulos ya no se pueden pegar a la pantalla. Por eso
-   solo se le pone cuando la tabla de verdad no entra a lo ancho: se quita, se
-   mide, y se vuelve a poner nada más si hace falta. */
+   antes de llegar a eso se prueba a apretar la tabla, de menos a más, y se
+   deja el primer aprieto con el que entra entera:
+
+     nivel 1 → letra y relleno más justos, sin perder ninguna columna
+     nivel 2 → en Créditos se va la foto de la boleta (se sigue viendo en la
+               ficha ℹ️); en la hoja se estrechan cliente y "cobró"
+     nivel 3 → en Créditos se van también las fechas de emisión y despacho
+
+   Solo si ni con el nivel 3 entra se le devuelve el corrimiento lateral. Se
+   mide en vez de mirar el ancho de la pantalla porque el sitio de verdad
+   depende también del panel lateral: en una pantalla de 1024px el panel se
+   lleva casi 300px y a la tabla le quedan 730. */
+const APRIETOS = 3;
 function ajustarCorrimiento(selector) {
   const wrap = document.querySelector(selector);
   if (!wrap || wrap.offsetParent === null) return;   // oculta (celular u otra sección)
   const tabla = wrap.querySelector('table');
   if (!tabla) return;
-  wrap.classList.remove('tabla-corre');
-  if (tabla.scrollWidth > wrap.clientWidth + 1) wrap.classList.add('tabla-corre');
+  wrap.classList.remove('tabla-corre', 'compacta-1', 'compacta-2', 'compacta-3');
+  for (let n = 0; n <= APRIETOS; n++) {
+    if (n > 0) wrap.classList.add('compacta-' + n);
+    if (tabla.scrollWidth <= wrap.clientWidth + 1) return;   // así ya entra
+  }
+  wrap.classList.add('tabla-corre');
 }
 
 /* Total que deben y cantidad de créditos según lo que está filtrado ahora mismo */
@@ -1867,11 +1882,11 @@ function renderTabla(lista) {
       <td>${c.zona ? escapeHtml(c.zona) : '—'}</td>
       <td class="col-num">${formatoMonto(c.monto)}</td>
       <td class="col-num ${saldo > 0 ? 'saldo-pend' : 'saldo-ok'}">${saldo > 0 ? formatoMonto(saldo) : '✓'}</td>
-      <td>${c.fecha ? formatoFecha(c.fecha) : '—'}</td>
-      <td>${c.fechaDespacho ? formatoFecha(c.fechaDespacho) : '—'}</td>
+      <td class="col-emision">${c.fecha ? formatoFecha(c.fecha) : '—'}</td>
+      <td class="col-despacho">${c.fechaDespacho ? formatoFecha(c.fechaDespacho) : '—'}</td>
       <td>${textoVencimiento(c)}</td>
       <td>${badgeEstado(c)}</td>
-      <td>${celdaFoto(c)}</td>
+      <td class="col-foto">${celdaFoto(c)}</td>
       <td>
         <div class="row-actions">
           <button class="btn btn-secondary btn-small" data-info="${c.id}" title="Ver información">ℹ️</button>
@@ -5647,6 +5662,12 @@ async function iniciar() {
   window.addEventListener('offline', actualizarAvisoConexion);
   // Al cambiar el tamaño de la ventana, la tabla vuelve a llegar hasta abajo
   window.addEventListener('resize', ajustarTablasFijas);
+  // Girar la tablet cambia el ancho de golpe: hay que volver a medir
+  window.addEventListener('orientationchange', () => setTimeout(ajustarTablasFijas, 250));
+  // La tipografía propia llega después del primer dibujo y mueve los anchos:
+  // sin volver a medir, la tabla podía quedarse con el corrimiento lateral
+  // puesto (y con él, los títulos dejaban de pegarse arriba).
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(ajustarTablasFijas);
   $('#btn-sincronizar').addEventListener('click', sincronizarAhora);
 
   // Apertura automática de la hoja de cobranza: se revisa cada pocos minutos

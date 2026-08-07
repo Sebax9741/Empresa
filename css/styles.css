@@ -717,6 +717,13 @@ select.input { cursor: pointer; }
    devuelve el corrimiento lateral. Lo activa el guion midiendo la tabla; ahí
    los títulos dejan de quedarse pegados, pero nada se sale de su sitio. */
 .table-wrap.tabla-corre { overflow-x: auto; }
+/* Cuando el recuadro se corre de lado pasa a ser su propia zona de
+   desplazamiento, y entonces el "arriba" de la fila de títulos ya no es la
+   pantalla sino el recuadro: con el alto de la cabecera se iba EMPUJADA hacia
+   abajo y quedaba una fila de créditos por encima de los títulos (se veía
+   descuadrado). Dentro del recuadro va pegada arriba del todo. */
+.table-wrap.tabla-corre .credit-table th,
+.cob-tabla-wrap.tabla-corre #cob-tabla th { top: 0; }
 
 .credit-table {
   width: 100%;
@@ -773,6 +780,37 @@ select.input { cursor: pointer; }
   .credit-table { font-size: 0.83rem; }
   .credit-table th, .credit-table td { padding: 0.55rem 0.38rem; }
 }
+/* Aprieto de la tabla de Créditos cuando no entra a lo ancho (tablet de pie,
+   o pantalla mediana con el panel lateral abierto). Los pone el guion después
+   de medir; ver ajustarCorrimiento(). La idea es no llegar nunca al
+   corrimiento lateral, porque con él la fila de títulos deja de pegarse
+   arriba de la pantalla, que es lo que se usa al recorrer la lista. */
+/* Nivel 1: solo se aprieta la letra y el relleno; no se pierde ninguna columna */
+.table-wrap.compacta-1 .credit-table { font-size: 0.8rem; }
+.table-wrap.compacta-1 .credit-table th,
+.table-wrap.compacta-1 .credit-table td { padding: 0.5rem 0.32rem; }
+/* Los títulos pueden partirse en dos líneas antes que ensanchar la columna */
+.table-wrap.compacta-1 .credit-table th { white-space: normal; }
+.table-wrap.compacta-1 .row-actions { gap: 0.2rem; }
+.table-wrap.compacta-1 .row-actions .btn-small { padding: 0.3rem 0.4rem; }
+
+/* Nivel 2: se va la foto de la boleta, que se sigue viendo en la ficha (ℹ️) */
+.table-wrap.compacta-2 .credit-table th,
+.table-wrap.compacta-2 .credit-table td { padding: 0.48rem 0.28rem; }
+.table-wrap.compacta-2 .col-foto { display: none; }
+
+/* Nivel 3: las fechas de emisión y despacho quedan en la ficha (ℹ️). Lo que no
+   puede faltar de un vistazo es cuánto debe, cuándo vence y cómo está. */
+.table-wrap.compacta-3 .credit-table th,
+.table-wrap.compacta-3 .credit-table td { padding: 0.45rem 0.25rem; }
+.table-wrap.compacta-3 .col-emision,
+.table-wrap.compacta-3 .col-despacho { display: none; }
+/* La zona ("PADRE ALDAMIZ") baja de línea en vez de llevarse una columna entera */
+.table-wrap.compacta-3 .credit-table th:nth-child(3),
+.table-wrap.compacta-3 .credit-table td:nth-child(3) { white-space: normal; }
+.table-wrap.compacta-3 .row-actions { gap: 0.15rem; }
+.table-wrap.compacta-3 .row-actions .btn-small { padding: 0.28rem 0.3rem; }
+.table-wrap.compacta-3 .badge { padding: 0.18rem 0.4rem; font-size: 0.7rem; }
 
 .col-num, td.col-num { text-align: right; }
 /* Los montos no se parten en dos líneas */
@@ -1487,12 +1525,50 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   max-width: 15rem;
 }
 /* Igual con "Cobró" (8ª): ahí va el usuario, que puede ser un correo. El ancho
-   da para un correo normal en una sola línea; uno larguísimo se parte. */
+   da para un correo normal en una sola línea; uno larguísimo se parte.
+   El min-width es lo que impide que, al faltar sitio, la columna se estruje
+   hasta una letra de ancho y el correo (y el propio título) salgan escritos
+   hacia abajo, una letra por línea. */
 #cob-tabla th:nth-child(8), #cob-tabla td:nth-child(8) {
   white-space: normal;
+  min-width: 7rem;
   max-width: 11rem;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
+/* Aprieto de la hoja de cobranza cuando sus 10 columnas no entran a lo ancho
+   (lo pone el guion tras medir; ver ajustarCorrimiento). Se aprieta el relleno
+   y se deja que los títulos y la zona bajen de línea antes que renunciar a la
+   fila de títulos pegada arriba. */
+.cob-tabla-wrap.compacta-1 .cob-tabla { font-size: 0.8rem; }
+.cob-tabla-wrap.compacta-1 .cob-tabla th,
+.cob-tabla-wrap.compacta-1 .cob-tabla td { padding: 0.4rem 0.35rem; }
+.cob-tabla-wrap.compacta-1 .cob-tabla th { white-space: normal; }
+.cob-tabla-wrap.compacta-1 #cob-tabla th:nth-child(2),
+.cob-tabla-wrap.compacta-1 #cob-tabla td:nth-child(2) { min-width: 7rem; max-width: 11rem; }
+.cob-tabla-wrap.compacta-1 #cob-tabla th:nth-child(3),
+.cob-tabla-wrap.compacta-1 #cob-tabla td:nth-child(3) { white-space: normal; }
+.cob-tabla-wrap.compacta-1 #cob-tabla th:nth-child(8),
+.cob-tabla-wrap.compacta-1 #cob-tabla td:nth-child(8) { min-width: 6rem; max-width: 8.5rem; }
+
+/* Nivel 2: cliente y "cobró" se estrechan un poco más (siguen partiéndose por
+   palabras, nunca letra por letra). */
+.cob-tabla-wrap.compacta-2 .cob-tabla th,
+.cob-tabla-wrap.compacta-2 .cob-tabla td { padding: 0.38rem 0.3rem; }
+.cob-tabla-wrap.compacta-2 #cob-tabla th:nth-child(2),
+.cob-tabla-wrap.compacta-2 #cob-tabla td:nth-child(2) { min-width: 6rem; max-width: 9rem; }
+.cob-tabla-wrap.compacta-2 #cob-tabla th:nth-child(8),
+.cob-tabla-wrap.compacta-2 #cob-tabla td:nth-child(8) { min-width: 5rem; max-width: 7rem; }
+
+/* Nivel 3: el relleno y las etiquetas quedan al mínimo */
+.cob-tabla-wrap.compacta-3 .cob-tabla th,
+.cob-tabla-wrap.compacta-3 .cob-tabla td { padding: 0.35rem 0.25rem; }
+.cob-tabla-wrap.compacta-3 #cob-tabla th:nth-child(2),
+.cob-tabla-wrap.compacta-3 #cob-tabla td:nth-child(2) { min-width: 5.5rem; max-width: 8rem; }
+.cob-tabla-wrap.compacta-3 #cob-tabla th:nth-child(8),
+.cob-tabla-wrap.compacta-3 #cob-tabla td:nth-child(8) { min-width: 4.5rem; max-width: 6.5rem; }
+.cob-tabla-wrap.compacta-3 .pago-tag { padding: 0.1rem 0.35rem; font-size: 0.7rem; }
+.cob-tabla-wrap.compacta-3 .cob-codigo { font-size: 0.76rem; }
+
 .cob-vacio { text-align: center; color: var(--gray); padding: 1.2rem; }
 
 .pago-tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
