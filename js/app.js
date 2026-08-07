@@ -567,6 +567,25 @@ function diasConCobros(lista) {
 }
 
 let toastTimer = null;
+/* Abre un cuadro sin que el teclado del celular salte solo.
+   showModal() le da el foco al primer campo que encuentra dentro, y en el
+   celular eso hace aparecer el teclado nada más abrir, tapando media pantalla
+   antes de que la persona haya decidido qué quiere tocar. Aquí se abre y se le
+   quita el foco a ese campo. Los cuadros donde SÍ se quiere escribir de
+   entrada (el código de seguridad, el nombre de un cliente nuevo) piden el
+   foco a propósito y no pasan por esta función. */
+function abrirSinTeclado(dlg) {
+  dlg.showModal();
+  const activo = document.activeElement;
+  if (activo && activo !== dlg && dlg.contains(activo)
+      && /^(INPUT|TEXTAREA|SELECT)$/.test(activo.tagName)) {
+    // El foco se pasa al propio cuadro (por eso lleva tabindex="-1") en vez de
+    // soltarlo del todo: así el recorrido con el tabulador y los lectores de
+    // pantalla siguen dentro del formulario, pero sin teclado en pantalla.
+    dlg.focus();
+  }
+}
+
 function toast(msg) {
   const el = $('#toast');
   el.textContent = msg;
@@ -2862,7 +2881,7 @@ function abrirInfo(credito) {
   bloquearCamposCobro(false);
   $('#btn-registrar-cobro').hidden = true;   // el cobro se registra al firmar; este queda de respaldo
   renderInfo();
-  $('#modal-info').showModal();
+  abrirSinTeclado($('#modal-info'));
 }
 
 /* Fila "Vence" de la ficha: con permiso, se puede cambiar la fecha ahí
@@ -3340,7 +3359,7 @@ function abrirFormulario(credito = null, prefill = null) {
       recalcularVencimiento();
     }
   }
-  modalForm.showModal();
+  abrirSinTeclado(modalForm);
 }
 
 /* Quita una "a cuenta", pidiendo antes el código de seguridad */
