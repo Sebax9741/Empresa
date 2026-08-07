@@ -1285,7 +1285,8 @@ function mostrarSeccion(nombre) {
   document.querySelectorAll('.header-actions .btn-icon').forEach(b => b.classList.toggle('activo', b.id === btnId));
   window.scrollTo(0, 0);
   // La tabla solo se puede medir cuando su sección ya está visible
-  if (nombre === 'creditos') requestAnimationFrame(ajustarTablaCreditos);
+  // Las tablas solo se pueden medir cuando su sección ya está visible
+  if (nombre === 'creditos' || nombre === 'cobranza') requestAnimationFrame(ajustarTablasFijas);
 }
 
 /* Si el dispositivo tenía créditos guardados en modo local, ofrece subirlos a la cuenta */
@@ -1708,28 +1709,32 @@ function render() {
   // mantén la vista de despachos al día si está abierta.
   if (!$('#view-despachos').hidden) renderDespachos();
   $('#empty-state').hidden = creditos.length > 0;
-  ajustarTablaCreditos();
+  ajustarTablasFijas();
   sincronizarAvisos();
 }
 
-/* La fila de títulos de la tabla se queda pegada al borde de arriba de la
+/* La fila de títulos de las tablas se queda pegada al borde de arriba de la
    pantalla, justo debajo de la cabecera de la app. Como esa cabecera cambia de
    alto según el ancho (el título se acorta, los botones se reacomodan), su
    alto se mide y se guarda en --alto-cabecera para que el CSS lo use. */
-function ajustarTablaCreditos() {
+function ajustarTablasFijas() {
   const cabecera = document.querySelector('.app-header');
   if (cabecera) {
     document.documentElement.style.setProperty('--alto-cabecera', `${Math.round(cabecera.getBoundingClientRect().height)}px`);
   }
+  ajustarCorrimiento('.table-wrap');      // Créditos
+  ajustarCorrimiento('.cob-tabla-wrap');  // Hoja de cobranza
+}
 
-  const wrap = document.querySelector('.table-wrap');
-  if (!wrap || wrap.offsetParent === null) return;   // en celular está oculta
+/* Con el corrimiento lateral puesto, el recuadro pasa a ser su propia zona de
+   desplazamiento y los títulos ya no se pueden pegar a la pantalla. Por eso
+   solo se le pone cuando la tabla de verdad no entra a lo ancho: se quita, se
+   mide, y se vuelve a poner nada más si hace falta. */
+function ajustarCorrimiento(selector) {
+  const wrap = document.querySelector(selector);
+  if (!wrap || wrap.offsetParent === null) return;   // oculta (celular u otra sección)
   const tabla = wrap.querySelector('table');
   if (!tabla) return;
-  // Con el corrimiento lateral puesto, el recuadro pasa a ser su propia zona
-  // de desplazamiento y los títulos ya no se pueden pegar a la pantalla. Por
-  // eso solo se le pone cuando la tabla de verdad no entra a lo ancho: se
-  // quita, se mide, y se vuelve a poner nada más si hace falta.
   wrap.classList.remove('tabla-corre');
   if (tabla.scrollWidth > wrap.clientWidth + 1) wrap.classList.add('tabla-corre');
 }
@@ -4013,6 +4018,7 @@ function renderCobranza() {
 
   $('#cob-vacio').hidden = filas.length > 0;
   $('#cob-tabla').hidden = filas.length === 0;
+  ajustarCorrimiento('.cob-tabla-wrap');   // ¿entra a lo ancho con estos datos?
 
   // Resumen del día y navegador de días con cobros
   const clientesDistintos = new Set(filas.map(f => f.cliente)).size;
@@ -5618,7 +5624,7 @@ async function iniciar() {
   window.addEventListener('online', actualizarAvisoConexion);
   window.addEventListener('offline', actualizarAvisoConexion);
   // Al cambiar el tamaño de la ventana, la tabla vuelve a llegar hasta abajo
-  window.addEventListener('resize', ajustarTablaCreditos);
+  window.addEventListener('resize', ajustarTablasFijas);
   $('#btn-sincronizar').addEventListener('click', sincronizarAhora);
 
   // Apertura automática de la hoja de cobranza: se revisa cada pocos minutos

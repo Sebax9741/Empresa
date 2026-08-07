@@ -745,6 +745,10 @@ select.input { cursor: pointer; }
   font-weight: 700;
 }
 .credit-table th:hover { color: #fff; }
+/* El recuadro ya no recorta (no tiene overflow), así que las esquinas de
+   arriba las redondea el propio encabezado */
+.credit-table thead th:first-child { border-top-left-radius: var(--radius); }
+.credit-table thead th:last-child { border-top-right-radius: var(--radius); }
 .credit-table th .sort-arrow { font-size: 0.7rem; color: var(--primary); }
 
 .credit-table td {
@@ -1422,7 +1426,10 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .cob-usuarios th,
 .cob-usuarios td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.cob-usuarios thead th { background: var(--bg-tint); text-align: left; font-size: 0.78rem; color: var(--muted); }
+.cob-usuarios thead th {
+  background: var(--side); text-align: left; font-size: 0.78rem; color: #c3cede; font-weight: 700;
+  border-bottom-color: transparent;
+}
 .cob-usuarios .col-num { text-align: right; }
 .cob-usuario-nom { font-weight: 700; }
 .cob-usuarios tbody tr:hover { background: var(--bg-tint); }
@@ -1445,11 +1452,47 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .cob-total-card .val { font-weight: 700; font-size: 0.95rem; }
 .cob-total-card.total { background: var(--primary-light); border-color: var(--primary); }
 
-.cob-tabla-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+/* Igual que en Créditos: sin overflow, el desplazamiento es el de la página,
+   para que la fila de títulos pueda quedarse pegada arriba de la pantalla.
+   El corrimiento lateral solo se activa (.tabla-corre) si la tabla no entra. */
+.cob-tabla-wrap { border: 1px solid var(--border); border-radius: 8px; }
+.cob-tabla-wrap.tabla-corre { overflow-x: auto; }
 .cob-tabla { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .cob-tabla th, .cob-tabla td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
 .cob-tabla th { background: var(--bg-tint); }
 .cob-tabla tbody tr:last-child td { border-bottom: none; }
+
+/* Fila de títulos de la hoja de cobranza: azul oscuro y clavada arriba */
+#cob-tabla th {
+  position: sticky;
+  top: var(--alto-cabecera, 0px);
+  z-index: 2;
+  background: var(--side);
+  color: #c3cede;
+  font-weight: 700;
+  /* Con border-collapse el borde se pierde al quedar fija: se dibuja dentro */
+  border-bottom-color: transparent;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.09);
+}
+/* El recuadro ya no recorta (no tiene overflow), así que las esquinas de
+   arriba las redondea el propio encabezado */
+#cob-tabla thead th:first-child { border-top-left-radius: 8px; }
+#cob-tabla thead th:last-child { border-top-right-radius: 8px; }
+/* La columna Cliente (2ª) puede partirse en dos líneas, como en Créditos: un
+   nombre largo de empresa en una sola línea se llevaba 450px él solo y dejaba
+   la tabla sin entrar en pantallas normales. */
+#cob-tabla th:nth-child(2), #cob-tabla td:nth-child(2) {
+  white-space: normal;
+  min-width: 9rem;
+  max-width: 15rem;
+}
+/* Igual con "Cobró" (8ª): ahí va el usuario, que puede ser un correo. El ancho
+   da para un correo normal en una sola línea; uno larguísimo se parte. */
+#cob-tabla th:nth-child(8), #cob-tabla td:nth-child(8) {
+  white-space: normal;
+  max-width: 11rem;
+  overflow-wrap: anywhere;
+}
 .cob-vacio { text-align: center; color: var(--gray); padding: 1.2rem; }
 
 .pago-tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
