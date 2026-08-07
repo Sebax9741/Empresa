@@ -1152,7 +1152,9 @@ function aplicarPermisos() {
   $('#btn-usuarios').hidden = !esAdmin();
   $('#btn-cliente-nuevo').hidden = !puede('clientes');
   $('#usuario-chip').hidden = !modoNube;
-  $('#hdr-usuario').textContent = (yo && (yo.nombre || yo.usuario)) || '';
+  const nombreUsuario = (yo && (yo.nombre || yo.usuario)) || '';
+  $('#hdr-usuario').textContent = nombreUsuario;
+  $('#hdr-avatar').textContent = inicialesDe(nombreUsuario);
   sincronizarNavLateral();
   // Un empleado sin acceso al Dashboard no debe quedarse viéndolo tras entrar
   if (seccionActual === 'dashboard' && !puedeVerDashboard()) mostrarSeccion('creditos');
@@ -1189,6 +1191,7 @@ function mostrarSeccion(nombre) {
     if (el) el.hidden = (s !== nombre);
   });
   if (nombre === 'dashboard') renderDashboard();
+  else ocultarTooltipGrafico();  // no dejar el tooltip flotando al salir del Dashboard
   // Entrada suave al cambiar de sección
   const vista = $('#view-' + nombre);
   if (vista && !prefiereMenosMovimiento()) {
@@ -1862,6 +1865,14 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
+}
+
+/* Iniciales para el avatar del usuario (hasta 2 letras) */
+function inicialesDe(nombre) {
+  const palabras = String(nombre || '').trim().split(/\s+/).filter(Boolean);
+  if (!palabras.length) return '?';
+  if (palabras.length === 1) return palabras[0].slice(0, 2).toUpperCase();
+  return (palabras[0][0] + palabras[1][0]).toUpperCase();
 }
 
 /* ====== Firma digital del cliente ======
@@ -3502,9 +3513,8 @@ function graficoArea(datos) {
   const etiquetas = datos.map((d, i) =>
     `<text x="${pts[i].x}" y="${Al - 8}" text-anchor="middle" class="eje">${escapeHtml(d.etiqueta)}</text>`).join('');
   const puntos = datos.map((d, i) => `
-    <g class="punto">
+    <g class="punto" data-tip-color="${COLORES_GRAFICO[0]}" data-tip-label="${escapeHtml(d.etiqueta)}" data-tip-value="${escapeHtml(formatoMonto(d.valor))}">
       <circle cx="${pts[i].x}" cy="${pts[i].y}" r="4.5" fill="#fff" stroke="var(--primary)" stroke-width="2.5"/>
-      <title>${escapeHtml(d.etiqueta)}: ${formatoMonto(d.valor)}</title>
     </g>`).join('');
   return `<svg viewBox="0 0 ${An} ${Al}" role="img" aria-label="Cobranza por mes">
     <defs>
@@ -3543,8 +3553,9 @@ function graficoDona(datos, textoCentro) {
          L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${grande} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
     ang = fin;
     const color = COLORES_GRAFICO[i % COLORES_GRAFICO.length];
-    return `<path d="${d2}" fill="${color}" class="porcion" style="--i:${i}">
-      <title>${escapeHtml(d.etiqueta)}: ${formatoMonto(d.valor)} (${Math.round(porcion * 100)}%)</title></path>`;
+    const valorTexto = `${formatoMonto(d.valor)} · ${Math.round(porcion * 100)}%`;
+    return `<path d="${d2}" fill="${color}" class="porcion" style="--i:${i}"
+      data-tip-color="${color}" data-tip-label="${escapeHtml(d.etiqueta)}" data-tip-value="${escapeHtml(valorTexto)}"></path>`;
   }).join('');
   const leyenda = datos.map((d, i) => `
     <span class="leyenda-item">
@@ -3563,14 +3574,60 @@ function graficoDona(datos, textoCentro) {
 function graficoBarras(datos, formato = formatoMonto) {
   if (!datos.length || datos.every(d => !d.valor)) return '<p class="chart-vacio">Sin datos para mostrar.</p>';
   const max = Math.max(...datos.map(d => d.valor)) || 1;
-  return `<div class="barras">${datos.map((d, i) => `
-    <div class="barra-fila">
+  return `<div class="barras">${datos.map((d, i) => {
+    const color = d.color || COLORES_GRAFICO[i % COLORES_GRAFICO.length];
+    return `
+    <div class="barra-fila" data-tip-color="${color}" data-tip-label="${escapeHtml(d.etiqueta)}" data-tip-value="${escapeHtml(formato(d.valor))}">
       <span class="barra-et">${escapeHtml(d.etiqueta)}</span>
       <span class="barra-pista">
-        <span class="barra-valor" style="--w:${(d.valor / max * 100).toFixed(1)}%; --c:${d.color || COLORES_GRAFICO[i % COLORES_GRAFICO.length]}; --i:${i}"></span>
+        <span class="barra-valor" style="--w:${(d.valor / max * 100).toFixed(1)}%; --c:${color}; --i:${i}"></span>
       </span>
       <span class="barra-num">${formato(d.valor)}</span>
-    </div>`).join('')}</div>`;
+    </div>`;
+  }).join('')}</div>`;
+}
+
+/* ---- Menú del usuario (Mi perfil / Configuración) ---- */
+function alternarMenuUsuario() {
+  const abierto = !$('#usuario-menu').hidden;
+  if (abierto) cerrarMenuUsuario(); else abrirMenuUsuario();
+}
+function abrirMenuUsuario() {
+  $('#usuario-menu').hidden = false;
+  $('#btn-cuenta').setAttribute('aria-expanded', 'true');
+}
+function cerrarMenuUsuario() {
+  $('#usuario-menu').hidden = true;
+  $('#btn-cuenta').setAttribute('aria-expanded', 'false');
+}
+
+/* ---- Tooltip de los gráficos del Dashboard (dona, barras, línea) ----
+   Un solo cuadro flotante que sigue al cursor. Los elementos que lo activan
+   llevan data-tip-color/label/value; se delega desde #view-dashboard porque
+   los gráficos se vuelven a dibujar (innerHTML) en cada actualización. */
+function mostrarTooltipGrafico(ev, color, label, valor) {
+  const tt = $('#chart-tooltip');
+  if (!tt) return;
+  $('#chart-tooltip-titulo').textContent = label;
+  $('#chart-tooltip-color').style.background = color || 'var(--primary)';
+  $('#chart-tooltip-valor').textContent = valor;
+  tt.hidden = false;
+  posicionarTooltipGrafico(ev);
+}
+function posicionarTooltipGrafico(ev) {
+  const tt = $('#chart-tooltip');
+  if (!tt || tt.hidden) return;
+  const pad = 14;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  const r = tt.getBoundingClientRect();
+  if (x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - pad;
+  tt.style.left = x + 'px';
+  tt.style.top = y + 'px';
+}
+function ocultarTooltipGrafico() {
+  const tt = $('#chart-tooltip');
+  if (tt) tt.hidden = true;
 }
 
 /* ---- Datos del dashboard ---- */
@@ -5367,8 +5424,53 @@ function inicializarEventos() {
   $('#auth-form').addEventListener('submit', enviarAuth);
   $('#btn-logout').addEventListener('click', cerrarSesion);
   $('#btn-logout-header').addEventListener('click', cerrarSesion);
-  $('#btn-cuenta').addEventListener('click', () => mostrarSeccion('settings'));
   $('#btn-cambiar-pass').addEventListener('click', cambiarMiContrasena);
+
+  // Menú del usuario: "Mi perfil" y "Configuración"
+  $('#btn-cuenta').addEventListener('click', ev => {
+    ev.stopPropagation();
+    alternarMenuUsuario();
+  });
+  $('#btn-mi-perfil').addEventListener('click', () => {
+    cerrarMenuUsuario();
+    mostrarSeccion('settings');
+    // "Mi perfil" lleva directo al bloque de la cuenta dentro de Configuración
+    requestAnimationFrame(() => {
+      const bloque = $('#settings-cuenta');
+      if (bloque) bloque.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+  $('#btn-mi-config').addEventListener('click', () => {
+    cerrarMenuUsuario();
+    mostrarSeccion('settings');
+  });
+  // Cerrar el menú al tocar fuera o con Escape
+  document.addEventListener('click', ev => {
+    if (!$('#usuario-menu').hidden && !ev.target.closest('.usuario-menu-wrap')) cerrarMenuUsuario();
+  });
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape' && !$('#usuario-menu').hidden) cerrarMenuUsuario();
+  });
+
+  // Tooltip de los gráficos del Dashboard (dona, barras, línea): se delega
+  // porque los gráficos se vuelven a dibujar en cada actualización.
+  $('#view-dashboard').addEventListener('pointermove', ev => {
+    const el = ev.target.closest('[data-tip-label]');
+    if (!el) { ocultarTooltipGrafico(); return; }
+    mostrarTooltipGrafico(ev, el.dataset.tipColor, el.dataset.tipLabel, el.dataset.tipValue);
+  });
+  $('#view-dashboard').addEventListener('pointerleave', ocultarTooltipGrafico);
+
+  // Cuando termina una animación de entrada, se libera: mientras una animación
+  // CSS sigue "activa" (aunque ya haya terminado, por el fill-mode), le gana
+  // en la cascada a reglas normales como :hover sobre la misma propiedad
+  // (transform). Sin esto, las tarjetas con animación de entrada no podrían
+  // levantarse al pasar el cursor.
+  document.addEventListener('animationend', ev => {
+    if (['entrarArriba', 'aparecer', 'brotarDona', 'crecerBarra', 'dibujarLinea'].includes(ev.animationName)) {
+      ev.target.style.animation = 'none';
+    }
+  });
 
   // Panel de administración de usuarios (solo admin)
   $('#btn-usuarios').addEventListener('click', abrirUsuarios);

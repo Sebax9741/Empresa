@@ -86,11 +86,22 @@
         <button id="btn-settings" class="btn-icon" title="Configuración" aria-label="Configuración">⚙️</button>
         <button id="btn-new" class="btn btn-primary">＋<span class="btn-label"> Nuevo crédito</span></button>
         <div id="usuario-chip" class="usuario-chip" hidden>
-          <button id="btn-cuenta" class="usuario-cuenta" title="Mi cuenta" aria-label="Mi cuenta">
-            <span class="usuario-ico">👤</span>
-            <span class="usuario-nombre" id="hdr-usuario"></span>
-          </button>
-          <button id="btn-logout-header" class="btn-icon" title="Cerrar sesión" aria-label="Cerrar sesión">🚪</button>
+          <div class="usuario-menu-wrap">
+            <button id="btn-cuenta" class="usuario-cuenta" aria-haspopup="true" aria-expanded="false" title="Mi cuenta">
+              <span class="usuario-avatar" id="hdr-avatar"></span>
+              <span class="usuario-nombre" id="hdr-usuario"></span>
+              <span class="usuario-caret">▾</span>
+            </button>
+            <div class="usuario-menu" id="usuario-menu" hidden>
+              <button type="button" class="usuario-menu-item" id="btn-mi-perfil">
+                <span>👤</span> Mi perfil
+              </button>
+              <button type="button" class="usuario-menu-item" id="btn-mi-config">
+                <span>⚙️</span> Configuración
+              </button>
+            </div>
+          </div>
+          <button id="btn-logout-header" class="btn-salir" type="button">Cerrar sesión</button>
         </div>
       </div>
     </div>
@@ -1019,6 +1030,15 @@
   </section>
 
   <div id="toast" class="toast" hidden></div>
+
+  <!-- Tooltip de los gráficos del Dashboard: color + etiqueta + valor, sigue al cursor -->
+  <div id="chart-tooltip" class="chart-tooltip" hidden>
+    <div class="chart-tooltip-titulo" id="chart-tooltip-titulo"></div>
+    <div class="chart-tooltip-fila">
+      <span class="chart-tooltip-color" id="chart-tooltip-color"></span>
+      <span id="chart-tooltip-valor"></span>
+    </div>
+  </div>
 
   <script src="js/db.js"></script>
   <script src="js/firebase-config.js"></script>
