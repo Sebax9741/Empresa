@@ -1285,7 +1285,7 @@ function mostrarSeccion(nombre) {
   document.querySelectorAll('.header-actions .btn-icon').forEach(b => b.classList.toggle('activo', b.id === btnId));
   window.scrollTo(0, 0);
   // La tabla solo se puede medir cuando su sección ya está visible
-  if (nombre === 'creditos') requestAnimationFrame(ajustarAltoTabla);
+  if (nombre === 'creditos') requestAnimationFrame(ajustarTablaCreditos);
 }
 
 /* Si el dispositivo tenía créditos guardados en modo local, ofrece subirlos a la cuenta */
@@ -1708,23 +1708,30 @@ function render() {
   // mantén la vista de despachos al día si está abierta.
   if (!$('#view-despachos').hidden) renderDespachos();
   $('#empty-state').hidden = creditos.length > 0;
-  ajustarAltoTabla();
+  ajustarTablaCreditos();
   sincronizarAvisos();
 }
 
-/* El recuadro de la tabla de créditos llega justo hasta el borde de abajo de
-   la pantalla. Así todo el recorrido de los créditos ocurre dentro del
-   recuadro (con la fila de títulos clavada arriba) y no hacen falta dos
-   barras de desplazamiento. La altura se mide en vez de fijarla en el CSS
-   porque la barra de filtros ocupa más o menos alto según el ancho. */
-function ajustarAltoTabla() {
+/* La fila de títulos de la tabla se queda pegada al borde de arriba de la
+   pantalla, justo debajo de la cabecera de la app. Como esa cabecera cambia de
+   alto según el ancho (el título se acorta, los botones se reacomodan), su
+   alto se mide y se guarda en --alto-cabecera para que el CSS lo use. */
+function ajustarTablaCreditos() {
+  const cabecera = document.querySelector('.app-header');
+  if (cabecera) {
+    document.documentElement.style.setProperty('--alto-cabecera', `${Math.round(cabecera.getBoundingClientRect().height)}px`);
+  }
+
   const wrap = document.querySelector('.table-wrap');
   if (!wrap || wrap.offsetParent === null) return;   // en celular está oculta
-  // Distancia desde el inicio del documento: no cambia aunque la página
-  // esté desplazada en el momento de medir.
-  const arriba = wrap.getBoundingClientRect().top + window.scrollY;
-  const libre = window.innerHeight - arriba - 24;    // 24px de aire abajo
-  wrap.style.maxHeight = `${Math.max(260, Math.round(libre))}px`;
+  const tabla = wrap.querySelector('table');
+  if (!tabla) return;
+  // Con el corrimiento lateral puesto, el recuadro pasa a ser su propia zona
+  // de desplazamiento y los títulos ya no se pueden pegar a la pantalla. Por
+  // eso solo se le pone cuando la tabla de verdad no entra a lo ancho: se
+  // quita, se mide, y se vuelve a poner nada más si hace falta.
+  wrap.classList.remove('tabla-corre');
+  if (tabla.scrollWidth > wrap.clientWidth + 1) wrap.classList.add('tabla-corre');
 }
 
 /* Total que deben y cantidad de créditos según lo que está filtrado ahora mismo */
@@ -5611,7 +5618,7 @@ async function iniciar() {
   window.addEventListener('online', actualizarAvisoConexion);
   window.addEventListener('offline', actualizarAvisoConexion);
   // Al cambiar el tamaño de la ventana, la tabla vuelve a llegar hasta abajo
-  window.addEventListener('resize', ajustarAltoTabla);
+  window.addEventListener('resize', ajustarTablaCreditos);
   $('#btn-sincronizar').addEventListener('click', sincronizarAhora);
 
   // Apertura automática de la hoja de cobranza: se revisa cada pocos minutos

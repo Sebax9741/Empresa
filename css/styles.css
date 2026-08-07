@@ -705,20 +705,18 @@ body {
 select.input { cursor: pointer; }
 
 /* ====== Tabla (pantallas grandes) ====== */
-/* La tabla se desplaza dentro de su propio recuadro (no con toda la página):
-   así la fila de títulos puede quedarse pegada arriba mientras se recorren
-   los créditos, y las 11 columnas siguen pudiendo correrse de lado en
-   pantallas angostas. El alto se limita a lo que queda de pantalla. */
+/* El desplazamiento es el de la PÁGINA, no el de un recuadro interno: por eso
+   aquí no hay overflow. Así la fila de títulos se queda pegada arriba de la
+   pantalla mientras se baja por los créditos. */
 .table-wrap {
   background: var(--card);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  overflow: auto;
-  /* Tope de alto (el definitivo lo mide el guion según la barra de filtros).
-     Es solo un tope: con pocos créditos el recuadro se encoge a su contenido. */
-  max-height: calc(100vh - 15rem);
-  overscroll-behavior: contain;
 }
+/* Solo si la tabla de verdad no entra a lo ancho (pantallas chicas) se le
+   devuelve el corrimiento lateral. Lo activa el guion midiendo la tabla; ahí
+   los títulos dejan de quedarse pegados, pero nada se sale de su sitio. */
+.table-wrap.tabla-corre { overflow-x: auto; }
 
 .credit-table {
   width: 100%;
@@ -729,9 +727,10 @@ select.input { cursor: pointer; }
 .credit-table th {
   text-align: left;
   padding: 0.75rem 0.9rem;
-  /* Fila de títulos anclada arriba mientras se baja por los créditos */
+  /* Fila de títulos pegada al borde de arriba de la pantalla, justo debajo de
+     la cabecera de la app (su alto lo mide el guion). */
   position: sticky;
-  top: 0;
+  top: var(--alto-cabecera, 0px);
   z-index: 2;
   background: var(--side);
   /* Con border-collapse el borde se pierde al quedar fija: se dibuja dentro */
@@ -756,6 +755,20 @@ select.input { cursor: pointer; }
 .credit-table tbody tr { transition: background 0.12s; }
 .credit-table tbody tr:hover { background: var(--bg-tint); }
 .credit-table tbody tr:last-child td { border-bottom: none; }
+
+/* En pantallas medianas las 11 columnas piden ~1200px y no entran: se aprieta
+   un poco el relleno para que la tabla siga cabiendo entera. Si entra, no hace
+   falta el corrimiento lateral y la fila de títulos sí se puede quedar pegada
+   arriba, que es lo que interesa al recorrer los créditos. */
+@media (max-width: 1500px) {
+  .credit-table { font-size: 0.86rem; }
+  .credit-table th, .credit-table td { padding: 0.6rem 0.5rem; }
+  .credit-table th { font-size: 0.68rem; letter-spacing: 0.03em; }
+}
+@media (max-width: 1330px) {
+  .credit-table { font-size: 0.83rem; }
+  .credit-table th, .credit-table td { padding: 0.55rem 0.38rem; }
+}
 
 .col-num, td.col-num { text-align: right; }
 /* Los montos no se parten en dos líneas */
