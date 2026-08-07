@@ -1,5 +1,5 @@
 /* Service worker: permite instalar la app y usarla sin internet */
-const CACHE = 'creditos-v70';
+const CACHE = 'creditos-v71';
 const ARCHIVOS = [
   './',
   './index.html',
@@ -18,7 +18,11 @@ const ARCHIVOS = [
 
 self.addEventListener('install', ev => {
   ev.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(ARCHIVOS)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      // 'reload' salta la caché del navegador: si no, al instalarse la versión
+      // nueva podría guardar los archivos viejos que aún tenía guardados.
+      .then(cache => cache.addAll(ARCHIVOS.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -30,11 +34,24 @@ self.addEventListener('activate', ev => {
   );
 });
 
+/* Los archivos que forman la app (página, guiones y estilos). A estos se les
+   pide siempre la versión del servidor saltando la caché del navegador: sin
+   eso, un cambio recién publicado podía tardar hasta una hora en verse en el
+   celular aunque se recargara, porque el navegador reusaba su copia guardada. */
+function esArchivoDeLaApp(url) {
+  return url.origin === self.location.origin
+    && /(\.(html|js|css|webmanifest)|\/)$/.test(url.pathname);
+}
+
 /* Estrategia: red primero (para recibir actualizaciones), caché si no hay internet */
 self.addEventListener('fetch', ev => {
   if (ev.request.method !== 'GET') return;
+  const url = new URL(ev.request.url);
+  const pedido = esArchivoDeLaApp(url)
+    ? fetch(url.href, { cache: 'reload', credentials: 'same-origin' })
+    : fetch(ev.request);
   ev.respondWith(
-    fetch(ev.request)
+    pedido
       .then(resp => {
         const copia = resp.clone();
         caches.open(CACHE).then(cache => cache.put(ev.request, copia));

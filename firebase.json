@@ -5,6 +5,23 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "//": "Sin esto Firebase manda Cache-Control: max-age=3600 y el celular sigue usando el app.js viejo hasta una hora despues de publicar. 'no-cache' no significa no guardar: significa preguntar siempre al servidor, que responde 304 (sin descarga) si no cambio nada. Asi los cambios se ven al recargar.",
+        "source": "/**/*.@(html|js|css|webmanifest)",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "//": "La raiz sirve index.html y tampoco puede quedarse pegada",
+        "source": "/",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "//": "Imagenes y tipografia cambian muy de vez en cuando: se guardan un dia",
+        "source": "/**/*.@(png|jpg|jpeg|svg|ico|woff2)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
+      }
     ]
   },
   "functions": [
