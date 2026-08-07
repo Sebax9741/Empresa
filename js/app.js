@@ -49,6 +49,9 @@ function usuarioAEmail(entrada) {
 /* Permisos del usuario actual */
 const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true, clientes: true, hojaCrear: true, vencimiento: true };
 function esAdmin() { return modoNube && !!(yo && yo.rol === 'admin'); }
+/* En modo local hay un solo dueño y manda igual que un administrador (es el
+   mismo criterio que ya se usa para quitar una "a cuenta"). */
+function mandaComoAdmin() { return !modoNube || esAdmin(); }
 function puede(nombre) {
   if (!modoNube) return true;         // modo local: un solo dueño, todo permitido
   if (yo && yo.rol === 'admin') return true;
@@ -3053,7 +3056,17 @@ function renderInfo() {
   const puedeCobrar = puede('pagos') && debe > 0 && abonos.length < MAX_ABONOS;
   $('#info-cobro').hidden = !puedeCobrar;
   if (puedeCobrar) {
-    $('#cobro-fecha').value = hoyISO();      // siempre hoy y bloqueada
+    // La fecha del cobro la puede corregir el administrador (por ejemplo, para
+    // registrar un cobro de ayer que no se alcanzó a anotar). Para el resto
+    // sigue siendo siempre hoy y bloqueada: así nadie puede colocar un cobro
+    // en otro día para saltarse una hoja de cobranza ya cerrada.
+    const admin = mandaComoAdmin();
+    $('#cobro-fecha').value = hoyISO();
+    $('#cobro-fecha').disabled = !admin;
+    $('#cobro-fecha').max = hoyISO();        // nunca a futuro
+    $('#cobro-fecha-nota').textContent = admin
+      ? '(puedes cambiarla; queda constancia del día real)'
+      : '(hoy, no se puede cambiar)';
     $('#btn-cobro-todo').textContent = `Saldar todo lo que debe (${formatoMonto(debe)})`;
 
     // La hoja de cobranza de hoy no hace falta crearla a mano: se abre sola
@@ -3071,15 +3084,25 @@ function renderInfo() {
   }
 }
 
+/* Con qué fecha se registra el cobro. Solo el administrador puede cambiarla;
+   para todos los demás el campo está bloqueado y vale hoy. Nunca a futuro. */
+function fechaDelCobro() {
+  const hoy = hoyISO();
+  if (!mandaComoAdmin()) return hoy;
+  const elegida = $('#cobro-fecha').value;
+  if (!elegida || elegida > hoy) return hoy;
+  return elegida;
+}
+
 /* Motivo por el que NO se puede registrar el cobro ahora mismo, o null si
    todo está listo. Se usa antes de pedir la firma (para no hacer firmar en
    vano) y también como control final al registrar. */
 function problemaParaCobrar(c) {
   if (!c) return '⚠️ No se encontró el crédito';
   if (!puede('pagos')) return '🔒 No tienes permiso para registrar pagos';
-  const hoy = hoyISO();
-  // Si la hoja de hoy todavía no existe, no bloquea: se abre sola al cobrar.
-  if (hojaCerrada(hoy) && !esAdmin()) return '🔒 La hoja de cobranza de hoy ya está cerrada';
+  const dia = fechaDelCobro();
+  // Si la hoja de ese día todavía no existe, no bloquea: se abre sola al cobrar.
+  if (hojaCerrada(dia) && !esAdmin()) return '🔒 La hoja de cobranza de hoy ya está cerrada';
   const monto = Number($('#cobro-monto').value);
   const debe = saldoDe(c);
   if (!monto || monto <= 0) return '⚠️ Escribe el monto cobrado';
@@ -3088,12 +3111,14 @@ function problemaParaCobrar(c) {
   return null;
 }
 
-/* Bloquea/desbloquea el monto y el método (la fecha ya está fija). Se bloquean
-   cuando el cliente ya firmó, para que no se puedan cambiar después. */
+/* Bloquea/desbloquea el monto, el método y la fecha. Se bloquean cuando el
+   cliente ya firmó, para que no se puedan cambiar después de la firma. */
 function bloquearCamposCobro(bloq) {
   $('#cobro-monto').disabled = bloq;
   $('#cobro-metodo').disabled = bloq;
   $('#btn-cobro-todo').disabled = bloq;
+  // Al desbloquear, la fecha vuelve a quedar disponible solo para el admin
+  $('#cobro-fecha').disabled = bloq || !mandaComoAdmin();
 }
 
 async function pedirFirmaCobro() {
@@ -3116,16 +3141,17 @@ async function registrarCobro() {
   if (!c) return;
   if (!puede('pagos')) { toast('🔒 No tienes permiso para registrar pagos'); return; }
 
-  // Si la hoja de cobranza de hoy todavía no existe, se abre sola con este
-  // cobro (quien sea que lo registre queda como quien la abrió).
-  const hoy = hoyISO();
-  if (!hojaExiste(hoy)) {
-    const abierta = await asegurarHojaAbierta(hoy);
-    if (!abierta) { toast('❌ No se pudo abrir la hoja de cobranza de hoy. Intenta de nuevo.'); return; }
+  // El cobro entra en la hoja del día que dice la fecha (normalmente hoy; el
+  // administrador puede haberla corregido). Si esa hoja todavía no existe, se
+  // abre sola con este cobro; si ya está cerrada, hace falta el código.
+  const dia = fechaDelCobro();
+  if (!hojaExiste(dia)) {
+    const abierta = await asegurarHojaAbierta(dia);
+    if (!abierta) { toast(`❌ No se pudo abrir la hoja de cobranza del ${formatoFecha(dia)}. Intenta de nuevo.`); return; }
   }
-  if (hojaCerrada(hoy)) {
+  if (hojaCerrada(dia)) {
     if (!esAdmin()) { toast('🔒 La hoja de cobranza de hoy ya está cerrada'); return; }
-    const autorizado = await pedirPin('La hoja de cobranza de hoy ya está cerrada. Escribe tu código para registrar este cobro de todos modos.');
+    const autorizado = await pedirPin(`La hoja de cobranza del ${formatoFecha(dia)} ya está cerrada. Escribe tu código para registrar este cobro de todos modos.`);
     if (!autorizado) { toast('🔒 Cobro cancelado'); return; }
   }
 
@@ -3140,9 +3166,11 @@ async function registrarCobro() {
     ...c,
     abonos: [...abonosDe(c), {
       monto,
-      fecha: hoyISO(),                 // la fecha del cobro es siempre hoy
+      fecha: dia,                      // el día al que se le carga el cobro
       metodo: $('#cobro-metodo').value,
       registradoPor: quienSoy(),
+      // Constancia: el día y la hora REALES en que se registró. Si no coinciden
+      // con la fecha del cobro, la ficha lo marca con un ⚠️.
       registradoFecha: hoyISO(),
       registrado: Date.now(),
       firma: firmaPendiente,
