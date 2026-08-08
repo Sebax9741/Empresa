@@ -866,6 +866,9 @@ function configNubeValida() {
    adelante. Si más tarde el servidor rechaza el cambio (por ejemplo por
    permisos), se avisa en ese momento. */
 const ESPERA_NUBE = 1500;   // ms que esperamos la confirmación del servidor
+/* ms que esperamos a que la nube confirme el acceso al abrir la app. Pasado
+   ese tiempo se entra con el acceso guardado en el equipo (ver conLimite). */
+const ESPERA_ACCESO = 6000;
 
 function escrituraNube(promesa, queEs) {
   let seguimosSinEsperar = false;
@@ -1065,10 +1068,28 @@ async function iniciarNube() {
   };
   modoNube = true;
 
+  /* Sin señal —o peor, con una conexión que se queda colgada y no falla ni
+     responde— Firebase Auth puede no llegar NUNCA a avisar quién había
+     entrado. La app se quedaba entonces esperando para siempre: ni entraba ni
+     mostraba la pantalla de acceso, que es justo el "no sucede nada" que se
+     ve al quitar el internet. Por eso se le pone un plazo: pasado ese tiempo
+     se entra con el acceso guardado en este equipo (que para eso se guarda) y
+     se trabaja con los datos del dispositivo. */
+  let authRespondio = false;
   authMod.onAuthStateChanged(auth, usuario => {
+    authRespondio = true;
     if (usuario) sesionIniciada(usuario);
     else sesionCerrada();
   });
+  setTimeout(() => {
+    if (authRespondio) return;
+    const guardado = ultimoAccesoLocal();
+    if (guardado && entrarConAccesoGuardado({ uid: guardado.uid })) return;
+    // Sin copia guardada no hay nada que enseñar: al menos que se vea la
+    // pantalla de acceso en vez de una app vacía y muda.
+    $('#auth-screen').hidden = false;
+    banner('📴 Sin conexión con la nube. Conéctate una vez para poder usar la app en este dispositivo.');
+  }, ESPERA_ACCESO);
 }
 
 /* Copia del acceso en este dispositivo, para poder entrar sin internet.
@@ -1083,13 +1104,79 @@ function leerAccesoLocal(uid) {
   catch (e) { return null; }
 }
 
+/* ====== Copia local de lo que llega de la nube ======
+   Firestore ya guarda lo suyo en el dispositivo, pero cuando la conexión se
+   queda colgada —hay wifi y el celular cree que hay internet, pero no llega
+   nada— tarda en decidirse a servir lo guardado, y mientras tanto la lista
+   sale vacía: es el "no cargan los datos" de siempre. Con esta copia la app
+   pinta los créditos al instante y la nube los actualiza cuando conteste.
+   Se guarda sin la foto grande de la boleta (que sí queda en la caché de
+   Firestore): así la copia es liviana y no duplica decenas de megas. */
+const DUENO_COPIA = 'creditos-copia-de';
+let copiaPendiente = null;
+function guardarCopiaLocal(lista) {
+  clearTimeout(copiaPendiente);
+  copiaPendiente = setTimeout(() => {
+    // Sin la foto grande de la boleta: la copia es solo para arrancar rápido
+    const liviano = lista.map(({ foto, ...resto }) => resto);
+    DB.guardarEspejo(liviano)
+      .then(() => { try { localStorage.setItem(DUENO_COPIA, ownerUid || ''); } catch (e) {} })
+      .catch(() => { /* sin espacio: manda la nube */ });
+  }, 2000);
+}
+
+/* Pinta lo que este equipo ya tenía guardado, mientras la nube contesta. Si la
+   nube ya contestó (hay créditos en pantalla), no se toca nada. */
+async function pintarCopiaLocal() {
+  if (!modoNube || creditos.length) return;
+  // La copia es de un negocio concreto: si entra otra cuenta, no se enseña
+  try { if (localStorage.getItem(DUENO_COPIA) !== ownerUid) return; } catch (e) { return; }
+  try {
+    const guardados = await DB.getAllEspejo();
+    if (guardados.length && !creditos.length) {
+      creditos = guardados;
+      render();
+    }
+  } catch (e) { /* no había copia */ }
+}
+
+/* El acceso guardado en este equipo, sin saber de qué usuario es. Hace falta
+   cuando Firebase Auth ni siquiera llega a decirnos quién había entrado. */
+function ultimoAccesoLocal() {
+  try {
+    for (const clave of Object.keys(localStorage)) {
+      if (!clave.startsWith('creditos-acceso-')) continue;
+      const datos = JSON.parse(localStorage.getItem(clave));
+      if (datos && datos.ownerUid && datos.yo) {
+        return { uid: clave.slice('creditos-acceso-'.length), ...datos };
+      }
+    }
+  } catch (e) { /* nada guardado */ }
+  return null;
+}
+
 /* Al iniciar sesión: averigua el dueño (o lo crea la 1ª vez), lee la membresía
    del usuario y aplica sus permisos. Si no es miembro, deniega el acceso.
    Sin internet se usa la copia guardada en este dispositivo. */
+/* Le pone un límite de tiempo a una consulta a la nube. Sin señal, la consulta
+   puede tardar bastante en rendirse y mientras tanto la app se queda en
+   blanco. Solo se usa cuando este equipo YA tiene guardado el acceso: si se
+   agota el tiempo, se entra con esa copia y se sigue trabajando con los datos
+   del dispositivo. Sin copia guardada no se limita, para no cortar por corto
+   un primer inicio de sesión con conexión lenta. */
+function conLimite(promesa, ms) {
+  if (!ms) return promesa;
+  return Promise.race([
+    promesa,
+    new Promise((_, rechazar) => setTimeout(() => rechazar(new Error('sin respuesta de la nube')), ms)),
+  ]);
+}
+
 async function sesionIniciada(usuario) {
+  const limite = leerAccesoLocal(usuario.uid) ? ESPERA_ACCESO : 0;
   try {
     const cfgRef = fb.doc(fb.db, 'config', 'app');
-    let cfgSnap = await fb.getDoc(cfgRef);
+    let cfgSnap = await conLimite(fb.getDoc(cfgRef), limite);
 
     if (!cfgSnap.exists()) {
       // Ojo: sin internet, "no existe" puede significar solo que este equipo
@@ -1114,7 +1201,7 @@ async function sesionIniciada(usuario) {
     }
 
     ownerUid = cfgSnap.data().ownerUid;
-    const miDoc = await fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', usuario.uid));
+    const miDoc = await conLimite(fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', usuario.uid)), limite);
     if (!miDoc.exists()) {
       // Sin internet y sin la ficha en este equipo: no se puede afirmar que
       // haya perdido el acceso, así que no se le cierra la sesión.
@@ -1150,8 +1237,27 @@ function entrarConAccesoGuardado(usuario) {
   ownerUid = guardado.ownerUid;
   yo = guardado.yo;
   abrirSesionEnPantalla();
+  servirDeLoGuardado();
   toast('📴 Sin internet: trabajando con los datos de este dispositivo');
   return true;
+}
+
+/* Se entra sin respuesta de la nube, así que se le dice a Firestore que sirva
+   YA lo que hay guardado en el dispositivo. Sin esto se queda esperando a una
+   conexión que no llega y las listas tardaban más de medio minuto en salir,
+   con la app abierta pero vacía. Enseguida se vuelve a habilitar la red en
+   segundo plano: cuando la conexión aparezca, se sincroniza y sube lo
+   pendiente sin que nadie tenga que hacer nada. */
+function servirDeLoGuardado() {
+  if (!modoNube || !fb) return;
+  datosDesdeCache = true;
+  // Sin await: la promesa puede tardar en cumplirse si la conexión quedó
+  // colgada, pero el efecto —servir de lo guardado— no depende de eso.
+  try { fb.disableNetwork(fb.db).catch(() => {}); } catch (e) { return; }
+  actualizarAvisoConexion();
+  // Se vuelve a habilitar la red aparte (no encadenado a la promesa anterior,
+  // que podría no cumplirse nunca): al aparecer la conexión, sube lo pendiente.
+  setTimeout(() => { try { fb.enableNetwork(fb.db).catch(() => {}); } catch (e) {} }, 4000);
 }
 
 function abrirSesionEnPantalla() {
@@ -1163,6 +1269,7 @@ function abrirSesionEnPantalla() {
   cargarSeguridad();        // copia local mientras llega la de la nube
   suscribirConfigNube();
   suscribirNube();
+  pintarCopiaLocal();
 }
 
 function sesionCerrada() {
@@ -1208,6 +1315,7 @@ function suscribirNube() {
   // recuperó la conexión (el aviso de "subiendo…" se quedaría pegado).
   unsubSnapshot = fb.onSnapshot(coleccion, { includeMetadataChanges: true }, snap => {
     creditos = snap.docs.map(d => d.data());
+    guardarCopiaLocal(creditos);
     // hasPendingWrites: hay cambios guardados aquí que aún no llegaron al servidor
     cambiosPendientes = snap.metadata.hasPendingWrites;
     marcarOrigenDatos(snap);

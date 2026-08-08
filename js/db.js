@@ -11,12 +11,16 @@ const DB = (() => {
   /* Miniaturas de las fotos de boleta. Se quedan SOLO en este dispositivo (no
      se suben ni se respaldan): son una copia chica que se puede rehacer. */
   const STORE_MINI = 'miniaturas';
+  /* Copia de lo que llega de la nube, para poder pintar la lista al instante
+     sin esperar a que la conexión conteste. Va aparte del almacén de "modo
+     local" para no pisar los datos de quien trabajó sin cuenta. */
+  const STORE_ESPEJO = 'espejo';
   let dbPromise = null;
 
   function open() {
     if (!dbPromise) {
       dbPromise = new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 5);
+        const req = indexedDB.open(DB_NAME, 6);
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains(STORE)) {
@@ -36,6 +40,9 @@ const DB = (() => {
           }
           if (!db.objectStoreNames.contains(STORE_MINI)) {
             db.createObjectStore(STORE_MINI, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(STORE_ESPEJO)) {
+            db.createObjectStore(STORE_ESPEJO, { keyPath: 'id' });
           }
         };
         req.onsuccess = () => resolve(req.result);
@@ -84,6 +91,16 @@ const DB = (() => {
     getAllMiniaturas() { return leerTodo(STORE_MINI); },
     putMiniatura(m) { return tx(STORE_MINI, 'readwrite', s => s.put(m)); },
     clearMiniaturas() { return tx(STORE_MINI, 'readwrite', s => s.clear()); },
+
+    /* Copia de los créditos de la nube (solo para arrancar rápido sin señal) */
+    getAllEspejo() { return leerTodo(STORE_ESPEJO); },
+    guardarEspejo(lista) {
+      return tx(STORE_ESPEJO, 'readwrite', s => {
+        s.clear();
+        for (const c of lista) s.put(c);
+        return { result: lista.length };
+      });
+    },
 
     /* Notas de venta anuladas: { id (nº de boleta), boleta, motivo, anuladoPor, anuladoEn } */
     getAllAnulados() { return leerTodo(STORE_ANUL); },
