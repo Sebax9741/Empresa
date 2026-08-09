@@ -1025,6 +1025,8 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .abono-datos { display: block; min-width: 0; }
 .abono-constancia { display: block; font-size: 0.74rem; color: var(--muted); margin-top: 0.1rem; }
 .abono-constancia.abono-ojo { color: var(--warning); font-weight: 600; }
+/* La corrección de un pago se distingue de quien lo cobró */
+.abono-constancia.abono-modificado, .info-abono-meta.abono-modificado { color: #6366f1; font-weight: 600; }
 .abono-bloqueado { font-size: 1rem; opacity: 0.55; padding: 0 0.2rem; cursor: help; }
 
 /* Buscador de clientes con sugerencias */
@@ -1249,8 +1251,12 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .abono-item .btn-fecha-editar { color: var(--primary); font-size: 0.85rem; }
 .abono-fecha-edit { display: inline-flex; align-items: center; gap: 0.3rem; }
 .abono-fecha-edit .input-mini { width: auto; margin: 0; padding: 0.15rem 0.35rem; font-size: 0.82rem; }
-.abono-fecha-edit button[data-confirmar-fecha] { color: var(--ok); }
-.abono-fecha-edit button[data-cancelar-fecha] { color: var(--gray); }
+/* Editor de un pago a cuenta: fecha, monto y método, uno al lado del otro */
+.abono-editor { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.4rem; margin-top: 0.3rem; }
+.abono-editor label { display: flex; flex-direction: column; font-size: 0.7rem; color: var(--muted); gap: 0.15rem; }
+.abono-editor .input-mini { width: auto; max-width: 8.5rem; margin: 0; padding: 0.15rem 0.35rem; font-size: 0.82rem; }
+.abono-editor button[data-confirmar-abono] { color: var(--ok); }
+.abono-editor button[data-cancelar-abono] { color: var(--gray); }
 .abonos-vacio { color: var(--gray); font-size: 0.88rem; margin: 0 0 0.6rem; }
 .abono-nuevo { border-top: 1px dashed var(--border); padding-top: 0.6rem; margin-bottom: 0.6rem; }
 .abono-nuevo-btns { display: flex; justify-content: flex-end; gap: 0.5rem; }

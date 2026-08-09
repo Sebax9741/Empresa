@@ -3168,7 +3168,9 @@ function renderInfo() {
           <strong>ACUENTA ${i + 1}: ${formatoMonto(a.monto)}</strong>
           <span class="info-abono-meta">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}</span>
           ${a.registradoPor ? `<span class="info-abono-meta${abonoConFechaCambiada(a) ? ' abono-ojo' : ''}">
-            ${abonoConFechaCambiada(a) ? '⚠️' : '🖊️'} ${escapeHtml(a.registradoPor)} · ${textoRegistrado(a)}</span>` : ''}
+            ${abonoConFechaCambiada(a) ? '⚠️' : '🖊️'} Registrado por ${escapeHtml(a.registradoPor)} · ${textoRegistrado(a)}</span>` : ''}
+          ${a.modificadoPor ? `<span class="info-abono-meta abono-modificado">
+            ✏️ Modificado por ${escapeHtml(a.modificadoPor)} · ${fechaHoraDeTimestamp(a.modificadoEn)}</span>` : ''}
         </div>
         ${a.firma
           ? `<img src="${a.firma}" class="firma-mini" alt="Firma" data-ver-firma="${i}" title="Ver la firma">`
@@ -3377,7 +3379,7 @@ function abrirFormulario(credito = null, prefill = null) {
   limpiarErrorFormulario();
   fotoActual = null;
   abonosActuales = [];
-  abonoFechaEditando = null;
+  abonoEditando = null;
   vencimientoEditadoManual = false;
   actualizarAtajosVenc();
   $('#btn-atajo-1').disabled = false;
@@ -3429,6 +3431,10 @@ function abrirFormulario(credito = null, prefill = null) {
       registradoPor: a.registradoPor || '',
       registradoFecha: a.registradoFecha || '',
       registrado: a.registrado || 0,
+      // Sin estos dos, al reabrir el crédito se perdía la constancia de quién
+      // había corregido el pago (esta lista se guarda tal cual al grabar).
+      modificadoPor: a.modificadoPor || '',
+      modificadoEn: a.modificadoEn || 0,
       firma: a.firma || '',
     }));
     $('#field-pago-inicial').hidden = true;
@@ -3493,41 +3499,66 @@ async function quitarAbonoConCodigo(indice) {
 /* Editar la fecha de un pago "a cuenta" ya registrado: solo el administrador
    (en modo local, el único dueño, siempre puede). Si la hoja de origen o la
    de destino ya está cerrada, se pide el código de seguridad. */
-let abonoFechaEditando = null;   // índice del abono cuya fecha se está editando ahora
+let abonoEditando = null;   // índice del abono que se está editando ahora
 
-function puedeEditarFechaAbono() {
+function puedeEditarAbono() {
   return !modoNube || esAdmin();
 }
 
-function iniciarEdicionFechaAbono(indice) {
-  if (!puedeEditarFechaAbono()) { toast('🔒 Solo el administrador puede editar la fecha'); return; }
-  abonoFechaEditando = indice;
+function iniciarEdicionAbono(indice) {
+  if (!puedeEditarAbono()) { toast('🔒 Solo el administrador puede editar los pagos a cuenta'); return; }
+  abonoEditando = indice;
   renderAbonos();
 }
 
-function cancelarEdicionFechaAbono() {
-  abonoFechaEditando = null;
+function cancelarEdicionAbono() {
+  abonoEditando = null;
   renderAbonos();
 }
 
-async function confirmarEdicionFechaAbono(indice) {
+async function confirmarEdicionAbono(indice) {
   const a = abonosActuales[indice];
+  if (!a) { cancelarEdicionAbono(); return; }
   const nuevaFecha = $(`#abono-fecha-edit-${indice}`).value;
-  if (!a || !nuevaFecha) { cancelarEdicionFechaAbono(); return; }
-  if (nuevaFecha === a.fecha) { cancelarEdicionFechaAbono(); return; }
+  const nuevoMonto = Number($(`#abono-monto-edit-${indice}`).value);
+  const nuevoMetodo = $(`#abono-metodo-edit-${indice}`).value;
+
+  if (!nuevaFecha) { toast('⚠️ El pago necesita una fecha'); return; }
+  if (!nuevoMonto || nuevoMonto <= 0) { toast('⚠️ El monto tiene que ser mayor que cero'); return; }
 
   const fechaVieja = a.fecha;
-  // Si la hoja de origen o la de destino ya está cerrada, hace falta el código
+  const cambios = [];
+  if (nuevaFecha !== fechaVieja) cambios.push('fecha');
+  if (nuevoMonto !== Number(a.monto)) cambios.push('monto');
+  if (nuevoMetodo !== metodoDe(a)) cambios.push('método');
+  if (!cambios.length) { cancelarEdicionAbono(); return; }
+
+  // Si la hoja de donde sale o la de donde entra ya está cerrada, hace falta
+  // el código: ese cobro ya está contado en el cierre de ese día.
   if ((fechaVieja && hojaCerrada(fechaVieja)) || hojaCerrada(nuevaFecha)) {
+    const detalle = cambios.includes('fecha')
+      ? `del ${fechaVieja ? formatoFecha(fechaVieja) : 'sin fecha'} al ${formatoFecha(nuevaFecha)}`
+      : `del ${formatoFecha(nuevaFecha)}`;
     const autorizado = await pedirPin(
-      `Vas a cambiar la fecha de la ACUENTA ${indice + 1} del ${fechaVieja ? formatoFecha(fechaVieja) : 'sin fecha'} al ${formatoFecha(nuevaFecha)}. Una de esas hojas ya está cerrada.`);
-    if (!autorizado) { toast('🔒 Cambio cancelado'); cancelarEdicionFechaAbono(); return; }
+      `Vas a cambiar ${cambios.join(' y ')} de la ACUENTA ${indice + 1} ${detalle}. Esa hoja de cobranza ya está cerrada.`);
+    if (!autorizado) { toast('🔒 Cambio cancelado'); cancelarEdicionAbono(); return; }
   }
 
-  abonosActuales[indice] = { ...a, fecha: nuevaFecha };
-  abonoFechaEditando = null;
+  abonosActuales[indice] = {
+    ...a,
+    fecha: nuevaFecha,
+    monto: nuevoMonto,
+    metodo: nuevoMetodo,
+    // Constancia de la corrección: quién la hizo y en qué momento real. Lo de
+    // "registrado por" no se toca nunca: sigue diciendo quién cobró.
+    // Se usa Date.now() y no la hora del servidor porque Firestore no admite
+    // su marca de tiempo dentro de una lista (los abonos van en una).
+    modificadoPor: quienSoy(),
+    modificadoEn: Date.now(),
+  };
+  abonoEditando = null;
   renderAbonos();
-  toast('✅ Fecha actualizada');
+  toast('✅ Pago a cuenta actualizado');
 }
 
 /* Dibuja la lista de abonos "a cuenta" y el saldo pendiente en el formulario. */
@@ -3542,22 +3573,39 @@ function renderAbonos() {
              ${abonoConFechaCambiada(a) ? '⚠️ ' : '🖊️ '}Registrado por ${escapeHtml(a.registradoPor)}
              el ${textoRegistrado(a)}</span>`
         : '';
+      // Constancia de la corrección, si alguien tocó este pago después
+      const modificado = a.modificadoPor
+        ? `<span class="abono-constancia abono-modificado">✏️ Modificado por ${escapeHtml(a.modificadoPor)}
+             el ${fechaHoraDeTimestamp(a.modificadoEn)}</span>`
+        : '';
       const puedeQuitar = puedeQuitarAbono(a);
-      const fechaHtml = abonoFechaEditando === i
-        ? `<span class="abono-fecha-edit">
-             <input type="date" id="abono-fecha-edit-${i}" class="input input-mini" value="${a.fecha || ''}">
-             <button type="button" data-confirmar-fecha="${i}" title="Guardar fecha">✓</button>
-             <button type="button" data-cancelar-fecha="${i}" title="Cancelar">✕</button>
+      const metodoActual = metodoDe(a);
+      const opcionesMetodo = ['efectivo', 'yape', 'bcp']
+        .map(m => `<option value="${m}"${m === metodoActual ? ' selected' : ''}>${metodoLabel(m)}</option>`).join('');
+      const fechaHtml = abonoEditando === i
+        ? `<span class="abono-editor">
+             <label>Fecha
+               <input type="date" id="abono-fecha-edit-${i}" class="input input-mini" value="${a.fecha || ''}" max="${hoyISO()}">
+             </label>
+             <label>Monto
+               <input type="number" id="abono-monto-edit-${i}" class="input input-mini" min="0" step="any" inputmode="decimal" value="${Number(a.monto) || 0}">
+             </label>
+             <label>Pago
+               <select id="abono-metodo-edit-${i}" class="input input-mini">${opcionesMetodo}</select>
+             </label>
+             <button type="button" data-confirmar-abono="${i}" title="Guardar los cambios">✓</button>
+             <button type="button" data-cancelar-abono="${i}" title="Cancelar">✕</button>
            </span>`
-        : `<span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}${
-            puedeEditarFechaAbono()
-              ? ` <button type="button" class="btn-fecha-editar" data-editar-fecha="${i}" title="Editar la fecha">✏️</button>`
+        : `<span class="abono-fecha">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoActual)}${
+            puedeEditarAbono()
+              ? ` <button type="button" class="btn-fecha-editar" data-editar-abono="${i}" title="Editar este pago (fecha, monto y método)">✏️</button>`
               : ''}</span>`;
       return `
       <div class="abono-item">
         <span class="abono-datos">ACUENTA ${i + 1}: <strong>${formatoMonto(a.monto)}</strong>
           ${fechaHtml}
-          ${constancia}</span>
+          ${constancia}
+          ${modificado}</span>
         ${a.firma ? `<img src="${a.firma}" class="firma-mini" alt="Firma" data-ver-firma-form="${i}" title="Ver la firma del cliente">` : ''}
         ${puedeQuitar
           ? `<button type="button" data-quitar-abono="${i}" title="Quitar este pago">🗑️</button>`
@@ -3580,7 +3628,7 @@ function renderAbonos() {
 }
 
 function abrirNuevoAbono() {
-  abonoFechaEditando = null;
+  abonoEditando = null;
   const monto = Number($('#f-monto').value) || 0;
   const abonado = abonosActuales.reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const saldo = Math.max(0, monto - abonado);
@@ -5528,9 +5576,9 @@ function inicializarEventos() {
     const verFirma = ev.target.closest('[data-ver-firma]');
     const verFotoInfo = ev.target.closest('[data-ver-foto-info]');
     const quitarAbono = ev.target.closest('[data-quitar-abono]');
-    const editarFecha = ev.target.closest('[data-editar-fecha]');
-    const confirmarFecha = ev.target.closest('[data-confirmar-fecha]');
-    const cancelarFecha = ev.target.closest('[data-cancelar-fecha]');
+    const editarAbono = ev.target.closest('[data-editar-abono]');
+    const confirmarAbono = ev.target.closest('[data-confirmar-abono]');
+    const cancelarAbono = ev.target.closest('[data-cancelar-abono]');
     const editarVenc = ev.target.closest('[data-editar-venc]');
     const confirmarVenc = ev.target.closest('[data-confirmar-venc]');
     const cancelarVenc = ev.target.closest('[data-cancelar-venc]');
@@ -5574,12 +5622,12 @@ function inicializarEventos() {
       borrarCredito(borrar.dataset.borrar);
     } else if (quitarAbono) {
       quitarAbonoConCodigo(Number(quitarAbono.dataset.quitarAbono));
-    } else if (editarFecha) {
-      iniciarEdicionFechaAbono(Number(editarFecha.dataset.editarFecha));
-    } else if (confirmarFecha) {
-      confirmarEdicionFechaAbono(Number(confirmarFecha.dataset.confirmarFecha));
-    } else if (cancelarFecha) {
-      cancelarEdicionFechaAbono();
+    } else if (editarAbono) {
+      iniciarEdicionAbono(Number(editarAbono.dataset.editarAbono));
+    } else if (confirmarAbono) {
+      confirmarEdicionAbono(Number(confirmarAbono.dataset.confirmarAbono));
+    } else if (cancelarAbono) {
+      cancelarEdicionAbono();
     } else if (editarVenc) {
       iniciarEdicionVencimiento();
     } else if (confirmarVenc) {
