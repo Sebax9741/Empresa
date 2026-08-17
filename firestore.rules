@@ -76,6 +76,29 @@ service cloud.firestore {
         allow create, update, delete: if permiso('despachos');
       }
 
+      // Catálogo de productos y movimientos de almacén (kardex). Todos los
+      // miembros los leen (hacen falta para vender y para ver el stock), pero
+      // solo quien tenga el permiso "productos" los toca.
+      match /productos/{docId} {
+        allow read: if esMiembro();
+        allow create, update, delete: if permiso('productos');
+      }
+      // El kardex también lo escribe quien vende: cada nota de venta genera su
+      // salida de almacén. Nadie lo borra salvo quien gestiona el almacén.
+      match /kardex/{docId} {
+        allow read: if esMiembro();
+        allow create: if permiso('productos') || permiso('ventas') || permiso('crear');
+        allow update, delete: if permiso('productos');
+      }
+
+      // Notas de venta emitidas. Una vez grabadas no se editan ni se borran:
+      // son el comprobante que se le entregó al cliente.
+      match /notas/{docId} {
+        allow read: if esMiembro();
+        allow create: if permiso('ventas') || permiso('crear');
+        allow update, delete: if esAdmin();
+      }
+
       // Ajustes del negocio (por ahora: la huella del código de seguridad).
       // Todos la pueden leer para comprobar el código, pero solo el
       // administrador la puede cambiar.

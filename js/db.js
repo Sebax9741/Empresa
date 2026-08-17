@@ -15,12 +15,16 @@ const DB = (() => {
      sin esperar a que la conexión conteste. Va aparte del almacén de "modo
      local" para no pisar los datos de quien trabajó sin cuenta. */
   const STORE_ESPEJO = 'espejo';
+  /* Catálogo de productos, movimientos de almacén (kardex) y notas de venta */
+  const STORE_PROD = 'productos';
+  const STORE_KARDEX = 'kardex';
+  const STORE_NOTAS = 'notas';
   let dbPromise = null;
 
   function open() {
     if (!dbPromise) {
       dbPromise = new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 6);
+        const req = indexedDB.open(DB_NAME, 7);
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains(STORE)) {
@@ -43,6 +47,15 @@ const DB = (() => {
           }
           if (!db.objectStoreNames.contains(STORE_ESPEJO)) {
             db.createObjectStore(STORE_ESPEJO, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(STORE_PROD)) {
+            db.createObjectStore(STORE_PROD, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(STORE_KARDEX)) {
+            db.createObjectStore(STORE_KARDEX, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(STORE_NOTAS)) {
+            db.createObjectStore(STORE_NOTAS, { keyPath: 'id' });
           }
         };
         req.onsuccess = () => resolve(req.result);
@@ -101,6 +114,21 @@ const DB = (() => {
         return { result: lista.length };
       });
     },
+
+    /* Productos: { id, codigo, nombre, presentacion, precioA, precioB, precioC, stockMin, activo } */
+    getAllProductos() { return leerTodo(STORE_PROD); },
+    putProducto(p) { return tx(STORE_PROD, 'readwrite', s => s.put(p)); },
+    deleteProducto(id) { return tx(STORE_PROD, 'readwrite', s => s.delete(id)); },
+
+    /* Kardex: { id, fecha, productoId, tipo, cantidad, costo, documento, motivo, usuario, creado } */
+    getAllKardex() { return leerTodo(STORE_KARDEX); },
+    putKardex(m) { return tx(STORE_KARDEX, 'readwrite', s => s.put(m)); },
+    deleteKardex(id) { return tx(STORE_KARDEX, 'readwrite', s => s.delete(id)); },
+
+    /* Notas de venta: { id, numero, serie, correlativo, clienteId, items[], total, … } */
+    getAllNotas() { return leerTodo(STORE_NOTAS); },
+    putNota(n) { return tx(STORE_NOTAS, 'readwrite', s => s.put(n)); },
+    deleteNota(id) { return tx(STORE_NOTAS, 'readwrite', s => s.delete(id)); },
 
     /* Notas de venta anuladas: { id (nº de boleta), boleta, motivo, anuladoPor, anuladoEn } */
     getAllAnulados() { return leerTodo(STORE_ANUL); },

@@ -2176,3 +2176,409 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-weight: 600;
 }
 .desp-vacio { color: var(--muted); font-size: 0.9rem; text-align: center; padding: 1rem 0; }
+
+/* ══════════════════════════════════════════════════════════════════
+   Productos, kardex y notas de venta
+   ══════════════════════════════════════════════════════════════════ */
+
+.vista.modal-productos,
+#view-productos, #view-kardex, #view-ventas { width: auto; max-width: 1500px; }
+
+/* Cabecera común de las secciones nuevas: título a la izquierda, buscador y
+   botones a la derecha, y en pantallas justas se apilan sin romperse. */
+.sec-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+.sec-cab h2 { margin: 0; }
+.sec-cab-acciones { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.sec-buscar { width: 16rem; max-width: 100%; margin: 0; }
+
+/* Fichas de resumen de cada sección (cuántos, cuánto, avisos) */
+.sec-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.9rem; }
+.chip {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.32rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  box-shadow: var(--shadow);
+}
+.chip strong { color: var(--text); }
+.chip-entrada { color: var(--ok); border-color: var(--ok-light); background: var(--ok-light); }
+.chip-salida { color: var(--primary-dark); border-color: var(--primary-light); background: var(--primary-light); }
+.chip-saldo { color: var(--azul); }
+.chip-alerta { color: var(--warning); background: var(--warning-light); border-color: var(--amber); }
+
+.sec-vacio {
+  color: var(--muted);
+  text-align: center;
+  padding: 2.2rem 1rem;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* ---- Las tres tablas nuevas comparten el mismo aspecto que la de créditos ---- */
+.prod-tabla, .kdx-tabla, .nv-tabla, .nv-items {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.prod-tabla th, .kdx-tabla th, .nv-tabla th, .nv-items th {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  position: sticky;
+  top: var(--alto-cabecera, 0px);
+  z-index: 2;
+  background: var(--side);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.09);
+  white-space: nowrap;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #c3cede;
+  font-weight: 700;
+}
+/* Con el corrimiento lateral el recuadro pasa a ser su propia zona de
+   desplazamiento: ahí los títulos van pegados a su borde, no al de la pantalla */
+.prod-tabla-wrap.tabla-corre .prod-tabla th,
+.kdx-tabla-wrap.tabla-corre .kdx-tabla th,
+.nv-tabla-wrap.tabla-corre .nv-tabla th { top: 0; }
+/* Las líneas de la nota van dentro de su propio recuadro: nunca se pegan */
+.nv-items th { position: static; }
+.prod-tabla thead th:first-child, .kdx-tabla thead th:first-child,
+.nv-tabla thead th:first-child, .nv-items thead th:first-child { border-top-left-radius: var(--radius); }
+.prod-tabla thead th:last-child, .kdx-tabla thead th:last-child,
+.nv-tabla thead th:last-child, .nv-items thead th:last-child { border-top-right-radius: var(--radius); }
+.prod-tabla th small, .kdx-tabla th small, .nv-tabla th small {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #8e9db2;
+}
+.prod-tabla td, .kdx-tabla td, .nv-tabla td, .nv-items td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.prod-tabla tbody tr:hover, .kdx-tabla tbody tr:hover, .nv-tabla tbody tr:hover { background: var(--bg-tint); }
+.prod-tabla tbody tr:last-child td, .kdx-tabla tbody tr:last-child td,
+.nv-tabla tbody tr:last-child td, .nv-items tbody tr:last-child td { border-bottom: none; }
+.prod-tabla .col-num, .kdx-tabla .col-num, .nv-tabla .col-num, .nv-items .col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.prod-tabla th.col-num, .kdx-tabla th.col-num, .nv-tabla th.col-num, .nv-items th.col-num { text-align: right; }
+.prod-tabla .col-acc, .kdx-tabla .col-acc, .nv-tabla .col-acc, .nv-items .col-acc {
+  white-space: nowrap;
+  text-align: right;
+}
+.prod-tabla code, .kdx-tabla code, .nv-items code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.prod-tabla-wrap, .kdx-tabla-wrap, .nv-tabla-wrap, .nv-items-wrap {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.prod-tabla-wrap.tabla-corre, .kdx-tabla-wrap.tabla-corre,
+.nv-tabla-wrap.tabla-corre, .nv-items-wrap.tabla-corre { overflow-x: auto; }
+
+/* ---- Productos ---- */
+.prod-nombre { font-weight: 600; }
+.prod-inactivo { opacity: 0.55; }
+.prod-etq {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg-tint);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+.prod-tabla .col-um small { display: block; color: var(--muted); font-size: 0.72rem; }
+.prod-stock-bajo { color: var(--danger); font-weight: 700; }
+
+.prod-precios {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.9rem 0.2rem;
+  margin: 0 0 0.85rem;
+}
+.prod-precios legend { font-size: 0.8rem; font-weight: 700; color: var(--muted); padding: 0 0.35rem; }
+.prod-precios .field-row { grid-template-columns: 1fr 1fr 1fr; }
+.prod-precios-ayuda { display: block; color: var(--muted); font-size: 0.78rem; margin-bottom: 0.6rem; }
+
+/* Etiquetas de categoría: una letra que se reconoce de un vistazo */
+.cat-lbl, .cliente-cat, .nv-cat-grande {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  border-radius: 8px;
+}
+.cat-lbl { width: 1.7rem; height: 1.7rem; font-size: 0.9rem; }
+.cliente-cat { width: 1.35rem; height: 1.35rem; font-size: 0.78rem; }
+.cat-A { background: var(--ok-light); color: var(--ok); }
+.cat-B { background: var(--amber-light); color: var(--warning); }
+.cat-C { background: var(--primary-light); color: var(--primary-dark); }
+
+/* ---- Kardex ---- */
+.kdx-filtros {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.9rem;
+}
+.kdx-filtros .field { margin: 0; min-width: 9rem; }
+.kdx-filtros .field:first-child { min-width: 15rem; flex: 1; }
+.kdx-alerta {
+  background: var(--warning-light);
+  border: 1px solid var(--amber);
+  color: var(--warning);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.86rem;
+  margin-bottom: 0.9rem;
+}
+.kdx-fecha small { display: block; color: var(--muted); font-size: 0.72rem; }
+.kdx-tabla td small { display: block; color: var(--muted); font-size: 0.74rem; }
+.kdx-tipo {
+  display: inline-block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+  white-space: nowrap;
+}
+.kdx-entrada-tipo, .kdx-entrada { color: var(--ok); }
+.kdx-tipo.kdx-entrada { background: var(--ok-light); color: var(--ok); }
+.kdx-tipo.kdx-salida { background: var(--primary-light); color: var(--primary-dark); }
+.kdx-tipo.kdx-ajuste { background: var(--amber-light); color: var(--warning); }
+.kdx-tabla .kdx-entrada { color: var(--ok); font-weight: 600; }
+.kdx-tabla .kdx-salida { color: var(--primary-dark); font-weight: 600; }
+.kdx-tabla .kdx-saldo { font-weight: 800; }
+.kdx-ayuda {
+  background: var(--amber-light);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  font-size: 0.82rem;
+  color: var(--warning);
+  margin: 0 0 0.85rem;
+}
+.kdx-saldo-previo {
+  background: var(--bg-tint);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  font-size: 0.86rem;
+  margin: 0 0 0.85rem;
+}
+
+/* ---- Notas de venta: cabecera del comprobante ---- */
+.nv-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  background: var(--side);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 1rem 1.3rem;
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow);
+}
+.nv-cab-etq {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--side-text);
+  font-weight: 700;
+}
+.nv-cab-numero strong {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.nv-cab-meta { display: flex; gap: 1.6rem; flex-wrap: wrap; }
+.nv-cab-meta > div { display: flex; flex-direction: column; gap: 0.2rem; }
+.nv-cab-meta span { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--side-text); font-weight: 700; }
+.nv-cab-meta strong { font-size: 0.98rem; }
+.nv-cab-meta .input { margin: 0; padding: 0.3rem 0.5rem; font-size: 0.9rem; }
+
+/* Bloques numerados del formulario (cliente, condición, productos, total) */
+.nv-bloque {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+.nv-bloque-cab { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.nv-bloque-tit {
+  margin: 0 0 0.85rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 800;
+}
+.nv-bloque-cab .nv-bloque-tit { margin-bottom: 0.85rem; }
+.nv-bloque .field-row { grid-template-columns: repeat(3, 1fr); }
+
+.nv-cliente-fila { display: flex; align-items: flex-end; gap: 0.7rem; flex-wrap: wrap; }
+.nv-cliente-buscar { flex: 1; min-width: 18rem; margin-bottom: 0; }
+.combo-wrap { position: relative; }
+.combo-sugerencias {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  padding: 0.25rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.combo-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 0.9rem;
+}
+.combo-item:hover, .combo-item.activo { background: var(--primary-light); }
+.combo-item small { color: var(--muted); font-size: 0.76rem; margin-left: auto; white-space: nowrap; }
+
+/* Ficha del cliente elegido: la categoría manda, por eso va en grande */
+.nv-ficha {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.2rem;
+  background: var(--bg-tint);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1.1rem;
+  margin-top: 0.9rem;
+  flex-wrap: wrap;
+}
+.nv-ficha-cat { display: flex; align-items: center; gap: 0.7rem; flex: none; }
+.nv-cat-grande { width: 3.2rem; height: 3.2rem; font-size: 1.9rem; border-radius: 14px; }
+.nv-cat-detalle { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+.nv-cat-detalle strong { font-size: 0.95rem; color: var(--text); text-transform: none; letter-spacing: 0; }
+.nv-ficha-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.45rem 1.2rem;
+  margin: 0;
+  flex: 1;
+  min-width: 20rem;
+}
+.nv-ficha-datos dt { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
+.nv-ficha-datos dd { margin: 0; font-size: 0.9rem; font-weight: 600; overflow-wrap: break-word; }
+.nv-ficha-datos .nv-deuda { color: var(--danger); }
+.nv-sin-cliente { color: var(--muted); font-size: 0.88rem; margin: 0.9rem 0 0; }
+
+/* Casilla de permitir modificación de precios: se ve que es una llave abierta */
+.nv-permiso {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-tint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 0.85rem;
+}
+.nv-permiso:has(input:checked) {
+  background: var(--amber-light);
+  border-color: var(--amber);
+  color: var(--warning);
+}
+.nv-permiso input { width: 1rem; height: 1rem; accent-color: var(--primary); }
+
+.nv-agregar { display: flex; align-items: flex-end; gap: 0.7rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.nv-agregar .field { margin: 0; }
+.nv-ag-prod { flex: 1; min-width: 18rem; }
+.nv-ag-cant { width: 8rem; }
+
+.nv-items .input-mini {
+  width: 100%;
+  max-width: 6.5rem;
+  margin: 0;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.88rem;
+  text-align: right;
+}
+.nv-items .input-mini[readonly] { background: var(--bg-tint); color: var(--muted); cursor: not-allowed; }
+.nv-items .nv-importe { font-weight: 700; }
+.nv-sin-stock { display: block; color: var(--danger); font-size: 0.74rem; font-weight: 600; }
+.nv-precio-tocado { display: block; color: var(--warning); font-size: 0.74rem; font-weight: 600; }
+
+/* Totales: las letras a la izquierda, las cifras a la derecha como en la nota */
+.nv-totales { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: flex-start; }
+.nv-letras {
+  flex: 1;
+  min-width: 18rem;
+  background: var(--bg-tint);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem 1rem;
+}
+.nv-letras span { display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; }
+.nv-letras strong { font-size: 0.95rem; }
+.nv-cifras { width: 22rem; max-width: 100%; }
+.nv-linea {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+.nv-linea .input { width: 8rem; margin: 0; padding: 0.25rem 0.5rem; text-align: right; }
+.nv-linea strong { font-variant-numeric: tabular-nums; }
+.nv-linea-total { border-bottom: none; font-size: 1.15rem; }
+.nv-linea-total strong { color: var(--primary-dark); font-weight: 800; }
+.nv-acciones { justify-content: flex-end; }
+.nv-num { font-variant-numeric: tabular-nums; }
+.nv-tabla td small { display: block; color: var(--muted); font-size: 0.74rem; }
+
+.settings-ayuda { color: var(--muted); font-size: 0.84rem; margin: 0 0 0.8rem; }
+
+/* En pantallas justas se ordena en una columna (el celular se afina aparte) */
+@media (max-width: 900px) {
+  .nv-bloque .field-row { grid-template-columns: 1fr; }
+  .nv-cab { flex-direction: column; align-items: flex-start; gap: 0.8rem; }
+  .nv-cifras { width: 100%; }
+  .sec-buscar { width: 100%; }
+}

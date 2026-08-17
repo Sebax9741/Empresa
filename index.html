@@ -47,6 +47,9 @@
     <div class="nav-titulo">Menú principal</div>
     <button type="button" class="nav-item" id="nav-dashboard"><span class="nav-ico">📊</span> Dashboard</button>
     <button type="button" class="nav-item" id="nav-inicio"><span class="nav-ico">📋</span> Créditos</button>
+    <button type="button" class="nav-item" id="nav-ventas"><span class="nav-ico">🧮</span> Notas de venta</button>
+    <button type="button" class="nav-item" id="nav-productos"><span class="nav-ico">🛒</span> Productos</button>
+    <button type="button" class="nav-item" id="nav-kardex"><span class="nav-ico">📒</span> Kardex</button>
     <button type="button" class="nav-item" id="nav-despachos"><span class="nav-ico">📦</span> Despachos</button>
     <button type="button" class="nav-item" id="nav-clientes"><span class="nav-ico">🧑‍🤝‍🧑</span> Clientes</button>
     <button type="button" class="nav-item" id="nav-cobranza"><span class="nav-ico">🧾</span> Hoja de cobranza</button>
@@ -81,6 +84,9 @@
       <div class="header-actions">
         <button id="btn-dashboard" class="btn-icon" title="Dashboard" aria-label="Dashboard">📊</button>
         <button id="btn-creditos" class="btn-icon" title="Créditos" aria-label="Créditos">📋</button>
+        <button id="btn-ventas" class="btn-icon" title="Notas de venta" aria-label="Notas de venta">🧮</button>
+        <button id="btn-productos" class="btn-icon" title="Productos" aria-label="Productos">🛒</button>
+        <button id="btn-kardex" class="btn-icon" title="Kardex" aria-label="Kardex">📒</button>
         <button id="btn-despachos" class="btn-icon" title="Despachos" aria-label="Despachos">📦</button>
         <button id="btn-clientes" class="btn-icon" title="Clientes" aria-label="Clientes">🧑‍🤝‍🧑</button>
         <button id="btn-usuarios" class="btn-icon" title="Usuarios" aria-label="Usuarios" hidden>👥</button>
@@ -671,6 +677,17 @@
       <div class="field-row">
         <label class="field"><span>Zona *</span>
           <select id="cli-zona" class="input" required></select></label>
+        <label class="field"><span>Categoría de precio *</span>
+          <select id="cli-categoria" class="input" required>
+            <option value="A">A — Mayorista</option>
+            <option value="B">B — Intermedio</option>
+            <option value="C" selected>C — Menudeo</option>
+          </select>
+          <small>Decide qué precio se cobra en la nota de venta.</small></label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>RUC / DNI <small>opcional</small></span>
+          <input type="text" id="cli-ruc" class="input" inputmode="numeric" maxlength="15" placeholder="Ej: 20512345678"></label>
         <label class="field"><span>Teléfono <small>opcional</small></span>
           <input type="tel" id="cli-telefono" class="input" inputmode="tel" placeholder="Ej: 987 654 321"></label>
       </div>
@@ -902,6 +919,349 @@
     </form>
   </dialog>
 
+  <!-- ══════════ Sección: Productos ══════════ -->
+  <section id="view-productos" class="vista" hidden>
+    <div class="sec-cab">
+      <h2>🛒 Productos</h2>
+      <div class="sec-cab-acciones">
+        <input type="search" id="prod-buscar" class="input sec-buscar" placeholder="🔍 Buscar por código o nombre…">
+        <button type="button" id="btn-prod-nuevo" class="btn btn-primary btn-small">➕ Nuevo producto</button>
+      </div>
+    </div>
+
+    <div class="sec-chips" id="prod-chips"></div>
+
+    <div class="table-wrap prod-tabla-wrap">
+      <table class="prod-tabla" id="prod-tabla">
+        <thead>
+          <tr>
+            <th class="col-cod">Código</th>
+            <th>Producto</th>
+            <th class="col-um">Presentación</th>
+            <th class="col-num col-precio">Precio A<small>Mayorista</small></th>
+            <th class="col-num col-precio">Precio B<small>Intermedio</small></th>
+            <th class="col-num col-precio">Precio C<small>Menudeo</small></th>
+            <th class="col-num">Stock</th>
+            <th class="col-acc">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="prod-body"></tbody>
+      </table>
+    </div>
+    <p class="sec-vacio" id="prod-vacio" hidden>Todavía no tienes productos. Usa “➕ Nuevo producto” para crear el primero.</p>
+  </section>
+
+  <!-- Modal: crear/editar producto -->
+  <dialog id="modal-producto" class="modal modal-producto" tabindex="-1">
+    <form id="prod-form">
+      <h3 id="prod-form-title">Nuevo producto</h3>
+      <input type="hidden" id="prod-id">
+      <div class="field-row">
+        <label class="field field-corto"><span>Código <small>(se genera solo)</small></span>
+          <input type="text" id="prod-codigo" class="input" maxlength="12" placeholder="Ej: 001003"></label>
+        <label class="field field-largo"><span>Nombre del producto *</span>
+          <input type="text" id="prod-nombre" class="input" required autocapitalize="characters" placeholder="Ej: HARINA ITALIANA X50KG"></label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Presentación *</span>
+          <select id="prod-presentacion" class="input" required>
+            <option value="balde">Balde (BLD)</option>
+            <option value="caja">Caja (CJA)</option>
+            <option value="saco">Saco (SAC)</option>
+            <option value="paquete">Paquete (PQT)</option>
+            <option value="unidad" selected>Unidad (UND)</option>
+          </select></label>
+        <label class="field"><span>Stock mínimo <small>avisa cuando baje de aquí</small></span>
+          <input type="number" id="prod-stockmin" class="input" min="0" step="1" value="0"></label>
+      </div>
+
+      <fieldset class="prod-precios">
+        <legend>Precios por categoría de cliente</legend>
+        <div class="field-row">
+          <label class="field"><span class="cat-lbl cat-A">A</span>
+            <input type="number" id="prod-precio-a" class="input" min="0" step="0.01" required placeholder="0.00"></label>
+          <label class="field"><span class="cat-lbl cat-B">B</span>
+            <input type="number" id="prod-precio-b" class="input" min="0" step="0.01" required placeholder="0.00"></label>
+          <label class="field"><span class="cat-lbl cat-C">C</span>
+            <input type="number" id="prod-precio-c" class="input" min="0" step="0.01" required placeholder="0.00"></label>
+        </div>
+        <small class="prod-precios-ayuda">Al hacer una nota de venta se cobra el precio de la categoría que tenga el cliente.</small>
+      </fieldset>
+
+      <label class="field field-check" id="prod-stock-inicial-box">
+        <span class="field-label">Stock inicial <small>entrada de apertura en el kardex</small></span>
+        <input type="number" id="prod-stock-inicial" class="input" min="0" step="1" value="0">
+      </label>
+
+      <label class="field field-check">
+        <input type="checkbox" id="prod-activo" checked>
+        <span>Producto activo <small>los inactivos no salen al hacer una nota de venta</small></span>
+      </label>
+
+      <div class="modal-buttons">
+        <button type="button" id="btn-prod-cancelar" class="btn btn-secondary">Cancelar</button>
+        <button type="submit" class="btn btn-primary">💾 Guardar producto</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ══════════ Sección: Kardex de almacén ══════════ -->
+  <section id="view-kardex" class="vista" hidden>
+    <div class="sec-cab">
+      <h2>📒 Kardex de almacén</h2>
+      <div class="sec-cab-acciones">
+        <button type="button" id="btn-kardex-nuevo" class="btn btn-primary btn-small">➕ Registrar movimiento</button>
+        <button type="button" id="btn-kardex-imprimir" class="btn btn-secondary btn-small">🖨️ Imprimir</button>
+      </div>
+    </div>
+
+    <div class="kdx-filtros">
+      <label class="field"><span>Producto</span>
+        <select id="kdx-fil-producto" class="input"></select></label>
+      <label class="field"><span>Movimiento</span>
+        <select id="kdx-fil-tipo" class="input">
+          <option value="">Todos</option>
+          <option value="entrada">📥 Entradas</option>
+          <option value="salida">📤 Salidas</option>
+          <option value="ajuste">⚖️ Ajustes</option>
+        </select></label>
+      <label class="field"><span>Desde</span>
+        <input type="date" id="kdx-fil-desde" class="input"></label>
+      <label class="field"><span>Hasta</span>
+        <input type="date" id="kdx-fil-hasta" class="input"></label>
+      <button type="button" id="btn-kdx-limpiar" class="btn btn-secondary btn-small">Limpiar</button>
+    </div>
+
+    <div class="sec-chips" id="kdx-chips"></div>
+    <div id="kdx-alerta" class="kdx-alerta" hidden></div>
+
+    <div class="table-wrap kdx-tabla-wrap">
+      <table class="kdx-tabla" id="kdx-tabla">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th class="col-cod">Código</th>
+            <th>Producto</th>
+            <th>Movimiento</th>
+            <th>Motivo</th>
+            <th>Documento</th>
+            <th class="col-num">Entrada</th>
+            <th class="col-num">Salida</th>
+            <th class="col-num">Saldo</th>
+            <th>Registró</th>
+            <th class="col-acc"></th>
+          </tr>
+        </thead>
+        <tbody id="kdx-body"></tbody>
+      </table>
+    </div>
+    <p class="sec-vacio" id="kdx-vacio" hidden>Todavía no hay movimientos de almacén.</p>
+  </section>
+
+  <!-- Modal: registrar movimiento de kardex -->
+  <dialog id="modal-kardex" class="modal modal-kardex" tabindex="-1">
+    <form id="kdx-form">
+      <h3>Registrar movimiento de almacén</h3>
+      <div class="field-row">
+        <label class="field field-largo"><span>Producto *</span>
+          <select id="kdx-producto" class="input" required></select></label>
+        <label class="field"><span>Fecha *</span>
+          <input type="date" id="kdx-fecha" class="input" required></label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Tipo de movimiento *</span>
+          <select id="kdx-tipo" class="input" required>
+            <option value="entrada">📥 Entrada (suma al stock)</option>
+            <option value="salida">📤 Salida (resta del stock)</option>
+            <option value="ajuste">⚖️ Ajuste por inventario</option>
+          </select></label>
+        <label class="field"><span>Cantidad *</span>
+          <input type="number" id="kdx-cantidad" class="input" step="1" required placeholder="0"></label>
+      </div>
+      <p class="kdx-ayuda" id="kdx-ayuda-ajuste" hidden>En un ajuste, escribe la cantidad <strong>real contada</strong> en el almacén: el sistema calcula solo la diferencia.</p>
+      <div class="field-row">
+        <label class="field"><span>Motivo *</span>
+          <select id="kdx-motivo" class="input" required></select></label>
+        <label class="field"><span>Documento <small>opcional</small></span>
+          <input type="text" id="kdx-documento" class="input" placeholder="Ej: Factura F001-1234"></label>
+      </div>
+      <label class="field"><span>Nota <small>opcional</small></span>
+        <input type="text" id="kdx-nota" class="input" placeholder="Ej: llegó con 2 sacos rotos"></label>
+      <p class="kdx-saldo-previo" id="kdx-saldo-previo"></p>
+      <div class="modal-buttons">
+        <button type="button" id="btn-kdx-cancelar" class="btn btn-secondary">Cancelar</button>
+        <button type="submit" class="btn btn-primary">💾 Registrar movimiento</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ══════════ Sección: Notas de venta ══════════ -->
+  <section id="view-ventas" class="vista" hidden>
+    <!-- ▸ Lista de notas emitidas -->
+    <div id="nv-vista-lista" class="nv-vista">
+      <div class="sec-cab">
+        <h2>🧮 Notas de venta</h2>
+        <div class="sec-cab-acciones">
+          <input type="search" id="nv-buscar" class="input sec-buscar" placeholder="🔍 Buscar por número o cliente…">
+          <button type="button" id="btn-nv-nueva" class="btn btn-primary btn-small">➕ Nueva nota de venta</button>
+        </div>
+      </div>
+      <div class="sec-chips" id="nv-chips"></div>
+      <div class="table-wrap nv-tabla-wrap">
+        <table class="nv-tabla" id="nv-tabla">
+          <thead>
+            <tr>
+              <th>N.º</th>
+              <th>Emisión</th>
+              <th>Cliente</th>
+              <th class="col-um">Cat.</th>
+              <th>Zona</th>
+              <th>Condición</th>
+              <th class="col-num">Ítems</th>
+              <th class="col-num">Total</th>
+              <th>Vendedor</th>
+              <th class="col-acc">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="nv-body"></tbody>
+        </table>
+      </div>
+      <p class="sec-vacio" id="nv-vacio" hidden>Todavía no has emitido notas de venta.</p>
+    </div>
+
+    <!-- ▸ Formulario: toma de pedido -->
+    <div id="nv-vista-form" class="nv-vista" hidden>
+      <div class="sec-cab">
+        <h2>🧮 Nueva nota de venta</h2>
+        <div class="sec-cab-acciones">
+          <button type="button" id="btn-nv-volver" class="btn btn-secondary btn-small">◀ Volver a la lista</button>
+        </div>
+      </div>
+
+      <!-- Cabecera del comprobante -->
+      <div class="nv-cab">
+        <div class="nv-cab-numero">
+          <span class="nv-cab-etq">NOTA DE VENTA</span>
+          <strong id="nv-numero">0001-00000001</strong>
+        </div>
+        <div class="nv-cab-meta">
+          <div><span>Fecha de emisión</span><input type="date" id="nv-fecha" class="input"></div>
+          <div><span>Hora de creación</span><strong id="nv-hora">—</strong></div>
+          <div><span>Vendedor</span><strong id="nv-vendedor">—</strong></div>
+        </div>
+      </div>
+
+      <!-- Cliente -->
+      <div class="nv-bloque">
+        <h3 class="nv-bloque-tit">1 · Cliente</h3>
+        <div class="nv-cliente-fila">
+          <label class="field nv-cliente-buscar">
+            <span>Buscar cliente *</span>
+            <div class="combo-wrap">
+              <input type="text" id="nv-cliente-buscar" class="input" autocomplete="off" placeholder="Escribe el nombre o el código…">
+              <div id="nv-cliente-sugerencias" class="combo-sugerencias" hidden></div>
+            </div>
+            <input type="hidden" id="nv-cliente-id">
+          </label>
+          <button type="button" id="btn-nv-cliente-nuevo" class="btn btn-secondary btn-small">➕ Registrar cliente</button>
+        </div>
+
+        <div class="nv-ficha" id="nv-ficha" hidden>
+          <div class="nv-ficha-cat" id="nv-ficha-cat"></div>
+          <dl class="nv-ficha-datos">
+            <div><dt>Cliente</dt><dd id="nv-fc-nombre">—</dd></div>
+            <div><dt>Código</dt><dd id="nv-fc-codigo">—</dd></div>
+            <div><dt>Zona</dt><dd id="nv-fc-zona">—</dd></div>
+            <div><dt>RUC / DNI</dt><dd id="nv-fc-ruc">—</dd></div>
+            <div><dt>Dirección</dt><dd id="nv-fc-direccion">—</dd></div>
+            <div><dt>Teléfono</dt><dd id="nv-fc-telefono">—</dd></div>
+            <div><dt>Deuda actual</dt><dd id="nv-fc-deuda">—</dd></div>
+            <div><dt>Nota</dt><dd id="nv-fc-notas">—</dd></div>
+          </dl>
+        </div>
+        <p class="nv-sin-cliente" id="nv-sin-cliente">Elige un cliente para ver su categoría y sus datos.</p>
+      </div>
+
+      <!-- Condición de pago -->
+      <div class="nv-bloque">
+        <h3 class="nv-bloque-tit">2 · Condición</h3>
+        <div class="field-row">
+          <label class="field"><span>Condición</span>
+            <select id="nv-condicion" class="input">
+              <option value="contado">CONTADO</option>
+              <option value="credito">CRÉDITO</option>
+            </select></label>
+          <label class="field"><span>Fecha de pago</span>
+            <input type="date" id="nv-fpago" class="input"></label>
+          <label class="field"><span>Pedido / referencia <small>opcional</small></span>
+            <input type="text" id="nv-referencia" class="input" placeholder="Ej: 90/1/0"></label>
+        </div>
+      </div>
+
+      <!-- Productos -->
+      <div class="nv-bloque">
+        <div class="nv-bloque-cab">
+          <h3 class="nv-bloque-tit">3 · Productos</h3>
+          <label class="nv-permiso">
+            <input type="checkbox" id="nv-permitir-precios">
+            <span>🔓 Permitir modificación de precios</span>
+          </label>
+        </div>
+
+        <div class="nv-agregar">
+          <label class="field nv-ag-prod"><span>Producto</span>
+            <select id="nv-producto" class="input"></select></label>
+          <label class="field nv-ag-cant"><span>Cantidad</span>
+            <input type="number" id="nv-cantidad" class="input" min="0.01" step="1" value="1"></label>
+          <button type="button" id="btn-nv-agregar" class="btn btn-primary btn-small">➕ Agregar</button>
+        </div>
+
+        <div class="table-wrap nv-items-wrap">
+          <table class="nv-items" id="nv-items">
+            <thead>
+              <tr>
+                <th class="col-cod">Código</th>
+                <th class="col-num">Cant.</th>
+                <th class="col-um">U.M.</th>
+                <th>Descripción</th>
+                <th class="col-num">P.U.</th>
+                <th class="col-num">Importe</th>
+                <th class="col-acc"></th>
+              </tr>
+            </thead>
+            <tbody id="nv-items-body"></tbody>
+          </table>
+        </div>
+        <p class="sec-vacio" id="nv-items-vacio">Todavía no agregaste productos a esta nota.</p>
+      </div>
+
+      <!-- Totales -->
+      <div class="nv-bloque nv-totales-bloque">
+        <h3 class="nv-bloque-tit">4 · Total</h3>
+        <div class="nv-totales">
+          <div class="nv-letras">
+            <span>Son:</span>
+            <strong id="nv-letras">—</strong>
+          </div>
+          <div class="nv-cifras">
+            <div class="nv-linea"><span>Subtotal</span><strong id="nv-subtotal">0.00</strong></div>
+            <div class="nv-linea">
+              <span>Total descuento</span>
+              <input type="number" id="nv-descuento" class="input" min="0" step="0.01" value="0">
+            </div>
+            <div class="nv-linea nv-linea-total"><span>Total a pagar</span><strong id="nv-total">0.00</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-buttons nv-acciones">
+        <button type="button" id="btn-nv-cancelar" class="btn btn-secondary">Cancelar</button>
+        <button type="button" id="btn-nv-guardar" class="btn btn-secondary">💾 Guardar</button>
+        <button type="button" id="btn-nv-guardar-imprimir" class="btn btn-primary">🖨️ Guardar e imprimir</button>
+      </div>
+    </div>
+  </section>
+
   <!-- Visor de imagen a pantalla completa -->
   <dialog id="modal-imagen" class="modal-imagen">
     <div class="imagen-view">
@@ -975,6 +1335,30 @@
           <span>Símbolo de moneda</span>
           <input type="text" id="s-moneda" class="input" maxlength="6" placeholder="$">
         </label>
+      </section>
+
+      <!-- ▸ Datos que salen impresos en la nota de venta -->
+      <section class="settings-grupo">
+        <h3 class="settings-titulo">🧮 Cabecera de la nota de venta</h3>
+        <p class="settings-ayuda">Esto es lo que se imprime arriba en cada nota de venta.</p>
+        <label class="field">
+          <span>Nombre del negocio</span>
+          <input type="text" id="s-emp-nombre" class="input" placeholder="IMPORTADORA NUEVA VISTA S.A.C.">
+        </label>
+        <label class="field">
+          <span>Dirección</span>
+          <input type="text" id="s-emp-direccion" class="input" placeholder="MADRE DE DIOS - TAMBOPATA - TAMBOPATA">
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>RUC</span>
+            <input type="text" id="s-emp-ruc" class="input" inputmode="numeric" maxlength="15" placeholder="20512345678">
+          </label>
+          <label class="field">
+            <span>Teléfono</span>
+            <input type="tel" id="s-emp-telefono" class="input" inputmode="tel" placeholder="982 345 678">
+          </label>
+        </div>
       </section>
 
       <!-- ▸ Notificaciones -->

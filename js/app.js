@@ -7,6 +7,9 @@ let hojas = [];           // hojas de cobranza creadas: { fecha, creada, creadaP
 let despachos = [];       // despachos (viajes de reparto): { id, fecha, repartidor, carguero, notas, cerrado, creado, creadoPor, pedidos: [...] }
 let repartidores = [];    // lista de repartidores (solo nombres): { id, nombre, activo, creado }
 let anulados = [];        // notas de venta anuladas: { id (nº boleta), boleta, motivo, anuladoPor, anuladoEn }
+let productos = [];       // catálogo: { id, codigo, nombre, presentacion, precioA, precioB, precioC, stockMin, activo, creado }
+let kardex = [];          // movimientos de almacén: { id, fecha, productoId, tipo, cantidad, motivo, documento, usuario, creado }
+let notas = [];           // notas de venta emitidas: { id, numero, clienteId, items[], total, emitidaPor, creado }
 let settings = {
   dias: 30,
   moneda: '$',
@@ -21,6 +24,11 @@ let settings = {
   // El Dashboard lo ve siempre el administrador; a los empleados se lo
   // muestra solo si el administrador activa este ajuste.
   dashboardEmpleados: false,
+  // Cabecera de la nota de venta impresa
+  empresaNombre: 'IMPORTADORA NUEVA VISTA S.A.C.',
+  empresaDireccion: 'MADRE DE DIOS - TAMBOPATA - TAMBOPATA',
+  empresaRuc: '',
+  empresaTelefono: '',
 };
 let vencimientoEditadoManual = false;
 
@@ -35,6 +43,9 @@ let unsubHojas = null;    // suscripción a las hojas de cobranza creadas
 let unsubDespachos = null; // suscripción a los despachos (viajes de reparto)
 let unsubRepartidores = null; // suscripción a la lista de repartidores
 let unsubAnulados = null;     // suscripción a las notas de venta anuladas
+let unsubProductos = null;    // suscripción al catálogo de productos
+let unsubKardex = null;       // suscripción a los movimientos de almacén
+let unsubNotas = null;        // suscripción a las notas de venta
 let migracionRevisada = false;
 let ownerUid = null;      // dónde viven los datos del negocio (dueño)
 let yo = null;            // membresía del usuario actual: { usuario, nombre, rol, permisos }
@@ -47,7 +58,7 @@ function usuarioAEmail(entrada) {
 }
 
 /* Permisos del usuario actual */
-const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true, clientes: true, hojaCrear: true, vencimiento: true };
+const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true, clientes: true, hojaCrear: true, vencimiento: true, productos: true, ventas: true };
 function esAdmin() { return modoNube && !!(yo && yo.rol === 'admin'); }
 /* En modo local hay un solo dueño y manda igual que un administrador (es el
    mismo criterio que ya se usa para quitar una "a cuenta"). */
@@ -59,6 +70,10 @@ function puede(nombre) {
   const valor = yo.permisos[nombre];
   // Usuarios creados antes de que existiera el permiso "clientes": se rigen por "crear"
   if (valor === undefined && nombre === 'clientes') return !!yo.permisos.crear;
+  // Lo mismo con los permisos nuevos de almacén y notas de venta: quien ya podía
+  // crear créditos puede vender, pero tocar el catálogo se concede a propósito.
+  if (valor === undefined && nombre === 'ventas') return !!yo.permisos.crear;
+  if (valor === undefined && nombre === 'productos') return false;
   return !!valor;
 }
 
@@ -98,7 +113,7 @@ function diasHastaVencimiento(vencimientoISO) {
 }
 
 /* ====== Zonas, meses y abonos "a cuenta" ====== */
-const ZONAS = ['MODELO', '3 DE MAYO', 'CIUDAD', 'MILAGROS', 'CARRETERA', 'PADRE ALDAMIZ', 'ALAMEDA'];
+const ZONAS = ['MODELO', '3 DE MAYO', 'CIUDAD', 'MILAGROS', 'CARRETERA', 'PADRE ALDAMIZ', 'ALAMEDA', 'LABERINTO', 'PAMPA'];
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const MAX_ABONOS = 8;
 
@@ -108,6 +123,50 @@ function metodoDe(a) { return (a && a.metodo && METODOS[a.metodo]) ? a.metodo : 
 function metodoLabel(m) { return METODOS[m] || METODOS.efectivo; }
 
 function abonosDe(c) { return Array.isArray(c.abonos) ? c.abonos : []; }
+
+/* ====== Categorías de precio ======
+   Cada cliente tiene una categoría (A, B o C) y cada producto tiene un precio
+   para cada una. Al armar la nota de venta, el precio sale de cruzar las dos. */
+const CATEGORIAS = {
+  A: { nombre: 'A', detalle: 'Mayorista' },
+  B: { nombre: 'B', detalle: 'Intermedio' },
+  C: { nombre: 'C', detalle: 'Menudeo' },
+};
+function categoriaDe(cliente) {
+  const c = String((cliente && cliente.categoria) || '').toUpperCase();
+  return CATEGORIAS[c] ? c : 'C';   // sin categoría, se cobra el precio de menudeo
+}
+
+/* Presentaciones y su abreviatura para la columna U.M. de la nota impresa */
+const PRESENTACIONES = {
+  balde: { nombre: 'Balde', um: 'BLD' },
+  caja: { nombre: 'Caja', um: 'CJA' },
+  saco: { nombre: 'Saco', um: 'SAC' },
+  paquete: { nombre: 'Paquete', um: 'PQT' },
+  unidad: { nombre: 'Unidad', um: 'UND' },
+};
+function presentacionDe(p) {
+  const v = String((p && p.presentacion) || '').toLowerCase();
+  return PRESENTACIONES[v] ? v : 'unidad';
+}
+function umDe(p) { return PRESENTACIONES[presentacionDe(p)].um; }
+
+/* Movimientos del kardex. "salida" resta del stock, "entrada" suma;
+   el ajuste sirve para cuadrar con el conteo físico del almacén. */
+const TIPOS_KARDEX = {
+  entrada: { nombre: 'Entrada', signo: 1, icono: '📥' },
+  salida: { nombre: 'Salida', signo: -1, icono: '📤' },
+  ajuste: { nombre: 'Ajuste', signo: 1, icono: '⚖️' },
+};
+const MOTIVOS_KARDEX = {
+  compra: 'Compra a proveedor',
+  devolucion_cliente: 'Devolución de cliente',
+  venta: 'Venta (nota de venta)',
+  merma: 'Merma o producto malogrado',
+  traslado: 'Traslado a otro almacén',
+  inventario: 'Conteo físico (inventario)',
+  otro: 'Otro',
+};
 
 /* Quién está usando la app ahora (para dejar constancia en cada "a cuenta") */
 function quienSoy() { return (modoNube && yo && yo.usuario) ? yo.usuario : 'dueño'; }
@@ -772,7 +831,8 @@ async function sincronizarAhora() {
    todos los usuarios. Además quedan copiados en este dispositivo, para
    que la app funcione igual sin internet.
    El aviso de vencimiento es de cada dispositivo, así que no se sube. */
-const CLAVES_NEGOCIO = ['dias', 'moneda', 'atajo1', 'atajo2', 'hojaAutoActiva', 'hojaAutoDias', 'hojaAutoHora', 'dashboardEmpleados'];
+const CLAVES_NEGOCIO = ['dias', 'moneda', 'atajo1', 'atajo2', 'hojaAutoActiva', 'hojaAutoDias', 'hojaAutoHora', 'dashboardEmpleados',
+  'empresaNombre', 'empresaDireccion', 'empresaRuc', 'empresaTelefono'];
 
 function cargarSettings() {
   try {
@@ -996,6 +1056,55 @@ async function eliminarAnuladoDeStore(id) {
       'anulación quitada');
   } else {
     await DB.deleteAnulado(id);
+  }
+}
+
+/* ---- Productos, kardex y notas de venta ---- */
+async function guardarProductoEnStore(p) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'productos', p.id), p),
+      `producto ${p.nombre}`);
+  } else {
+    await DB.putProducto(p);
+  }
+}
+
+async function eliminarProductoDeStore(id) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'productos', id)), 'borrado de un producto');
+  } else {
+    await DB.deleteProducto(id);
+  }
+}
+
+async function guardarKardexEnStore(m) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'kardex', m.id), m),
+      'movimiento de almacén');
+  } else {
+    await DB.putKardex(m);
+  }
+}
+
+async function eliminarKardexDeStore(id) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'kardex', id)), 'borrado de un movimiento');
+  } else {
+    await DB.deleteKardex(id);
+  }
+}
+
+async function guardarNotaEnStore(n) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'notas', n.id), n),
+      `nota de venta ${n.numero}`);
+  } else {
+    await DB.putNota(n);
   }
 }
 
@@ -1374,6 +1483,34 @@ function suscribirNube() {
   }, err => {
     console.error('Error al sincronizar las notas anuladas:', err);
   });
+
+  if (unsubProductos) unsubProductos();
+  unsubProductos = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'productos'), snap => {
+    productos = snap.docs.map(d => d.data());
+    ordenarProductos();
+    if (!$('#view-productos').hidden) renderProductos();
+    if (!$('#view-kardex').hidden) renderKardex();
+    if (!$('#view-ventas').hidden) renderVentas();
+  }, err => {
+    console.error('Error al sincronizar los productos:', err);
+  });
+
+  if (unsubKardex) unsubKardex();
+  unsubKardex = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'kardex'), snap => {
+    kardex = snap.docs.map(d => d.data());
+    if (!$('#view-kardex').hidden) renderKardex();
+    if (!$('#view-productos').hidden) renderProductos();
+  }, err => {
+    console.error('Error al sincronizar el kardex:', err);
+  });
+
+  if (unsubNotas) unsubNotas();
+  unsubNotas = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'notas'), snap => {
+    notas = snap.docs.map(d => d.data());
+    if (!$('#view-ventas').hidden) renderVentas();
+  }, err => {
+    console.error('Error al sincronizar las notas de venta:', err);
+  });
 }
 
 /* Muestra/oculta botones según los permisos del usuario actual */
@@ -1382,6 +1519,9 @@ function aplicarPermisos() {
   $('#btn-dashboard').hidden = !puedeVerDashboard();
   $('#btn-cobranza').hidden = !puede('cobranza');
   $('#btn-despachos').hidden = !puede('despachos');
+  $('#btn-ventas').hidden = !puede('ventas');
+  $('#btn-productos').hidden = !puede('productos');
+  $('#btn-kardex').hidden = !puede('productos');
   $('#btn-usuarios').hidden = !esAdmin();
   $('#btn-cliente-nuevo').hidden = !puede('clientes');
   $('#usuario-chip').hidden = !modoNube;
@@ -1398,6 +1538,9 @@ function aplicarPermisos() {
 function sincronizarNavLateral() {
   const items = {
     'nav-dashboard': puedeVerDashboard(),
+    'nav-ventas': puede('ventas'),
+    'nav-productos': puede('productos'),
+    'nav-kardex': puede('productos'),
     'nav-despachos': puede('despachos'),
     'nav-clientes': true,
     'nav-cobranza': puede('cobranza'),
@@ -1410,7 +1553,7 @@ function sincronizarNavLateral() {
 }
 
 /* ====== Router de apartados (cada uno es una sección de página, no un modal) ====== */
-const SECCIONES = ['dashboard', 'creditos', 'despachos', 'clientes', 'cobranza', 'usuarios', 'settings'];
+const SECCIONES = ['dashboard', 'creditos', 'ventas', 'productos', 'kardex', 'despachos', 'clientes', 'cobranza', 'usuarios', 'settings'];
 let seccionActual = 'dashboard';
 
 function mostrarSeccion(nombre) {
@@ -1439,12 +1582,13 @@ function mostrarSeccion(nombre) {
   const navId = nombre === 'creditos' ? 'nav-inicio' : 'nav-' + nombre;
   if (nombre === 'dashboard' && btnNew) btnNew.hidden = true;
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('activo', b.id === navId));
-  const btnId = { dashboard: 'btn-dashboard', creditos: 'btn-creditos', despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
+  const btnId = { dashboard: 'btn-dashboard', creditos: 'btn-creditos', ventas: 'btn-ventas', productos: 'btn-productos', kardex: 'btn-kardex', despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
   document.querySelectorAll('.header-actions .btn-icon').forEach(b => b.classList.toggle('activo', b.id === btnId));
   window.scrollTo(0, 0);
-  // La tabla solo se puede medir cuando su sección ya está visible
   // Las tablas solo se pueden medir cuando su sección ya está visible
-  if (nombre === 'creditos' || nombre === 'cobranza') requestAnimationFrame(ajustarTablasFijas);
+  if (['creditos', 'cobranza', 'productos', 'kardex', 'ventas'].includes(nombre)) {
+    requestAnimationFrame(ajustarTablasFijas);
+  }
 }
 
 /* Si el dispositivo tenía créditos guardados en modo local, ofrece subirlos a la cuenta */
@@ -1513,6 +1657,8 @@ const PERMISOS_LISTA = [
   ['clientes', 'Registrar/editar clientes'],
   ['hojaCrear', 'Crear la hoja de cobranza del día'],
   ['despachos', 'Armar despachos de reparto'],
+  ['ventas', 'Emitir notas de venta'],
+  ['productos', 'Gestionar productos y almacén (kardex)'],
 ];
 // Nota: el permiso 'vencimiento' ya no se ofrece. Cambiar la fecha de
 // vencimiento es solo del administrador; los empleados anotan la fecha de
@@ -1883,6 +2029,9 @@ function ajustarTablasFijas() {
   }
   ajustarCorrimiento('.table-wrap');      // Créditos
   ajustarCorrimiento('.cob-tabla-wrap');  // Hoja de cobranza
+  ajustarCorrimiento('.prod-tabla-wrap'); // Productos
+  ajustarCorrimiento('.kdx-tabla-wrap');  // Kardex
+  ajustarCorrimiento('.nv-tabla-wrap');   // Notas de venta
 }
 
 /* Con el corrimiento lateral puesto, el recuadro pasa a ser su propia zona de
@@ -2717,6 +2866,9 @@ function limpiarFormCliente() {
   $('#cli-form').reset();
   $('#cli-id').value = '';
   $('#cli-codigo').value = siguienteCodigoCliente();
+  // Sin categoría elegida se cobra el precio de menudeo: nunca se cobra de
+  // menos por descuido, y si el cliente es mayorista se le cambia a mano.
+  $('#cli-categoria').value = 'C';
   $('#cli-form-title').textContent = 'Registrar cliente';
   $('#btn-cli-guardar').textContent = '💾 Guardar cliente';
 }
@@ -2729,6 +2881,7 @@ function renderClientes() {
     ? clientes.filter(c => normalizarNombre(c.nombre).includes(buscado)
         || normalizarNombre(c.codigo).includes(buscado)
         || normalizarNombre(c.zona).includes(buscado)
+        || normalizarNombre(c.ruc).includes(buscado)
         || normalizarNombre(c.direccion).includes(buscado))
     : clientes;
 
@@ -2748,15 +2901,18 @@ function renderClientes() {
   cont.innerHTML = lista.map(c => {
     const nPedidos = creditosDeCliente(c.id).length;
     const extra = [
+      c.ruc ? `🆔 ${escapeHtml(c.ruc)}` : '',
       c.direccion ? `🏠 ${escapeHtml(c.direccion)}` : '',
       c.telefono ? `📞 ${escapeHtml(c.telefono)}` : '',
       c.notas ? escapeHtml(c.notas) : '',
     ].filter(Boolean).join(' · ');
+    const cat = categoriaDe(c);
     return `
       <div class="cliente-item">
         <div class="cliente-datos">
           ${c.codigo ? `<span class="cliente-codigo">${escapeHtml(c.codigo)}</span>` : ''}
           <strong>${escapeHtml(c.nombre)}</strong>
+          <span class="cliente-cat cat-${cat}" title="Categoría de precio: ${CATEGORIAS[cat].detalle}">${cat}</span>
           <span class="cliente-zona">${c.zona ? escapeHtml(c.zona) : 'sin zona'}</span>
           <span class="cliente-meta">${nPedidos} crédito${nPedidos === 1 ? '' : 's'}${extra ? ' · ' + extra : ''}</span>
         </div>
@@ -2775,6 +2931,8 @@ function editarClienteForm(id) {
   $('#cli-id').value = cli.id;
   $('#cli-codigo').value = cli.codigo || '';
   $('#cli-nombre').value = cli.nombre;
+  $('#cli-categoria').value = categoriaDe(cli);
+  $('#cli-ruc').value = cli.ruc || '';
   $('#cli-zona').value = cli.zona || '';
   $('#cli-direccion').value = cli.direccion || '';
   $('#cli-telefono').value = cli.telefono || '';
@@ -2814,6 +2972,9 @@ async function guardarClienteForm(ev) {
     codigo,
     nombre,
     zona,
+    // Categoría de precio: decide qué precio del producto se cobra en la nota
+    categoria: $('#cli-categoria').value || 'C',
+    ruc: $('#cli-ruc').value.trim(),
     direccion: $('#cli-direccion').value.trim(),
     telefono: $('#cli-telefono').value.trim(),
     notas: $('#cli-notas').value.trim(),
@@ -2851,6 +3012,7 @@ async function guardarClienteForm(ev) {
   if (!anterior) {
     if ($('#modal-form').open) seleccionarCliente(cliente.id);
     else if (!$('#view-despachos').hidden && !$('#desp-vista-form').hidden) seleccionarClienteDesp(cliente.id);
+    else if (!$('#view-ventas').hidden && !$('#nv-vista-form').hidden) nvSeleccionarCliente(cliente.id);
   }
   render();
   toast(anterior
@@ -5327,7 +5489,8 @@ async function borrarCredito(id) {
 
 /* ====== Respaldo ====== */
 function exportarRespaldo() {
-  const datos = { version: 3, exportado: new Date().toISOString(), settings, creditos, clientes, despachos, repartidores };
+  const datos = { version: 4, exportado: new Date().toISOString(), settings,
+    creditos, clientes, despachos, repartidores, productos, kardex, notas };
   const blob = new Blob([JSON.stringify(datos)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -5382,6 +5545,41 @@ async function importarRespaldo(file) {
         }
       }
     }
+    // Catálogo, almacén y notas de venta (respaldos de la versión 4 en adelante)
+    if (Array.isArray(datos.productos)) {
+      for (const p of datos.productos) {
+        await guardarProductoEnStore(p);
+        if (!modoNube) {
+          const i = productos.findIndex(x => x.id === p.id);
+          if (i >= 0) productos[i] = p; else productos.push(p);
+        }
+      }
+      ordenarProductos();
+    }
+    if (Array.isArray(datos.kardex)) {
+      for (const m of datos.kardex) {
+        await guardarKardexEnStore(m);
+        if (!modoNube) {
+          const i = kardex.findIndex(x => x.id === m.id);
+          if (i >= 0) kardex[i] = m; else kardex.push(m);
+        }
+      }
+    }
+    if (Array.isArray(datos.notas)) {
+      for (const n of datos.notas) {
+        await guardarNotaEnStore(n);
+        if (!modoNube) {
+          const i = notas.findIndex(x => x.id === n.id);
+          if (i >= 0) notas[i] = n; else notas.push(n);
+        }
+      }
+    }
+    if (Array.isArray(datos.productos) || Array.isArray(datos.kardex) || Array.isArray(datos.notas)) {
+      llenarSelectoresProducto();
+      renderProductos();
+      renderKardex();
+      renderVentas();
+    }
     if (datos.settings) { settings = { ...settings, ...datos.settings }; await guardarSettings().catch(() => {}); }
     render();
     toast('⬆️ Respaldo importado correctamente');
@@ -5389,6 +5587,974 @@ async function importarRespaldo(file) {
     console.error(e);
     toast('❌ El archivo no es un respaldo válido');
   }
+}
+
+/* ══════════════════════ Productos ══════════════════════ */
+
+function ordenarProductos() {
+  productos.sort((a, b) =>
+    String(a.codigo || '').localeCompare(String(b.codigo || ''), 'es', { numeric: true }));
+}
+
+function productoPorId(id) { return productos.find(p => p.id === id) || null; }
+function productosActivos() { return productos.filter(p => p.activo !== false); }
+
+/* Códigos de 6 cifras como los de tu talonario: 001003, 001026… */
+function siguienteCodigoProducto() {
+  let mayor = 0;
+  for (const p of productos) {
+    const n = Number(String(p.codigo || '').replace(/\D/g, ''));
+    if (Number.isFinite(n)) mayor = Math.max(mayor, n);
+  }
+  return String(mayor + 1).padStart(6, '0');
+}
+
+function codigoProductoRepetido(codigo, exceptoId) {
+  const clave = String(codigo).trim().toUpperCase();
+  return productos.find(p => String(p.codigo || '').trim().toUpperCase() === clave && p.id !== exceptoId) || null;
+}
+
+/* El precio que le toca a un cliente según su categoría */
+function precioDe(producto, categoria) {
+  if (!producto) return 0;
+  const campo = { A: 'precioA', B: 'precioB', C: 'precioC' }[categoria] || 'precioC';
+  return Number(producto[campo]) || 0;
+}
+
+function soles(n) {
+  return (Number(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* ---- Stock: siempre se calcula del kardex, que es la única fuente de verdad ---- */
+function cantidadConSigno(m) {
+  const t = TIPOS_KARDEX[m.tipo] || TIPOS_KARDEX.entrada;
+  // En un ajuste ya se guardó la diferencia contra el stock (puede ser negativa)
+  return t.signo * (Number(m.cantidad) || 0);
+}
+
+function stockDe(productoId) {
+  let s = 0;
+  for (const m of kardex) if (m.productoId === productoId) s += cantidadConSigno(m);
+  return s;
+}
+
+function kardexOrdenado() {
+  return kardex.slice().sort((a, b) => {
+    if ((a.fecha || '') !== (b.fecha || '')) return (a.fecha || '') < (b.fecha || '') ? -1 : 1;
+    return (a.creado || 0) - (b.creado || 0);
+  });
+}
+
+/* Cada movimiento con el saldo que dejó ese producto: es la columna que hace
+   que un kardex sirva de verdad (se puede auditar fila por fila). */
+function kardexConSaldo() {
+  const saldos = new Map();
+  return kardexOrdenado().map(m => {
+    const previo = saldos.get(m.productoId) || 0;
+    const saldo = previo + cantidadConSigno(m);
+    saldos.set(m.productoId, saldo);
+    return { ...m, saldo, previo };
+  });
+}
+
+function abrirProductos() {
+  $('#prod-buscar').value = '';
+  $('#btn-prod-nuevo').hidden = !puede('productos');
+  renderProductos();
+  mostrarSeccion('productos');
+}
+
+function renderProductos() {
+  const cuerpo = $('#prod-body');
+  if (!cuerpo) return;
+  const buscado = normalizarNombre($('#prod-buscar') ? $('#prod-buscar').value : '');
+  const lista = buscado
+    ? productos.filter(p => normalizarNombre(p.nombre).includes(buscado)
+        || normalizarNombre(p.codigo).includes(buscado))
+    : productos;
+
+  const bajos = productos.filter(p => p.activo !== false && stockDe(p.id) <= (Number(p.stockMin) || 0));
+  $('#prod-chips').innerHTML = [
+    `<span class="chip">🛒 ${productos.length} producto${productos.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip">✅ ${productosActivos().length} activo${productosActivos().length === 1 ? '' : 's'}</span>`,
+    bajos.length ? `<span class="chip chip-alerta">⚠️ ${bajos.length} con stock bajo</span>` : '',
+  ].filter(Boolean).join('');
+
+  $('#prod-vacio').hidden = !!lista.length;
+  $('.prod-tabla-wrap').hidden = !lista.length;
+  if (!lista.length) {
+    $('#prod-vacio').textContent = productos.length
+      ? 'Ningún producto coincide con la búsqueda.'
+      : 'Todavía no tienes productos. Usa “➕ Nuevo producto” para crear el primero.';
+    cuerpo.innerHTML = '';
+    return;
+  }
+
+  const permitido = puede('productos');
+  cuerpo.innerHTML = lista.map(p => {
+    const stock = stockDe(p.id);
+    const min = Number(p.stockMin) || 0;
+    const bajo = p.activo !== false && stock <= min;
+    return `<tr class="${p.activo === false ? 'prod-inactivo' : ''}">
+      <td class="col-cod"><code>${escapeHtml(p.codigo || '—')}</code></td>
+      <td class="prod-nombre">${escapeHtml(p.nombre)}${p.activo === false ? ' <span class="prod-etq">inactivo</span>' : ''}</td>
+      <td class="col-um">${PRESENTACIONES[presentacionDe(p)].nombre} <small>${umDe(p)}</small></td>
+      <td class="col-num">${soles(p.precioA)}</td>
+      <td class="col-num">${soles(p.precioB)}</td>
+      <td class="col-num">${soles(p.precioC)}</td>
+      <td class="col-num ${bajo ? 'prod-stock-bajo' : ''}" title="${bajo ? `Stock mínimo: ${min}` : ''}">${stock}${bajo ? ' ⚠️' : ''}</td>
+      <td class="col-acc">${permitido ? `
+        <button type="button" class="btn btn-secondary btn-small" data-editar-producto="${escapeHtml(p.id)}" title="Editar">✏️</button>
+        <button type="button" class="btn btn-secondary btn-small" data-mover-producto="${escapeHtml(p.id)}" title="Entrada o salida de almacén">📒</button>
+        <button type="button" class="btn btn-danger btn-small" data-borrar-producto="${escapeHtml(p.id)}" title="Borrar">🗑️</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function abrirFormProducto(producto = null) {
+  if (!puede('productos')) { toast('🔒 No tienes permiso para gestionar productos'); return; }
+  $('#prod-form').reset();
+  $('#prod-id').value = producto ? producto.id : '';
+  $('#prod-codigo').value = producto ? (producto.codigo || '') : siguienteCodigoProducto();
+  $('#prod-nombre').value = producto ? producto.nombre : '';
+  $('#prod-presentacion').value = producto ? presentacionDe(producto) : 'unidad';
+  $('#prod-stockmin').value = producto ? (Number(producto.stockMin) || 0) : 0;
+  $('#prod-precio-a').value = producto ? (producto.precioA ?? '') : '';
+  $('#prod-precio-b').value = producto ? (producto.precioB ?? '') : '';
+  $('#prod-precio-c').value = producto ? (producto.precioC ?? '') : '';
+  $('#prod-activo').checked = producto ? producto.activo !== false : true;
+  // El stock solo se pone al crear: después se mueve por el kardex, para que
+  // nunca haya un stock que nadie pueda explicar.
+  $('#prod-stock-inicial').value = 0;
+  $('#prod-stock-inicial-box').hidden = !!producto;
+  $('#prod-form-title').textContent = producto ? `Editar producto — ${producto.nombre}` : 'Nuevo producto';
+  abrirSinTeclado($('#modal-producto'));
+}
+
+async function guardarProductoForm(ev) {
+  ev.preventDefault();
+  if (!puede('productos')) { toast('🔒 No tienes permiso para gestionar productos'); return; }
+
+  const id = $('#prod-id').value;
+  const anterior = id ? productoPorId(id) : null;
+  const nombre = $('#prod-nombre').value.trim().toUpperCase();
+  if (!nombre) { toast('⚠️ Escribe el nombre del producto'); return; }
+
+  let codigo = $('#prod-codigo').value.trim().toUpperCase();
+  if (!codigo) codigo = (anterior && anterior.codigo) || siguienteCodigoProducto();
+  const repetido = codigoProductoRepetido(codigo, id);
+  if (repetido) { toast(`⚠️ El código ${codigo} ya es de "${repetido.nombre}"`); return; }
+
+  const precios = ['a', 'b', 'c'].map(l => Number($(`#prod-precio-${l}`).value));
+  if (precios.some(p => !Number.isFinite(p) || p < 0)) { toast('⚠️ Revisa los tres precios'); return; }
+
+  const producto = {
+    id: id || nuevoId(),
+    codigo,
+    nombre,
+    presentacion: $('#prod-presentacion').value,
+    precioA: precios[0], precioB: precios[1], precioC: precios[2],
+    stockMin: Number($('#prod-stockmin').value) || 0,
+    activo: $('#prod-activo').checked,
+    creado: anterior ? anterior.creado : Date.now(),
+    creadoPor: anterior ? (anterior.creadoPor || '') : quienSoy(),
+  };
+  if (anterior) { producto.modificadoPor = quienSoy(); producto.modificadoEn = Date.now(); }
+
+  try {
+    await guardarProductoEnStore(producto);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar el producto. Revisa tu conexión.');
+    return;
+  }
+
+  const i = productos.findIndex(p => p.id === producto.id);
+  if (i >= 0) productos[i] = producto; else productos.push(producto);
+  ordenarProductos();
+
+  // Stock de apertura: entra al kardex como cualquier otro movimiento
+  const inicial = Number($('#prod-stock-inicial').value) || 0;
+  if (!anterior && inicial > 0) {
+    await registrarMovimiento({
+      productoId: producto.id, fecha: hoyISO(), tipo: 'entrada', cantidad: inicial,
+      motivo: 'inventario', documento: '', nota: 'Stock inicial al crear el producto',
+    });
+  }
+
+  $('#modal-producto').close();
+  renderProductos();
+  llenarSelectoresProducto();
+  toast(anterior ? '✅ Producto actualizado' : `✅ Producto "${nombre}" creado`);
+}
+
+async function borrarProducto(id) {
+  if (!puede('productos')) return;
+  const p = productoPorId(id);
+  if (!p) return;
+  const movimientos = kardex.filter(m => m.productoId === id).length;
+  const enNotas = notas.filter(n => (n.items || []).some(it => it.productoId === id)).length;
+  if (movimientos || enNotas) {
+    alert(`No se puede borrar "${p.nombre}" porque tiene ${movimientos} movimiento(s) de almacén` +
+      `${enNotas ? ` y sale en ${enNotas} nota(s) de venta` : ''}.\n\n` +
+      'Si ya no lo vendes, edítalo y desmarca “Producto activo”: deja de aparecer al vender, pero su historial se conserva.');
+    return;
+  }
+  if (!confirm(`¿Borrar el producto "${p.nombre}"?`)) return;
+  try {
+    await eliminarProductoDeStore(id);
+  } catch (e) {
+    toast('❌ No se pudo borrar. Revisa tu conexión.');
+    return;
+  }
+  productos = productos.filter(x => x.id !== id);
+  renderProductos();
+  llenarSelectoresProducto();
+  toast('🗑️ Producto borrado');
+}
+
+/* ══════════════════════ Kardex de almacén ══════════════════════ */
+
+let kdxFiltros = { producto: '', tipo: '', desde: '', hasta: '' };
+
+function abrirKardex() {
+  $('#btn-kardex-nuevo').hidden = !puede('productos');
+  llenarSelectoresProducto();
+  renderKardex();
+  mostrarSeccion('kardex');
+}
+
+function llenarSelectoresProducto() {
+  const opciones = p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.codigo || '')} · ${escapeHtml(p.nombre)}</option>`;
+  const filtro = $('#kdx-fil-producto');
+  if (filtro) {
+    const antes = filtro.value;
+    filtro.innerHTML = '<option value="">Todos los productos</option>' + productos.map(opciones).join('');
+    filtro.value = antes;
+  }
+  const form = $('#kdx-producto');
+  if (form) {
+    const antes = form.value;
+    form.innerHTML = '<option value="">— Elige un producto —</option>' + productos.map(opciones).join('');
+    form.value = antes;
+  }
+  const venta = $('#nv-producto');
+  if (venta) {
+    const antes = venta.value;
+    venta.innerHTML = '<option value="">— Elige un producto —</option>' + productosActivos().map(opciones).join('');
+    venta.value = antes;
+  }
+  const motivos = $('#kdx-motivo');
+  if (motivos && !motivos.options.length) {
+    motivos.innerHTML = Object.entries(MOTIVOS_KARDEX)
+      .map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  }
+}
+
+function movimientosFiltrados() {
+  return kardexConSaldo().filter(m => {
+    if (kdxFiltros.producto && m.productoId !== kdxFiltros.producto) return false;
+    if (kdxFiltros.tipo && m.tipo !== kdxFiltros.tipo) return false;
+    if (kdxFiltros.desde && (m.fecha || '') < kdxFiltros.desde) return false;
+    if (kdxFiltros.hasta && (m.fecha || '') > kdxFiltros.hasta) return false;
+    return true;
+  }).reverse();   // lo más reciente arriba
+}
+
+function renderKardex() {
+  const cuerpo = $('#kdx-body');
+  if (!cuerpo) return;
+  const lista = movimientosFiltrados();
+
+  let entradas = 0, salidas = 0;
+  for (const m of lista) {
+    const c = cantidadConSigno(m);
+    if (c >= 0) entradas += c; else salidas += -c;
+  }
+  const prodFiltrado = kdxFiltros.producto ? productoPorId(kdxFiltros.producto) : null;
+  $('#kdx-chips').innerHTML = [
+    `<span class="chip">📄 ${lista.length} movimiento${lista.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip chip-entrada">📥 Entradas: ${entradas}</span>`,
+    `<span class="chip chip-salida">📤 Salidas: ${salidas}</span>`,
+    prodFiltrado
+      ? `<span class="chip chip-saldo">📦 Stock actual de ${escapeHtml(prodFiltrado.nombre)}: <strong>${stockDe(prodFiltrado.id)}</strong></span>`
+      : '',
+  ].filter(Boolean).join('');
+
+  // Aviso de productos por debajo de su stock mínimo
+  const bajos = productosActivos().filter(p => stockDe(p.id) <= (Number(p.stockMin) || 0));
+  const alerta = $('#kdx-alerta');
+  alerta.hidden = !bajos.length;
+  if (bajos.length) {
+    alerta.innerHTML = `⚠️ <strong>Stock bajo:</strong> ` + bajos.slice(0, 8).map(p =>
+      `${escapeHtml(p.nombre)} <b>(${stockDe(p.id)})</b>`).join(' · ') +
+      (bajos.length > 8 ? ` y ${bajos.length - 8} más` : '');
+  }
+
+  $('#kdx-vacio').hidden = !!lista.length;
+  $('.kdx-tabla-wrap').hidden = !lista.length;
+  if (!lista.length) { cuerpo.innerHTML = ''; return; }
+
+  const permitido = puede('productos');
+  cuerpo.innerHTML = lista.map(m => {
+    const p = productoPorId(m.productoId);
+    const c = cantidadConSigno(m);
+    const t = TIPOS_KARDEX[m.tipo] || TIPOS_KARDEX.entrada;
+    return `<tr>
+      <td class="kdx-fecha">${formatoFecha(m.fecha)}<small>${horaDeTimestamp(m.creado) || ''}</small></td>
+      <td class="col-cod"><code>${escapeHtml(p ? p.codigo : '—')}</code></td>
+      <td>${escapeHtml(p ? p.nombre : 'producto borrado')}</td>
+      <td><span class="kdx-tipo kdx-${m.tipo}">${t.icono} ${t.nombre}</span></td>
+      <td>${escapeHtml(MOTIVOS_KARDEX[m.motivo] || '—')}${m.nota ? `<small>${escapeHtml(m.nota)}</small>` : ''}</td>
+      <td>${escapeHtml(m.documento || '—')}</td>
+      <td class="col-num kdx-entrada">${c > 0 ? c : ''}</td>
+      <td class="col-num kdx-salida">${c < 0 ? -c : ''}</td>
+      <td class="col-num kdx-saldo">${m.saldo}</td>
+      <td>${escapeHtml(m.usuario || '—')}</td>
+      <td class="col-acc">${permitido && m.motivo !== 'venta'
+        ? `<button type="button" class="btn btn-danger btn-small" data-borrar-kardex="${escapeHtml(m.id)}" title="Anular movimiento">🗑️</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* Guarda un movimiento. En un ajuste, `cantidad` es lo CONTADO en el almacén y
+   aquí se convierte en la diferencia contra el stock que tenía el sistema. */
+async function registrarMovimiento({ productoId, fecha, tipo, cantidad, motivo, documento, nota, notaId }) {
+  let cant = Number(cantidad) || 0;
+  if (tipo === 'ajuste') cant = cant - stockDe(productoId);
+  const mov = {
+    id: nuevoId(),
+    productoId,
+    fecha: fecha || hoyISO(),
+    tipo,
+    cantidad: cant,
+    motivo: motivo || 'otro',
+    documento: documento || '',
+    nota: nota || '',
+    notaId: notaId || '',
+    usuario: quienSoy(),
+    creado: Date.now(),
+  };
+  await guardarKardexEnStore(mov);
+  if (!modoNube) kardex.push(mov);
+  return mov;
+}
+
+function abrirFormKardex(productoId = '') {
+  if (!puede('productos')) { toast('🔒 No tienes permiso para mover el almacén'); return; }
+  if (!productos.length) { toast('⚠️ Primero crea al menos un producto'); return; }
+  llenarSelectoresProducto();
+  $('#kdx-form').reset();
+  $('#kdx-fecha').value = hoyISO();
+  $('#kdx-producto').value = productoId || '';
+  $('#kdx-tipo').value = 'entrada';
+  $('#kdx-motivo').value = 'compra';
+  $('#kdx-ayuda-ajuste').hidden = true;
+  actualizarSaldoPrevio();
+  abrirSinTeclado($('#modal-kardex'));
+}
+
+function actualizarSaldoPrevio() {
+  const id = $('#kdx-producto').value;
+  const caja = $('#kdx-saldo-previo');
+  if (!id) { caja.textContent = ''; return; }
+  const p = productoPorId(id);
+  caja.innerHTML = `📦 Stock actual de <strong>${escapeHtml(p ? p.nombre : '')}</strong>: <strong>${stockDe(id)}</strong>`;
+}
+
+async function guardarKardexForm(ev) {
+  ev.preventDefault();
+  if (!puede('productos')) { toast('🔒 No tienes permiso para mover el almacén'); return; }
+  const productoId = $('#kdx-producto').value;
+  if (!productoId) { toast('⚠️ Elige el producto'); return; }
+  const tipo = $('#kdx-tipo').value;
+  const cantidad = Number($('#kdx-cantidad').value);
+  if (!Number.isFinite(cantidad) || (tipo !== 'ajuste' && cantidad <= 0)) {
+    toast('⚠️ Escribe una cantidad válida'); return;
+  }
+  if (tipo === 'ajuste' && cantidad < 0) { toast('⚠️ El conteo físico no puede ser negativo'); return; }
+
+  // No se deja dejar el stock en negativo: casi siempre es un error de tipeo
+  if (tipo === 'salida' && cantidad > stockDe(productoId)) {
+    const p = productoPorId(productoId);
+    if (!confirm(`Solo hay ${stockDe(productoId)} de "${p.nombre}" y estás sacando ${cantidad}.\n\n` +
+      '¿Registrar igual y dejar el stock en negativo?')) return;
+  }
+
+  try {
+    await registrarMovimiento({
+      productoId,
+      fecha: $('#kdx-fecha').value || hoyISO(),
+      tipo,
+      cantidad,
+      motivo: $('#kdx-motivo').value,
+      documento: $('#kdx-documento').value.trim(),
+      nota: $('#kdx-nota').value.trim(),
+    });
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo registrar el movimiento. Revisa tu conexión.');
+    return;
+  }
+  $('#modal-kardex').close();
+  renderKardex();
+  renderProductos();
+  toast('✅ Movimiento registrado');
+}
+
+async function borrarMovimiento(id) {
+  if (!puede('productos')) return;
+  const m = kardex.find(x => x.id === id);
+  if (!m) return;
+  const p = productoPorId(m.productoId);
+  if (!confirm(`¿Anular este movimiento de "${p ? p.nombre : 'producto'}"?\n\n` +
+    'El stock se recalcula solo.')) return;
+  try {
+    await eliminarKardexDeStore(id);
+  } catch (e) {
+    toast('❌ No se pudo anular. Revisa tu conexión.');
+    return;
+  }
+  kardex = kardex.filter(x => x.id !== id);
+  renderKardex();
+  renderProductos();
+  toast('🗑️ Movimiento anulado');
+}
+
+function imprimirKardex() {
+  const lista = movimientosFiltrados().slice().reverse();   // del más antiguo al más nuevo
+  const p = kdxFiltros.producto ? productoPorId(kdxFiltros.producto) : null;
+  const rango = [kdxFiltros.desde ? `desde ${formatoFecha(kdxFiltros.desde)}` : '',
+    kdxFiltros.hasta ? `hasta ${formatoFecha(kdxFiltros.hasta)}` : ''].filter(Boolean).join(' ');
+  const filas = lista.map(m => {
+    const prod = productoPorId(m.productoId);
+    const c = cantidadConSigno(m);
+    return `<tr><td>${formatoFecha(m.fecha)}</td><td>${escapeHtml(prod ? prod.codigo : '—')}</td>
+      <td>${escapeHtml(prod ? prod.nombre : '—')}</td>
+      <td>${escapeHtml((TIPOS_KARDEX[m.tipo] || {}).nombre || '')}</td>
+      <td>${escapeHtml(MOTIVOS_KARDEX[m.motivo] || '')}</td>
+      <td>${escapeHtml(m.documento || '')}</td>
+      <td style="text-align:right">${c > 0 ? c : ''}</td>
+      <td style="text-align:right">${c < 0 ? -c : ''}</td>
+      <td style="text-align:right"><b>${m.saldo}</b></td>
+      <td>${escapeHtml(m.usuario || '')}</td></tr>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Kardex</title>
+    <style>body{font-family:system-ui,sans-serif;padding:18px;color:#111}
+      h1{font-size:17px;margin:0 0 4px}.sub{color:#555;margin:0 0 14px;font-size:13px}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{border:1px solid #bbb;padding:4px 6px;text-align:left}th{background:#eee}
+    </style></head><body>
+    <h1>📒 Kardex de almacén</h1>
+    <p class="sub">${p ? escapeHtml(p.nombre) : 'Todos los productos'} ${escapeHtml(rango)} — ${lista.length} movimiento(s)
+    ${p ? `<br>Stock actual: <b>${stockDe(p.id)}</b>` : ''}</p>
+    <table><thead><tr><th>Fecha</th><th>Código</th><th>Producto</th><th>Movimiento</th><th>Motivo</th>
+    <th>Documento</th><th style="text-align:right">Entrada</th><th style="text-align:right">Salida</th>
+    <th style="text-align:right">Saldo</th><th>Registró</th></tr></thead>
+    <tbody>${filas || '<tr><td colspan="10" style="text-align:center">Sin movimientos</td></tr>'}</tbody></table>
+    <script>window.onload=function(){window.print();}<\/script></body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  w.document.write(html); w.document.close();
+}
+
+/* ══════════════════════ Importe en letras ══════════════════════ */
+
+const LETRAS_UNIDAD = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE',
+  'DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE',
+  'VEINTE', 'VEINTIUNO', 'VEINTIDÓS', 'VEINTITRÉS', 'VEINTICUATRO', 'VEINTICINCO', 'VEINTISÉIS',
+  'VEINTISIETE', 'VEINTIOCHO', 'VEINTINUEVE'];
+const LETRAS_DECENA = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+const LETRAS_CENTENA = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS',
+  'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+
+function letrasHasta999(n) {
+  if (n === 0) return '';
+  if (n === 100) return 'CIEN';
+  const centena = Math.floor(n / 100), resto = n % 100;
+  let txt = centena ? LETRAS_CENTENA[centena] : '';
+  if (resto) {
+    const r = resto < 30
+      ? LETRAS_UNIDAD[resto]
+      : LETRAS_DECENA[Math.floor(resto / 10)] + (resto % 10 ? ' Y ' + LETRAS_UNIDAD[resto % 10] : '');
+    txt = txt ? `${txt} ${r}` : r;
+  }
+  return txt;
+}
+
+function letrasEnteras(n) {
+  if (n === 0) return 'CERO';
+  const millones = Math.floor(n / 1000000);
+  const miles = Math.floor((n % 1000000) / 1000);
+  const resto = n % 1000;
+  const partes = [];
+  if (millones) partes.push(millones === 1 ? 'UN MILLÓN' : `${letrasEnteras(millones)} MILLONES`);
+  if (miles) partes.push(miles === 1 ? 'MIL' : `${letrasHasta999(miles)} MIL`);
+  if (resto) partes.push(letrasHasta999(resto));
+  return partes.join(' ');
+}
+
+/* "324.00" → "TRESCIENTOS VEINTICUATRO CON 00/100 SOLES" */
+function montoEnLetras(monto) {
+  const centavosTotales = Math.round((Number(monto) || 0) * 100);
+  const enteros = Math.floor(centavosTotales / 100);
+  const centavos = centavosTotales % 100;
+  // "UNO" y "VEINTIUNO" se apocopan delante del nombre de la moneda
+  const txt = letrasEnteras(enteros)
+    .replace(/VEINTIUNO$/, 'VEINTIÚN')
+    .replace(/(^|\s)UNO$/, '$1UN');
+  return `${txt} CON ${String(centavos).padStart(2, '0')}/100 SOLES`;
+}
+
+/* ══════════════════════ Notas de venta ══════════════════════ */
+
+const SERIE_NOTA = '0001';
+let nvItems = [];          // líneas de la nota que se está armando
+let nvClienteId = '';
+let nvNumero = '';
+let nvCreadoEn = 0;        // hora en que se empezó la nota
+let nvComboIndice = -1;
+
+function siguienteNumeroNota() {
+  let mayor = 0;
+  for (const n of notas) {
+    const m = /-(\d+)$/.exec(String(n.numero || ''));
+    if (m) mayor = Math.max(mayor, Number(m[1]));
+  }
+  return `${SERIE_NOTA}-${String(mayor + 1).padStart(8, '0')}`;
+}
+
+function notasOrdenadas() {
+  return notas.slice().sort((a, b) => (b.creado || 0) - (a.creado || 0));
+}
+
+function abrirVentas() {
+  $('#btn-nv-nueva').hidden = !puede('ventas');
+  mostrarVistaVenta('lista');
+  renderVentas();
+  mostrarSeccion('ventas');
+}
+
+function mostrarVistaVenta(cual) {
+  $('#nv-vista-lista').hidden = cual !== 'lista';
+  $('#nv-vista-form').hidden = cual !== 'form';
+}
+
+function renderVentas() {
+  const cuerpo = $('#nv-body');
+  if (!cuerpo) return;
+  const buscado = normalizarNombre($('#nv-buscar') ? $('#nv-buscar').value : '');
+  const todas = notasOrdenadas();
+  const lista = buscado
+    ? todas.filter(n => normalizarNombre(n.numero).includes(buscado)
+        || normalizarNombre(n.clienteNombre).includes(buscado))
+    : todas;
+
+  const hoy = hoyISO();
+  const deHoy = todas.filter(n => n.fecha === hoy);
+  const totalHoy = deHoy.reduce((s, n) => s + (Number(n.total) || 0), 0);
+  $('#nv-chips').innerHTML = [
+    `<span class="chip">🧮 ${todas.length} nota${todas.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip chip-entrada">📅 Hoy: ${deHoy.length} · S/ ${soles(totalHoy)}</span>`,
+  ].join('');
+
+  $('#nv-vacio').hidden = !!lista.length;
+  $('.nv-tabla-wrap').hidden = !lista.length;
+  if (!lista.length) {
+    $('#nv-vacio').textContent = todas.length
+      ? 'Ninguna nota coincide con la búsqueda.'
+      : 'Todavía no has emitido notas de venta.';
+    cuerpo.innerHTML = '';
+    return;
+  }
+
+  cuerpo.innerHTML = lista.map(n => {
+    const cat = String(n.categoria || 'C').toUpperCase();
+    return `<tr>
+      <td class="nv-num"><strong>${escapeHtml(n.numero)}</strong></td>
+      <td>${formatoFecha(n.fecha)}<small>${escapeHtml(n.hora || '')}</small></td>
+      <td>${escapeHtml(n.clienteNombre || '—')}</td>
+      <td class="col-um"><span class="cliente-cat cat-${cat}">${cat}</span></td>
+      <td>${escapeHtml(n.zona || '—')}</td>
+      <td>${n.condicion === 'credito' ? 'CRÉDITO' : 'CONTADO'}</td>
+      <td class="col-num">${(n.items || []).length}</td>
+      <td class="col-num"><strong>${soles(n.total)}</strong></td>
+      <td>${escapeHtml(n.emitidaPor || '—')}</td>
+      <td class="col-acc">
+        <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
+        <button type="button" class="btn btn-secondary btn-small" data-copiar-nota="${escapeHtml(n.id)}" title="Usar como base para una nota nueva">📋</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function abrirNuevaNota(base = null) {
+  if (!puede('ventas')) { toast('🔒 No tienes permiso para emitir notas de venta'); return; }
+  if (!productosActivos().length) {
+    toast('⚠️ Primero crea productos en la sección 🛒 Productos');
+    return;
+  }
+  llenarSelectoresProducto();
+  nvItems = base ? (base.items || []).map(it => ({ ...it })) : [];
+  nvNumero = siguienteNumeroNota();
+  nvCreadoEn = Date.now();
+  $('#nv-numero').textContent = nvNumero;
+  $('#nv-fecha').value = hoyISO();
+  $('#nv-hora').textContent = horaDeTimestamp(nvCreadoEn);
+  $('#nv-vendedor').textContent = quienSoy();
+  $('#nv-condicion').value = base ? (base.condicion || 'contado') : 'contado';
+  $('#nv-fpago').value = hoyISO();
+  $('#nv-referencia').value = base ? (base.referencia || '') : '';
+  $('#nv-descuento').value = 0;
+  $('#nv-permitir-precios').checked = false;
+  $('#nv-cantidad').value = 1;
+  $('#nv-producto').value = '';
+  nvSeleccionarCliente(base ? (base.clienteId || '') : '');
+  mostrarVistaVenta('form');
+  renderNotaItems();
+  window.scrollTo(0, 0);
+}
+
+/* ---- Buscador de cliente de la nota ---- */
+function nvRenderSugerencias(texto) {
+  const caja = $('#nv-cliente-sugerencias');
+  const clave = normalizarNombre(texto);
+  if (!clave) { caja.hidden = true; caja.innerHTML = ''; return; }
+  const encontrados = clientes.filter(c =>
+    normalizarNombre(c.nombre).includes(clave) || normalizarNombre(c.codigo).includes(clave)).slice(0, 8);
+  if (!encontrados.length) {
+    caja.innerHTML = '<div class="combo-vacio">Ningún cliente coincide</div>';
+    caja.hidden = false;
+    return;
+  }
+  nvComboIndice = -1;
+  caja.innerHTML = encontrados.map((c, i) => {
+    const cat = categoriaDe(c);
+    return `<button type="button" class="combo-item" data-nv-cliente="${escapeHtml(c.id)}" data-i="${i}">
+      <span class="cliente-cat cat-${cat}">${cat}</span>
+      <span class="combo-nombre">${escapeHtml(c.nombre)}</span>
+      <small>${escapeHtml(c.codigo || '')} ${c.zona ? '· ' + escapeHtml(c.zona) : ''}</small>
+    </button>`;
+  }).join('');
+  caja.hidden = false;
+}
+
+function nvCerrarSugerencias() {
+  const caja = $('#nv-cliente-sugerencias');
+  if (caja) { caja.hidden = true; caja.innerHTML = ''; }
+  nvComboIndice = -1;
+}
+
+function nvSeleccionarCliente(id) {
+  nvClienteId = id || '';
+  $('#nv-cliente-id').value = nvClienteId;
+  nvCerrarSugerencias();
+  const cli = nvClienteId ? clientePorId(nvClienteId) : null;
+  $('#nv-cliente-buscar').value = cli ? cli.nombre : '';
+  $('#nv-ficha').hidden = !cli;
+  $('#nv-sin-cliente').hidden = !!cli;
+  if (cli) {
+    const cat = categoriaDe(cli);
+    $('#nv-ficha-cat').innerHTML =
+      `<span class="nv-cat-grande cat-${cat}">${cat}</span>
+       <span class="nv-cat-detalle">Categoría de precio<br><strong>${CATEGORIAS[cat].detalle}</strong></span>`;
+    $('#nv-fc-nombre').textContent = cli.nombre;
+    $('#nv-fc-codigo').textContent = cli.codigo || '—';
+    $('#nv-fc-zona').textContent = cli.zona || '—';
+    $('#nv-fc-ruc').textContent = cli.ruc || '—';
+    $('#nv-fc-direccion').textContent = cli.direccion || '—';
+    $('#nv-fc-telefono').textContent = cli.telefono || '—';
+    const deuda = creditosDeCliente(cli.id).reduce((s, c) => s + saldoDe(c), 0);
+    $('#nv-fc-deuda').textContent = deuda > 0 ? formatoMonto(deuda) : 'sin deuda';
+    $('#nv-fc-deuda').className = deuda > 0 ? 'nv-deuda' : '';
+    $('#nv-fc-notas').textContent = cli.notas || '—';
+  }
+  // Al cambiar de cliente cambia la categoría: se repone el precio de lista de
+  // las líneas que nadie tocó a mano (las editadas se respetan).
+  reponerPreciosDeLista();
+  renderNotaItems();
+}
+
+function categoriaActual() {
+  const cli = nvClienteId ? clientePorId(nvClienteId) : null;
+  return cli ? categoriaDe(cli) : 'C';
+}
+
+function reponerPreciosDeLista() {
+  const cat = categoriaActual();
+  for (const it of nvItems) {
+    if (it.precioEditado) continue;
+    const p = productoPorId(it.productoId);
+    if (p) it.precio = precioDe(p, cat);
+  }
+}
+
+function agregarItemNota() {
+  const id = $('#nv-producto').value;
+  if (!id) { toast('⚠️ Elige el producto'); return; }
+  const cantidad = Number($('#nv-cantidad').value);
+  if (!Number.isFinite(cantidad) || cantidad <= 0) { toast('⚠️ Escribe una cantidad válida'); return; }
+  const p = productoPorId(id);
+  if (!p) return;
+
+  // Si el producto ya está en la nota, se suma a la línea que ya existe
+  const yaEsta = nvItems.find(it => it.productoId === id);
+  if (yaEsta) {
+    yaEsta.cantidad = (Number(yaEsta.cantidad) || 0) + cantidad;
+  } else {
+    nvItems.push({
+      productoId: p.id,
+      codigo: p.codigo,
+      descripcion: p.nombre,
+      um: umDe(p),
+      cantidad,
+      precio: precioDe(p, categoriaActual()),
+      precioEditado: false,
+    });
+  }
+  $('#nv-producto').value = '';
+  $('#nv-cantidad').value = 1;
+  renderNotaItems();
+}
+
+function renderNotaItems() {
+  const cuerpo = $('#nv-items-body');
+  if (!cuerpo) return;
+  const editable = $('#nv-permitir-precios').checked;
+  $('#nv-items-vacio').hidden = !!nvItems.length;
+  $('.nv-items-wrap').hidden = !nvItems.length;
+
+  cuerpo.innerHTML = nvItems.map((it, i) => {
+    const importe = (Number(it.cantidad) || 0) * (Number(it.precio) || 0);
+    const p = productoPorId(it.productoId);
+    const stock = p ? stockDe(p.id) : 0;
+    const falta = p && (Number(it.cantidad) || 0) > stock;
+    return `<tr>
+      <td class="col-cod"><code>${escapeHtml(it.codigo || '—')}</code></td>
+      <td class="col-num">
+        <input type="number" class="input input-mini" data-nv-cant="${i}" min="0.01" step="1" value="${it.cantidad}">
+      </td>
+      <td class="col-um">${escapeHtml(it.um || '')}</td>
+      <td>${escapeHtml(it.descripcion || '')}
+        ${falta ? `<small class="nv-sin-stock">⚠️ solo hay ${stock} en almacén</small>` : ''}
+        ${it.precioEditado ? '<small class="nv-precio-tocado">precio modificado a mano</small>' : ''}</td>
+      <td class="col-num">
+        <input type="number" class="input input-mini" data-nv-precio="${i}" min="0" step="0.01"
+          value="${Number(it.precio).toFixed(2)}" ${editable ? '' : 'readonly'}>
+      </td>
+      <td class="col-num nv-importe">${soles(importe)}</td>
+      <td class="col-acc"><button type="button" class="btn btn-danger btn-small" data-nv-quitar="${i}" title="Quitar">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  recalcularTotalesNota();
+}
+
+function recalcularTotalesNota() {
+  const subtotal = nvItems.reduce((s, it) => s + (Number(it.cantidad) || 0) * (Number(it.precio) || 0), 0);
+  let descuento = Number($('#nv-descuento').value) || 0;
+  if (descuento < 0) descuento = 0;
+  if (descuento > subtotal) descuento = subtotal;
+  const total = subtotal - descuento;
+  $('#nv-subtotal').textContent = soles(subtotal);
+  $('#nv-total').textContent = soles(total);
+  $('#nv-letras').textContent = nvItems.length ? montoEnLetras(total) : '—';
+  return { subtotal, descuento, total };
+}
+
+function armarNota() {
+  const cli = nvClienteId ? clientePorId(nvClienteId) : null;
+  if (!cli) { toast('⚠️ Elige el cliente de la nota'); $('#nv-cliente-buscar').focus(); return null; }
+  if (!nvItems.length) { toast('⚠️ Agrega al menos un producto'); return null; }
+  const { subtotal, descuento, total } = recalcularTotalesNota();
+  return {
+    id: nuevoId(),
+    numero: nvNumero,
+    serie: SERIE_NOTA,
+    fecha: $('#nv-fecha').value || hoyISO(),
+    hora: horaDeTimestamp(nvCreadoEn),
+    clienteId: cli.id,
+    clienteNombre: cli.nombre,
+    clienteCodigo: cli.codigo || '',
+    clienteRuc: cli.ruc || '',
+    clienteDireccion: cli.direccion || '',
+    clienteTelefono: cli.telefono || '',
+    categoria: categoriaDe(cli),
+    zona: cli.zona || '',
+    condicion: $('#nv-condicion').value,
+    fechaPago: $('#nv-fpago').value || '',
+    referencia: $('#nv-referencia').value.trim(),
+    preciosModificados: $('#nv-permitir-precios').checked && nvItems.some(it => it.precioEditado),
+    items: nvItems.map(it => ({
+      productoId: it.productoId, codigo: it.codigo, descripcion: it.descripcion, um: it.um,
+      cantidad: Number(it.cantidad) || 0, precio: Number(it.precio) || 0,
+      importe: (Number(it.cantidad) || 0) * (Number(it.precio) || 0),
+      precioEditado: !!it.precioEditado,
+    })),
+    subtotal, descuento, total,
+    enLetras: montoEnLetras(total),
+    emitidaPor: quienSoy(),
+    creado: nvCreadoEn || Date.now(),
+  };
+}
+
+async function guardarNota(imprimir) {
+  if (!puede('ventas')) { toast('🔒 No tienes permiso para emitir notas de venta'); return; }
+  const nota = armarNota();
+  if (!nota) return;
+
+  // El número se recalcula al grabar: entre que se abrió el formulario y ahora,
+  // otro usuario pudo emitir una nota desde su tablet.
+  const enUso = notas.some(n => n.numero === nota.numero);
+  if (enUso) nota.numero = siguienteNumeroNota();
+
+  const btnG = $('#btn-nv-guardar'), btnI = $('#btn-nv-guardar-imprimir');
+  btnG.disabled = btnI.disabled = true;
+  try {
+    await guardarNotaEnStore(nota);
+    if (!modoNube) notas.push(nota);
+    // Cada producto vendido sale del almacén, con la nota como documento.
+    // Van a la vez: si fueran de una en una, con la nube cada línea esperaría
+    // su confirmación y una nota de ocho productos tardaría una eternidad.
+    await Promise.all(nota.items.map(it => registrarMovimiento({
+      productoId: it.productoId, fecha: nota.fecha, tipo: 'salida', cantidad: it.cantidad,
+      motivo: 'venta', documento: `Nota ${nota.numero}`, notaId: nota.id,
+    })));
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo guardar la nota. Revisa tu conexión.');
+    btnG.disabled = btnI.disabled = false;
+    return;
+  }
+  btnG.disabled = btnI.disabled = false;
+
+  toast(`✅ Nota de venta ${nota.numero} guardada`);
+  if (imprimir) imprimirNota(nota);
+  nvItems = [];
+  nvClienteId = '';
+  mostrarVistaVenta('lista');
+  renderVentas();
+  renderProductos();
+  renderKardex();
+}
+
+/* ══════════ Impresión: media hoja A4 (A5 apaisado) ══════════ */
+function imprimirNota(nota) {
+  const emp = settings;
+  const filas = (nota.items || []).map(it => `<tr>
+      <td class="c-cod">${escapeHtml(it.codigo || '')}</td>
+      <td class="c-cant">${it.cantidad}</td>
+      <td class="c-um">${escapeHtml(it.um || '')}</td>
+      <td class="c-desc">${escapeHtml(it.descripcion || '')}</td>
+      <td class="c-pu">${soles(it.precio)}</td>
+      <td class="c-imp">${soles(it.importe)}</td>
+    </tr>`).join('');
+  // Renglones en blanco para que el cuadro no quede corto en la hoja
+  const enBlanco = Math.max(0, 8 - (nota.items || []).length);
+  const vacias = Array.from({ length: enBlanco },
+    () => '<tr class="vacia"><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('');
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+  <title>Nota de venta ${escapeHtml(nota.numero)}</title>
+  <style>
+    @page { size: A5 landscape; margin: 6mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #000; margin: 0; }
+    .marco { border: 1px solid #000; }
+    /* Cabecera: datos del negocio a la izquierda, el número dentro de su recuadro */
+    .cab { display: flex; align-items: flex-start; gap: 6mm; padding: 0 0 2mm; }
+    .cab-emp { flex: 1; padding-top: 1mm; }
+    .cab-emp .nom { font-weight: bold; font-size: 10pt; }
+    .cab-emp .lin { font-size: 8pt; }
+    .cab-num { border: 1px solid #000; text-align: center; padding: 1.5mm 4mm; min-width: 46mm; }
+    .cab-num .tit { font-weight: bold; font-size: 10pt; letter-spacing: .3px; }
+    .cab-num .num { font-weight: bold; font-size: 10pt; }
+    /* Datos del cliente y del comprobante, en dos columnas dentro de un recuadro */
+    .datos { display: flex; border: 1px solid #000; }
+    .datos > div { padding: 1.5mm 2mm; }
+    .datos .izq { flex: 1.35; border-right: 1px solid #000; }
+    .datos .der { flex: 1; }
+    .fila { display: flex; gap: 2mm; line-height: 1.5; }
+    .fila .et { width: 22mm; flex: none; }
+    .der .fila .et { width: 21mm; }
+    /* Segunda etiqueta de la misma línea (F.Pago, Tlfno): pegada a su valor */
+    .der .fila .et2 { width: auto; }
+    .fila .va { font-weight: bold; }
+    .der .fila .va { flex: none; }
+    /* Cuadro de productos */
+    table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
+    th, td { border: 1px solid #000; padding: .8mm 1.5mm; font-size: 8.5pt; }
+    th { font-weight: normal; text-align: left; }
+    .c-cod { width: 16mm; } .c-cant { width: 12mm; text-align: right; }
+    .c-um { width: 12mm; } .c-pu { width: 18mm; text-align: right; }
+    .c-imp { width: 20mm; text-align: right; }
+    tr.vacia td { height: 4.6mm; }
+    /* Pie: importe en letras a la izquierda, totales a la derecha */
+    .pie { display: flex; gap: 3mm; align-items: flex-start; }
+    .letras { flex: 1; border: 1px solid #000; border-top: none; padding: 1mm 1.5mm; font-size: 8.5pt; }
+    .totales { width: 46mm; flex: none; }
+    .tot-fila { display: flex; border: 1px solid #000; border-top: none; }
+    .tot-fila .et { flex: 1; text-align: center; border-right: 1px solid #000; padding: .8mm; background: #eee; }
+    .tot-fila .va { width: 22mm; text-align: right; padding: .8mm 1.5mm; font-weight: bold; }
+    .nota-pie { margin-top: 2mm; font-size: 7.5pt; color: #333; display: flex; justify-content: space-between; }
+  </style></head><body>
+    <div class="cab">
+      <div class="cab-emp">
+        <div class="nom">${escapeHtml(emp.empresaNombre || '')}</div>
+        <div class="lin">${escapeHtml(emp.empresaDireccion || '')}</div>
+        <div class="lin">${emp.empresaRuc ? 'RUC: ' + escapeHtml(emp.empresaRuc) + ' &nbsp; ' : ''}Tlfno: ${escapeHtml(emp.empresaTelefono || '')}</div>
+      </div>
+      <div class="cab-num">
+        <div class="tit">NOTA DE VENTA</div>
+        <div class="num">${escapeHtml(nota.numero)}</div>
+      </div>
+    </div>
+
+    <div class="datos">
+      <div class="izq">
+        <div class="fila"><span class="et">Señor(es):</span><span class="va">${escapeHtml(nota.clienteNombre || '')}</span></div>
+        <div class="fila"><span class="et">Dirección:</span><span class="va">${escapeHtml(nota.clienteDireccion || '')}</span></div>
+        <div class="fila"><span class="et">RUC:</span><span class="va">${escapeHtml(nota.clienteRuc || '')}</span></div>
+        <div class="fila"><span class="et">Código:</span><span class="va">${escapeHtml(nota.clienteCodigo || '')}</span></div>
+        <div class="fila"><span class="et">Zona:</span><span class="va">${escapeHtml(nota.zona || '')}</span></div>
+      </div>
+      <div class="der">
+        <div class="fila"><span class="et">F.Emisión:</span><span class="va">${formatoFecha(nota.fecha)}</span></div>
+        <div class="fila"><span class="et">Condición:</span><span class="va">${nota.condicion === 'credito' ? 'CRÉDITO' : 'CONTADO'}</span>
+          <span class="et et2">F.Pago:</span><span class="va">${nota.fechaPago ? formatoFecha(nota.fechaPago) : ''}</span></div>
+        <div class="fila"><span class="et">Ped:</span><span class="va">${escapeHtml(nota.referencia || '')}</span>
+          <span class="et et2">Tlfno:</span><span class="va">${escapeHtml(nota.clienteTelefono || '')}</span></div>
+        <div class="fila"><span class="et">Vendedor:</span><span class="va">${escapeHtml(String(nota.emitidaPor || '').toUpperCase())}</span></div>
+        <div class="fila"><span class="et">Hora:</span><span class="va">${escapeHtml(nota.hora || '')}</span></div>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th class="c-cod">Código</th><th class="c-cant">Cant.</th><th class="c-um">U.M.</th>
+        <th class="c-desc">Descripción</th><th class="c-pu">P.U.</th><th class="c-imp">Importe</th>
+      </tr></thead>
+      <tbody>${filas}${vacias}</tbody>
+    </table>
+
+    <div class="pie">
+      <div class="letras">Son: ${escapeHtml(nota.enLetras || '')}</div>
+      <div class="totales">
+        <div class="tot-fila"><span class="et">Total Dscto</span><span class="va">${soles(nota.descuento)}</span></div>
+        <div class="tot-fila"><span class="et">Total a Pagar</span><span class="va">${soles(nota.total)}</span></div>
+      </div>
+    </div>
+    <div class="nota-pie">
+      <span>Emitido por ${escapeHtml(nota.emitidaPor || '')} el ${formatoFecha(nota.fecha)} a las ${escapeHtml(nota.hora || '')}</span>
+      <span>Categoría de precio: ${escapeHtml(nota.categoria || '')}</span>
+    </div>
+    <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  w.document.write(html);
+  w.document.close();
 }
 
 /* Llena el selector de zona del formulario y las casillas de zonas/meses del filtro. */
@@ -5401,6 +6567,7 @@ function poblarSelectores() {
     `<label><input type="checkbox" class="fil-zona" value="${escapeHtml(z)}"> ${escapeHtml(z)}</label>`).join('');
   $('#filtro-meses').innerHTML = MESES.map((m, i) =>
     `<label><input type="checkbox" class="fil-mes" value="${i + 1}"> ${m}</label>`).join('');
+  llenarSelectoresProducto();
 }
 
 /* ====== Eventos ====== */
@@ -5664,6 +6831,159 @@ function inicializarEventos() {
   $('#btn-rotar-imagen').addEventListener('click', rotarImagenVisor);
   $('#btn-guardar-rotacion').addEventListener('click', guardarRotacionImagen);
 
+  // ────────── Productos ──────────
+  $('#btn-productos').addEventListener('click', abrirProductos);
+  $('#nav-productos').addEventListener('click', abrirProductos);
+  $('#btn-prod-nuevo').addEventListener('click', () => abrirFormProducto());
+  $('#btn-prod-cancelar').addEventListener('click', () => $('#modal-producto').close());
+  $('#prod-form').addEventListener('submit', guardarProductoForm);
+  $('#prod-buscar').addEventListener('input', renderProductos);
+  $('#prod-body').addEventListener('click', ev => {
+    const editar = ev.target.closest('[data-editar-producto]');
+    const mover = ev.target.closest('[data-mover-producto]');
+    const borrar = ev.target.closest('[data-borrar-producto]');
+    if (editar) abrirFormProducto(productoPorId(editar.dataset.editarProducto));
+    else if (mover) abrirFormKardex(mover.dataset.moverProducto);
+    else if (borrar) borrarProducto(borrar.dataset.borrarProducto);
+  });
+
+  // ────────── Kardex ──────────
+  $('#btn-kardex').addEventListener('click', abrirKardex);
+  $('#nav-kardex').addEventListener('click', abrirKardex);
+  $('#btn-kardex-nuevo').addEventListener('click', () => abrirFormKardex());
+  $('#btn-kardex-imprimir').addEventListener('click', imprimirKardex);
+  $('#btn-kdx-cancelar').addEventListener('click', () => $('#modal-kardex').close());
+  $('#kdx-form').addEventListener('submit', guardarKardexForm);
+  $('#kdx-producto').addEventListener('change', actualizarSaldoPrevio);
+  $('#kdx-tipo').addEventListener('change', () => {
+    const esAjuste = $('#kdx-tipo').value === 'ajuste';
+    $('#kdx-ayuda-ajuste').hidden = !esAjuste;
+    if (esAjuste) $('#kdx-motivo').value = 'inventario';
+  });
+  for (const [id, campo] of [['#kdx-fil-producto', 'producto'], ['#kdx-fil-tipo', 'tipo'],
+    ['#kdx-fil-desde', 'desde'], ['#kdx-fil-hasta', 'hasta']]) {
+    $(id).addEventListener('change', () => { kdxFiltros[campo] = $(id).value; renderKardex(); });
+  }
+  $('#btn-kdx-limpiar').addEventListener('click', () => {
+    kdxFiltros = { producto: '', tipo: '', desde: '', hasta: '' };
+    $('#kdx-fil-producto').value = ''; $('#kdx-fil-tipo').value = '';
+    $('#kdx-fil-desde').value = ''; $('#kdx-fil-hasta').value = '';
+    renderKardex();
+  });
+  $('#kdx-body').addEventListener('click', ev => {
+    const borrar = ev.target.closest('[data-borrar-kardex]');
+    if (borrar) borrarMovimiento(borrar.dataset.borrarKardex);
+  });
+
+  // ────────── Notas de venta ──────────
+  $('#btn-ventas').addEventListener('click', abrirVentas);
+  $('#nav-ventas').addEventListener('click', abrirVentas);
+  $('#btn-nv-nueva').addEventListener('click', () => abrirNuevaNota());
+  $('#nv-buscar').addEventListener('input', renderVentas);
+  $('#btn-nv-volver').addEventListener('click', () => { mostrarVistaVenta('lista'); renderVentas(); });
+  $('#btn-nv-cancelar').addEventListener('click', () => {
+    if (nvItems.length && !confirm('¿Descartar esta nota de venta?')) return;
+    nvItems = []; nvClienteId = '';
+    mostrarVistaVenta('lista'); renderVentas();
+  });
+  $('#nv-body').addEventListener('click', ev => {
+    const imprimir = ev.target.closest('[data-imprimir-nota]');
+    const copiar = ev.target.closest('[data-copiar-nota]');
+    if (imprimir) {
+      const n = notas.find(x => x.id === imprimir.dataset.imprimirNota);
+      if (n) imprimirNota(n);
+    } else if (copiar) {
+      const n = notas.find(x => x.id === copiar.dataset.copiarNota);
+      if (n) { abrirNuevaNota(n); toast('📋 Nota copiada: revisa cantidades y precios'); }
+    }
+  });
+
+  // Buscador de cliente de la nota
+  $('#nv-cliente-buscar').addEventListener('input', ev => {
+    $('#nv-cliente-id').value = '';
+    nvRenderSugerencias(ev.target.value);
+  });
+  $('#nv-cliente-buscar').addEventListener('keydown', ev => {
+    const items = Array.from($('#nv-cliente-sugerencias').querySelectorAll('[data-nv-cliente]'));
+    if (!items.length) return;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      nvComboIndice = (nvComboIndice + (ev.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items.forEach((b, i) => b.classList.toggle('activo', i === nvComboIndice));
+    } else if (ev.key === 'Enter' && nvComboIndice >= 0) {
+      ev.preventDefault();
+      nvSeleccionarCliente(items[nvComboIndice].dataset.nvCliente);
+    } else if (ev.key === 'Escape') {
+      nvCerrarSugerencias();
+    }
+  });
+  $('#nv-cliente-sugerencias').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-nv-cliente]');
+    if (b) nvSeleccionarCliente(b.dataset.nvCliente);
+  });
+  document.addEventListener('click', ev => {
+    if (!ev.target.closest('.nv-cliente-buscar')) nvCerrarSugerencias();
+  });
+  $('#btn-nv-cliente-nuevo').addEventListener('click', abrirModalClienteForm);
+
+  // Productos de la nota
+  $('#btn-nv-agregar').addEventListener('click', agregarItemNota);
+  $('#nv-cantidad').addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); agregarItemNota(); }
+  });
+  $('#nv-permitir-precios').addEventListener('change', ev => {
+    if (!ev.target.checked) {
+      // Al volver a bloquear los precios se restauran los de la lista, para que
+      // no quede una nota con un precio suelto que nadie recuerda haber puesto
+      for (const it of nvItems) it.precioEditado = false;
+      reponerPreciosDeLista();
+    }
+    renderNotaItems();
+  });
+  $('#nv-items-body').addEventListener('input', ev => {
+    const cant = ev.target.closest('[data-nv-cant]');
+    const precio = ev.target.closest('[data-nv-precio]');
+    if (cant) {
+      const it = nvItems[Number(cant.dataset.nvCant)];
+      if (it) { it.cantidad = Number(cant.value) || 0; renderNotaItems(); }
+    } else if (precio) {
+      const it = nvItems[Number(precio.dataset.nvPrecio)];
+      if (!it) return;
+      const nuevo = Number(precio.value) || 0;
+      const p = productoPorId(it.productoId);
+      it.precio = nuevo;
+      it.precioEditado = !!p && nuevo !== precioDe(p, categoriaActual());
+      // Se recalcula solo el total: redibujar entero quitaría el foco del campo
+      recalcularTotalesNota();
+      const fila = precio.closest('tr');
+      if (!fila) return;
+      fila.querySelector('.nv-importe').textContent = soles((Number(it.cantidad) || 0) * nuevo);
+      // El aviso de "precio modificado a mano" también se pone aquí, por lo mismo
+      const desc = fila.cells[3];
+      let aviso = desc.querySelector('.nv-precio-tocado');
+      if (it.precioEditado && !aviso) {
+        aviso = document.createElement('small');
+        aviso.className = 'nv-precio-tocado';
+        aviso.textContent = 'precio modificado a mano';
+        desc.appendChild(aviso);
+      } else if (!it.precioEditado && aviso) {
+        aviso.remove();
+      }
+    }
+  });
+  $('#nv-items-body').addEventListener('click', ev => {
+    const quitar = ev.target.closest('[data-nv-quitar]');
+    if (quitar) { nvItems.splice(Number(quitar.dataset.nvQuitar), 1); renderNotaItems(); }
+  });
+  $('#nv-descuento').addEventListener('input', recalcularTotalesNota);
+  $('#nv-condicion').addEventListener('change', () => {
+    // A crédito, la fecha de pago se propone según los días configurados
+    const dias = $('#nv-condicion').value === 'credito' ? Number(settings.dias) || 30 : 0;
+    $('#nv-fpago').value = sumarDias($('#nv-fecha').value || hoyISO(), dias);
+  });
+  $('#btn-nv-guardar').addEventListener('click', () => guardarNota(false));
+  $('#btn-nv-guardar-imprimir').addEventListener('click', () => guardarNota(true));
+
   // Hoja de cobranza
   $('#btn-cobranza').addEventListener('click', abrirCobranza);
   $('#cob-fecha').addEventListener('change', renderCobranza);
@@ -5829,8 +7149,14 @@ function inicializarEventos() {
     $('#settings-dashboard').hidden = !esAdmin();
     $('#s-dashboard-empleados').checked = !!settings.dashboardEmpleados;
     // Los ajustes del negocio los define el administrador para todos
+    $('#s-emp-nombre').value = settings.empresaNombre || '';
+    $('#s-emp-direccion').value = settings.empresaDireccion || '';
+    $('#s-emp-ruc').value = settings.empresaRuc || '';
+    $('#s-emp-telefono').value = settings.empresaTelefono || '';
     const soloAdmin = modoNube && !esAdmin();
-    ['s-dias', 's-moneda', 's-atajo1', 's-atajo2'].forEach(id => { $('#' + id).disabled = soloAdmin; });
+    ['s-dias', 's-moneda', 's-atajo1', 's-atajo2',
+      's-emp-nombre', 's-emp-direccion', 's-emp-ruc', 's-emp-telefono',
+    ].forEach(id => { $('#' + id).disabled = soloAdmin; });
     $('#settings-nota-admin').hidden = !soloAdmin;
     mostrarSeccion('settings');
   });
@@ -5851,6 +7177,11 @@ function inicializarEventos() {
     settings.avisos = $('#s-avisos').checked;
     settings.atajo1 = Math.min(365, Math.max(1, Number($('#s-atajo1').value) || 15));
     settings.atajo2 = Math.min(365, Math.max(1, Number($('#s-atajo2').value) || 45));
+    // Cabecera de la nota de venta impresa
+    settings.empresaNombre = $('#s-emp-nombre').value.trim();
+    settings.empresaDireccion = $('#s-emp-direccion').value.trim();
+    settings.empresaRuc = $('#s-emp-ruc').value.trim();
+    settings.empresaTelefono = $('#s-emp-telefono').value.trim();
     // Apertura automática de la hoja de cobranza (solo el admin la puede tocar)
     if (esAdmin()) {
       settings.hojaAutoActiva = $('#s-hoja-auto').checked;
@@ -5999,7 +7330,11 @@ async function iniciarLocal() {
     despachos = await DB.getAllDespachos();
     repartidores = await DB.getAllRepartidores();
     anulados = await DB.getAllAnulados();
+    productos = await DB.getAllProductos();
+    kardex = await DB.getAllKardex();
+    notas = await DB.getAllNotas();
     ordenarClientes();
+    ordenarProductos();
   } catch (e) {
     toast('❌ No se pudo abrir la base de datos local');
     creditos = [];
@@ -6007,10 +7342,14 @@ async function iniciarLocal() {
     despachos = [];
     repartidores = [];
     anulados = [];
+    productos = [];
+    kardex = [];
+    notas = [];
   }
   cargarSeguridad();
   llenarSelectClientes();
   renderClientes();
+  llenarSelectoresProducto();
   await cargarMiniaturas();
   render();
   avisoAlAbrir();
