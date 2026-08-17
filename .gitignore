@@ -20,3 +20,8 @@ scratchpad/
 *service-account*.json
 .env
 .env.*
+
+# Registros que dejan los emuladores al probar en el equipo
+firebase-debug.log
+firestore-debug.log
+*-debug.log
