@@ -2582,3 +2582,65 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   .nv-cifras { width: 100%; }
   .sec-buscar { width: 100%; }
 }
+
+/* ══════════ Ventanas del tamaño de una pantalla de computadora ══════════
+   Las ventanas nacieron pensadas para el celular (480px de ancho). En una
+   pantalla grande eso deja una tarjeta diminuta en medio de la nada y obliga
+   a bajar por campos que cabrían de sobra al lado. A partir de 1000px de
+   ancho se ensanchan y los campos se reparten en columnas. */
+@media (min-width: 1000px) {
+  .modal { width: min(760px, calc(100vw - 4rem)); padding: 1.8rem 2rem; }
+  .modal-mini { width: min(460px, calc(100vw - 4rem)); }
+  .modal-pin { width: min(400px, calc(100vw - 4rem)); }
+  .modal h3 { font-size: 1.25rem; }
+  .modal .input { padding: 0.6rem 0.75rem; }
+  /* Formularios de producto y de cliente: más anchos todavía */
+  .modal-producto { width: min(880px, calc(100vw - 4rem)); }
+  .modal-cliente-form { width: min(820px, calc(100vw - 4rem)); }
+  .modal-kardex { width: min(720px, calc(100vw - 4rem)); }
+  /* Los botones quedan abajo a la derecha, con aire */
+  .modal .modal-buttons { margin-top: 1.4rem; }
+}
+
+/* Tres columnas donde la ventana ya es ancha (presentación/stocks, precios) */
+@media (min-width: 800px) {
+  .field-row.prod-fila-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .field-row.prod-fila-nombre { grid-template-columns: 1fr 2.2fr; }
+}
+
+/* Etiqueta de precio: la letra dentro de su cuadro de color, y al lado el
+   nombre de la categoría. Antes el cuadro y la letra se separaban porque la
+   regla general de `.field > span` (display:block) le ganaba a la del cuadro. */
+.prod-precio > span { display: flex; align-items: center; gap: 0.45rem; }
+.prod-precio .cat-lbl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: none;
+  margin: 0;
+  font-style: normal;
+  font-size: 0.9rem;
+  font-weight: 800;
+  border-radius: 8px;
+}
+
+/* El kardex ya no se escribe a mano: aquí se explica de dónde sale cada fila */
+.kdx-explica {
+  background: var(--accent-light);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  font-size: 0.88rem;
+  color: var(--text);
+  margin: 0 0 1rem;
+}
+.kdx-explica-mini {
+  background: var(--bg-tint);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem;
+  font-size: 0.84rem;
+  color: var(--muted);
+  margin: 0 0 1rem;
+}

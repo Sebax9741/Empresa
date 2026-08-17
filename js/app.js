@@ -5599,14 +5599,14 @@ function ordenarProductos() {
 function productoPorId(id) { return productos.find(p => p.id === id) || null; }
 function productosActivos() { return productos.filter(p => p.activo !== false); }
 
-/* Códigos de 6 cifras como los de tu talonario: 001003, 001026… */
+/* Códigos de producto: PR-0001, PR-0002… */
 function siguienteCodigoProducto() {
   let mayor = 0;
   for (const p of productos) {
     const n = Number(String(p.codigo || '').replace(/\D/g, ''));
     if (Number.isFinite(n)) mayor = Math.max(mayor, n);
   }
-  return String(mayor + 1).padStart(6, '0');
+  return 'PR-' + String(mayor + 1).padStart(4, '0');
 }
 
 function codigoProductoRepetido(codigo, exceptoId) {
@@ -5704,8 +5704,8 @@ function renderProductos() {
       <td class="col-num">${soles(p.precioC)}</td>
       <td class="col-num ${bajo ? 'prod-stock-bajo' : ''}" title="${bajo ? `Stock mínimo: ${min}` : ''}">${stock}${bajo ? ' ⚠️' : ''}</td>
       <td class="col-acc">${permitido ? `
+        <button type="button" class="btn btn-secondary btn-small" data-mover-producto="${escapeHtml(p.id)}" title="Ingresó mercadería o corregir el stock">📥 Stock</button>
         <button type="button" class="btn btn-secondary btn-small" data-editar-producto="${escapeHtml(p.id)}" title="Editar">✏️</button>
-        <button type="button" class="btn btn-secondary btn-small" data-mover-producto="${escapeHtml(p.id)}" title="Entrada o salida de almacén">📒</button>
         <button type="button" class="btn btn-danger btn-small" data-borrar-producto="${escapeHtml(p.id)}" title="Borrar">🗑️</button>` : ''}</td>
     </tr>`;
   }).join('');
@@ -5818,7 +5818,6 @@ async function borrarProducto(id) {
 let kdxFiltros = { producto: '', tipo: '', desde: '', hasta: '' };
 
 function abrirKardex() {
-  $('#btn-kardex-nuevo').hidden = !puede('productos');
   llenarSelectoresProducto();
   renderKardex();
   mostrarSeccion('kardex');
@@ -5844,11 +5843,23 @@ function llenarSelectoresProducto() {
     venta.innerHTML = '<option value="">— Elige un producto —</option>' + productosActivos().map(opciones).join('');
     venta.value = antes;
   }
-  const motivos = $('#kdx-motivo');
-  if (motivos && !motivos.options.length) {
-    motivos.innerHTML = Object.entries(MOTIVOS_KARDEX)
-      .map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-  }
+  llenarMotivos($('#kdx-tipo') ? $('#kdx-tipo').value : 'entrada');
+}
+
+/* Los motivos que tienen sentido cambian según lo que pasó: no se le ofrece
+   "merma" a una entrada ni "compra a proveedor" a una salida. */
+const MOTIVOS_POR_TIPO = {
+  entrada: ['compra', 'devolucion_cliente', 'otro'],
+  salida: ['merma', 'traslado', 'otro'],
+  ajuste: ['inventario'],
+};
+function llenarMotivos(tipo) {
+  const sel = $('#kdx-motivo');
+  if (!sel) return;
+  const antes = sel.value;
+  const claves = MOTIVOS_POR_TIPO[tipo] || MOTIVOS_POR_TIPO.entrada;
+  sel.innerHTML = claves.map(k => `<option value="${k}">${MOTIVOS_KARDEX[k]}</option>`).join('');
+  if (claves.includes(antes)) sel.value = antes;
 }
 
 function movimientosFiltrados() {
@@ -5950,6 +5961,8 @@ function abrirFormKardex(productoId = '') {
   $('#kdx-tipo').value = 'entrada';
   $('#kdx-motivo').value = 'compra';
   $('#kdx-ayuda-ajuste').hidden = true;
+  const p = productoId ? productoPorId(productoId) : null;
+  $('#kdx-form-title').textContent = p ? `Stock de ${p.nombre}` : 'Stock del producto';
   actualizarSaldoPrevio();
   abrirSinTeclado($('#modal-kardex'));
 }
@@ -6850,15 +6863,14 @@ function inicializarEventos() {
   // ────────── Kardex ──────────
   $('#btn-kardex').addEventListener('click', abrirKardex);
   $('#nav-kardex').addEventListener('click', abrirKardex);
-  $('#btn-kardex-nuevo').addEventListener('click', () => abrirFormKardex());
   $('#btn-kardex-imprimir').addEventListener('click', imprimirKardex);
   $('#btn-kdx-cancelar').addEventListener('click', () => $('#modal-kardex').close());
   $('#kdx-form').addEventListener('submit', guardarKardexForm);
   $('#kdx-producto').addEventListener('change', actualizarSaldoPrevio);
   $('#kdx-tipo').addEventListener('change', () => {
-    const esAjuste = $('#kdx-tipo').value === 'ajuste';
-    $('#kdx-ayuda-ajuste').hidden = !esAjuste;
-    if (esAjuste) $('#kdx-motivo').value = 'inventario';
+    const tipo = $('#kdx-tipo').value;
+    $('#kdx-ayuda-ajuste').hidden = tipo !== 'ajuste';
+    llenarMotivos(tipo);
   });
   for (const [id, campo] of [['#kdx-fil-producto', 'producto'], ['#kdx-fil-tipo', 'tipo'],
     ['#kdx-fil-desde', 'desde'], ['#kdx-fil-hasta', 'hasta']]) {

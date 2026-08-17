@@ -1,4 +1,8 @@
 {
+  "//": "Sin esta seccion las reglas de firestore.rules nunca se publicaban: la base de datos seguia con las reglas viejas y rechazaba todo lo que fuera de una coleccion nueva (productos, kardex, notas).",
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "public": "www",
     "ignore": [

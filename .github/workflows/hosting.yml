@@ -32,3 +32,26 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: empresa-ab
           channelId: live
+
+      # Las reglas dicen quién puede leer y escribir cada cosa. Si no se
+      # publican, la base de datos se queda con las viejas y rechaza cualquier
+      # colección nueva, aunque la app ya sepa usarla.
+      # La cuenta de servicio que creó Firebase para publicar la web puede no
+      # tener permiso para tocar las reglas. Si falla, la web igual queda
+      # publicada y aquí abajo se explica cómo pegarlas a mano.
+      - name: Publicar las reglas de la base de datos
+        id: reglas
+        continue-on-error: true
+        run: |
+          printf '%s' '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/cuenta.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/cuenta.json"
+          npx --yes firebase-tools@13 deploy --only firestore:rules --project empresa-ab --non-interactive
+          rm -f "$RUNNER_TEMP/cuenta.json"
+
+      - name: Avisar si las reglas no se pudieron publicar
+        if: steps.reglas.outcome == 'failure'
+        run: |
+          echo "::warning::No se pudieron publicar las reglas de la base de datos."
+          echo "Publícalas a mano: consola de Firebase → Firestore Database → pestaña Reglas →"
+          echo "pega el contenido de firestore.rules y pulsa Publicar."
+          echo "Sin esto, Productos, Kardex y Notas de venta dan 'No se pudo guardar'."
