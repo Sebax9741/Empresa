@@ -13,6 +13,9 @@ android-keys/
 *.keystore
 *.jks
 
+# Capturas y guiones de prueba que se generan al revisar la app
+scratchpad/
+
 # Credenciales
 *service-account*.json
 .env
