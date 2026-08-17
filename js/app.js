@@ -930,6 +930,30 @@ const ESPERA_NUBE = 1500;   // ms que esperamos la confirmación del servidor
    ese tiempo se entra con el acceso guardado en el equipo (ver conLimite). */
 const ESPERA_ACCESO = 6000;
 
+/* Traduce el fallo de la nube a algo que se pueda leer y arreglar.
+   El más engañoso es 'permission-denied': no es el internet, son las reglas
+   de la base de datos, que hay que volver a publicar cada vez que la app
+   estrena una sección nueva. Decir "revisa tu conexión" ahí manda a buscar
+   el problema donde no está. */
+function motivoDeFallo(e) {
+  const codigo = String((e && (e.code || e.message)) || '');
+  if (/permission-denied|PERMISSION_DENIED|insufficient permissions/i.test(codigo)) {
+    return '🔒 La base de datos rechazó el cambio. No es tu internet: faltan publicar las reglas de Firestore (mira el README, "Si sale No se pudo guardar"). Avísale al administrador.';
+  }
+  if (/unauthenticated/i.test(codigo)) {
+    return '🔒 Tu sesión caducó. Cierra sesión y vuelve a entrar.';
+  }
+  if (/unavailable|deadline|network/i.test(codigo)) {
+    return '📴 Sin conexión con la nube ahora mismo. El cambio quedó guardado aquí y subirá solo.';
+  }
+  return '';
+}
+
+/* Mensaje para el usuario: el motivo exacto si se conoce, y si no el genérico */
+function avisoDeFallo(e, generico) {
+  return motivoDeFallo(e) || generico;
+}
+
 function escrituraNube(promesa, queEs) {
   let seguimosSinEsperar = false;
   const vigilada = promesa.then(() => null, e => e);
@@ -938,7 +962,9 @@ function escrituraNube(promesa, queEs) {
   vigilada.then(err => {
     if (!err) return;
     console.error(`No se pudo sincronizar ${queEs}:`, err);
-    if (seguimosSinEsperar) toast(`⚠️ Un cambio no se pudo subir a la nube (${queEs})`);
+    if (seguimosSinEsperar) {
+      toast(avisoDeFallo(err, `⚠️ Un cambio no se pudo subir a la nube (${queEs})`));
+    }
   });
 
   return new Promise((resolve, reject) => {
@@ -1866,7 +1892,7 @@ async function anularBoleta(boleta) {
     await guardarAnuladoEnStore(registro);
   } catch (e) {
     console.error(e);
-    toast('❌ No se pudo guardar la anulación. Revisa tu conexión.');
+    toast(avisoDeFallo(e, '❌ No se pudo guardar la anulación. Revisa tu conexión.'));
     return;
   }
   const i = anulados.findIndex(a => String(a.boleta) === String(boleta));
@@ -2985,7 +3011,7 @@ async function guardarClienteForm(ev) {
     await guardarClienteEnStore(cliente);
   } catch (e) {
     console.error(e);
-    toast('❌ No se pudo guardar el cliente. Revisa tu conexión.');
+    toast(avisoDeFallo(e, '❌ No se pudo guardar el cliente. Revisa tu conexión.'));
     return;
   }
 
@@ -3475,7 +3501,7 @@ async function registrarCobro() {
     await guardarEnStore(actualizado);
   } catch (e) {
     console.error(e);
-    toast('❌ No se pudo registrar el cobro. Revisa tu conexión.');
+    toast(avisoDeFallo(e, '❌ No se pudo registrar el cobro. Revisa tu conexión.'));
     boton.disabled = false;
     // La firma quedó guardada: se muestra el botón para reintentar sin volver
     // a firmar (con el monto/método ya bloqueados, no se pueden cambiar).
@@ -5099,7 +5125,7 @@ async function guardarDespachoForm(ev) {
     await guardarDespachoEnStore(despacho);
   } catch (e) {
     console.error(e);
-    toast('❌ No se pudo guardar el despacho. Revisa tu conexión.');
+    toast(avisoDeFallo(e, '❌ No se pudo guardar el despacho. Revisa tu conexión.'));
     return;
   }
   const idx = despachos.findIndex(d => d.id === id);
@@ -5765,7 +5791,7 @@ async function guardarProductoForm(ev) {
     await guardarProductoEnStore(producto);
   } catch (e) {
     console.error(e);
-    toast('❌ No se pudo guardar el producto. Revisa tu conexión.');
+    toast(avisoDeFallo(e, '❌ No se pudo guardar el producto. Revisa tu conexión.'));
     return;
   }
 
@@ -6006,7 +6032,7 @@ async function guardarKardexForm(ev) {
     });
   } catch (e) {
     console.error(e);
-    toast('❌ No se pudo registrar el movimiento. Revisa tu conexión.');
+    toast(avisoDeFallo(e, '❌ No se pudo registrar el movimiento. Revisa tu conexión.'));
     return;
   }
   $('#modal-kardex').close();
@@ -6435,7 +6461,7 @@ async function guardarNota(imprimir) {
     })));
   } catch (e) {
     console.error(e);
-    toast('❌ No se pudo guardar la nota. Revisa tu conexión.');
+    toast(avisoDeFallo(e, '❌ No se pudo guardar la nota. Revisa tu conexión.'));
     btnG.disabled = btnI.disabled = false;
     return;
   }

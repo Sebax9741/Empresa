@@ -58,11 +58,21 @@ Se usa **Firebase** de Google (el plan gratuito sobra para este uso).
 
 6. Ve a **⚙️ (arriba a la izquierda) → Configuración del proyecto** → baja hasta **"Tus apps"** → toca el ícono **`</>`** (Web) → ponle un nombre (ej: `creditos-web`) → **Registrar app**. Te mostrará un código con `firebaseConfig = { apiKey: "...", ... }`. **Copia esos valores.**
 
-### Si sale "No se pudo guardar. Revisa tu conexión"
+### Si sale "No se pudo guardar" o "La base de datos rechazó el cambio"
 
-Casi siempre no es la conexión: son las **reglas de la base de datos**, que dicen quién puede escribir en cada cosa. Cuando se agrega una sección nueva (Productos, Kardex, Notas de venta) hay que publicarlas otra vez, o Firestore rechaza todo lo que vaya a esas colecciones.
+No es la conexión: son las **reglas de la base de datos**, que dicen quién puede escribir en cada cosa. Cuando la app estrena una sección nueva (Productos, Kardex, Notas de venta) hay que publicarlas otra vez, o Firestore rechaza todo lo que vaya a esas colecciones.
 
-Se publican solas al subir cambios, pero si el aviso sigue apareciendo, hazlo a mano: **consola de Firebase → Firestore Database → pestaña "Reglas" → pega el contenido del archivo `firestore.rules` de este repositorio → Publicar**. Tarda unos segundos en surtir efecto.
+**Arreglo rápido (2 minutos, vale enseguida):**
+
+1. Entra a la [consola de Firebase](https://console.firebase.google.com) → tu proyecto → **Firestore Database**
+2. Pestaña **"Reglas"** (arriba, junto a "Datos")
+3. **Borra todo** lo que hay en el recuadro
+4. Abre el archivo [`firestore.rules`](firestore.rules) de este repositorio, **copia todo su contenido** y pégalo ahí
+5. Botón **"Publicar"**
+
+Tarda unos segundos en surtir efecto. Después recarga la app.
+
+**Arreglo definitivo (para que se publiquen solas):** la cuenta con la que GitHub publica la web no tiene permiso para tocar las reglas, por eso hay que hacerlo a mano. Para dárselo una sola vez: [Google Cloud → IAM](https://console.cloud.google.com/iam-admin/iam) → elige el proyecto → busca la cuenta que empieza por `github-action-` → ✏️ Editar → **Agregar otro rol** → busca **"Firebase Rules Admin"** → Guardar. Desde ahí, cada vez que suba cambios las reglas se publican solas.
 
 ## PASO 2 — Pegar la configuración en la app
 

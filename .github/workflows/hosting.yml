@@ -51,7 +51,14 @@ jobs:
       - name: Avisar si las reglas no se pudieron publicar
         if: steps.reglas.outcome == 'failure'
         run: |
-          echo "::warning::No se pudieron publicar las reglas de la base de datos."
-          echo "Publícalas a mano: consola de Firebase → Firestore Database → pestaña Reglas →"
-          echo "pega el contenido de firestore.rules y pulsa Publicar."
-          echo "Sin esto, Productos, Kardex y Notas de venta dan 'No se pudo guardar'."
+          echo "::error::LAS REGLAS DE LA BASE DE DATOS NO SE PUBLICARON."
+          echo "Sin ellas, Productos, Kardex y Notas de venta dan 'No se pudo guardar'."
+          echo ""
+          echo "ARREGLO RÁPIDO (vale ya):"
+          echo "  consola de Firebase -> Firestore Database -> pestaña 'Reglas'"
+          echo "  -> pega el contenido de firestore.rules -> Publicar"
+          echo ""
+          echo "ARREGLO DEFINITIVO (para que se publiquen solas de aquí en adelante):"
+          echo "  console.cloud.google.com/iam-admin/iam -> proyecto empresa-ab"
+          echo "  -> busca la cuenta github-action-...@empresa-ab.iam.gserviceaccount.com"
+          echo "  -> Editar -> Agregar otro rol -> 'Firebase Rules Admin' -> Guardar"
