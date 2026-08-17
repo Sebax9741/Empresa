@@ -1547,6 +1547,7 @@ function aplicarPermisos() {
   $('#btn-despachos').hidden = !puede('despachos');
   $('#btn-ventas').hidden = !puede('ventas');
   $('#btn-productos').hidden = !puede('productos');
+  $('#btn-ingresos').hidden = !puede('productos');
   $('#btn-kardex').hidden = !puede('productos');
   $('#btn-usuarios').hidden = !esAdmin();
   $('#btn-cliente-nuevo').hidden = !puede('clientes');
@@ -1566,6 +1567,7 @@ function sincronizarNavLateral() {
     'nav-dashboard': puedeVerDashboard(),
     'nav-ventas': puede('ventas'),
     'nav-productos': puede('productos'),
+    'nav-ingresos': puede('productos'),
     'nav-kardex': puede('productos'),
     'nav-despachos': puede('despachos'),
     'nav-clientes': true,
@@ -1579,7 +1581,7 @@ function sincronizarNavLateral() {
 }
 
 /* ====== Router de apartados (cada uno es una sección de página, no un modal) ====== */
-const SECCIONES = ['dashboard', 'creditos', 'ventas', 'productos', 'kardex', 'despachos', 'clientes', 'cobranza', 'usuarios', 'settings'];
+const SECCIONES = ['dashboard', 'creditos', 'ventas', 'productos', 'ingresos', 'kardex', 'despachos', 'clientes', 'cobranza', 'usuarios', 'settings'];
 let seccionActual = 'dashboard';
 
 function mostrarSeccion(nombre) {
@@ -1608,11 +1610,11 @@ function mostrarSeccion(nombre) {
   const navId = nombre === 'creditos' ? 'nav-inicio' : 'nav-' + nombre;
   if (nombre === 'dashboard' && btnNew) btnNew.hidden = true;
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('activo', b.id === navId));
-  const btnId = { dashboard: 'btn-dashboard', creditos: 'btn-creditos', ventas: 'btn-ventas', productos: 'btn-productos', kardex: 'btn-kardex', despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
+  const btnId = { dashboard: 'btn-dashboard', creditos: 'btn-creditos', ventas: 'btn-ventas', productos: 'btn-productos', ingresos: 'btn-ingresos', kardex: 'btn-kardex', despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
   document.querySelectorAll('.header-actions .btn-icon').forEach(b => b.classList.toggle('activo', b.id === btnId));
   window.scrollTo(0, 0);
   // Las tablas solo se pueden medir cuando su sección ya está visible
-  if (['creditos', 'cobranza', 'productos', 'kardex', 'ventas'].includes(nombre)) {
+  if (['creditos', 'cobranza', 'productos', 'ingresos', 'kardex', 'ventas'].includes(nombre)) {
     requestAnimationFrame(ajustarTablasFijas);
   }
 }
@@ -2056,6 +2058,7 @@ function ajustarTablasFijas() {
   ajustarCorrimiento('.table-wrap');      // Créditos
   ajustarCorrimiento('.cob-tabla-wrap');  // Hoja de cobranza
   ajustarCorrimiento('.prod-tabla-wrap'); // Productos
+  ajustarCorrimiento('.ing-tabla-wrap');  // Ingreso de productos
   ajustarCorrimiento('.kdx-tabla-wrap');  // Kardex
   ajustarCorrimiento('.nv-tabla-wrap');   // Notas de venta
 }
@@ -5730,7 +5733,7 @@ function renderProductos() {
       <td class="col-num">${soles(p.precioC)}</td>
       <td class="col-num ${bajo ? 'prod-stock-bajo' : ''}" title="${bajo ? `Stock mínimo: ${min}` : ''}">${stock}${bajo ? ' ⚠️' : ''}</td>
       <td class="col-acc">${permitido ? `
-        <button type="button" class="btn btn-secondary btn-small" data-mover-producto="${escapeHtml(p.id)}" title="Ingresó mercadería o corregir el stock">📥 Stock</button>
+        <button type="button" class="btn btn-secondary btn-small" data-ingreso-producto="${escapeHtml(p.id)}" title="Registrar ingreso de este producto">📥</button>
         <button type="button" class="btn btn-secondary btn-small" data-editar-producto="${escapeHtml(p.id)}" title="Editar">✏️</button>
         <button type="button" class="btn btn-danger btn-small" data-borrar-producto="${escapeHtml(p.id)}" title="Borrar">🗑️</button>` : ''}</td>
     </tr>`;
@@ -5749,10 +5752,9 @@ function abrirFormProducto(producto = null) {
   $('#prod-precio-b').value = producto ? (producto.precioB ?? '') : '';
   $('#prod-precio-c').value = producto ? (producto.precioC ?? '') : '';
   $('#prod-activo').checked = producto ? producto.activo !== false : true;
-  // El stock solo se pone al crear: después se mueve por el kardex, para que
-  // nunca haya un stock que nadie pueda explicar.
-  $('#prod-stock-inicial').value = 0;
-  $('#prod-stock-inicial-box').hidden = !!producto;
+  // El stock nunca se pone aquí: nace en cero y se carga desde
+  // 📥 Ingreso de productos, para que nunca haya un stock que nadie pueda explicar.
+  $('#prod-ayuda-stock').hidden = !!producto;
   $('#prod-form-title').textContent = producto ? `Editar producto — ${producto.nombre}` : 'Nuevo producto';
   abrirSinTeclado($('#modal-producto'));
 }
@@ -5799,19 +5801,12 @@ async function guardarProductoForm(ev) {
   if (i >= 0) productos[i] = producto; else productos.push(producto);
   ordenarProductos();
 
-  // Stock de apertura: entra al kardex como cualquier otro movimiento
-  const inicial = Number($('#prod-stock-inicial').value) || 0;
-  if (!anterior && inicial > 0) {
-    await registrarMovimiento({
-      productoId: producto.id, fecha: hoyISO(), tipo: 'entrada', cantidad: inicial,
-      motivo: 'inventario', documento: '', nota: 'Stock inicial al crear el producto',
-    });
-  }
-
   $('#modal-producto').close();
   renderProductos();
   llenarSelectoresProducto();
-  toast(anterior ? '✅ Producto actualizado' : `✅ Producto "${nombre}" creado`);
+  toast(anterior
+    ? '✅ Producto actualizado'
+    : `✅ Producto "${nombre}" creado. Ahora ve a 📥 Ingreso de productos para cargarle stock.`);
 }
 
 async function borrarProducto(id) {
@@ -5857,7 +5852,7 @@ function llenarSelectoresProducto() {
     filtro.innerHTML = '<option value="">Todos los productos</option>' + productos.map(opciones).join('');
     filtro.value = antes;
   }
-  const form = $('#kdx-producto');
+  const form = $('#ing-producto');
   if (form) {
     const antes = form.value;
     form.innerHTML = '<option value="">— Elige un producto —</option>' + productos.map(opciones).join('');
@@ -5869,7 +5864,7 @@ function llenarSelectoresProducto() {
     venta.innerHTML = '<option value="">— Elige un producto —</option>' + productosActivos().map(opciones).join('');
     venta.value = antes;
   }
-  llenarMotivos($('#kdx-tipo') ? $('#kdx-tipo').value : 'entrada');
+  llenarMotivos($('#ing-tipo') ? $('#ing-tipo').value : 'entrada');
 }
 
 /* Los motivos que tienen sentido cambian según lo que pasó: no se le ofrece
@@ -5880,7 +5875,7 @@ const MOTIVOS_POR_TIPO = {
   ajuste: ['inventario'],
 };
 function llenarMotivos(tipo) {
-  const sel = $('#kdx-motivo');
+  const sel = $('#ing-motivo');
   if (!sel) return;
   const antes = sel.value;
   const claves = MOTIVOS_POR_TIPO[tipo] || MOTIVOS_POR_TIPO.entrada;
@@ -5977,45 +5972,65 @@ async function registrarMovimiento({ productoId, fecha, tipo, cantidad, motivo, 
   return mov;
 }
 
-function abrirFormKardex(productoId = '') {
-  if (!puede('productos')) { toast('🔒 No tienes permiso para mover el almacén'); return; }
-  if (!productos.length) { toast('⚠️ Primero crea al menos un producto'); return; }
+/* ══════════════════════ Ingreso de productos ══════════════════════
+   Sección aparte, no un modal: es donde entra la mercadería nueva y donde se
+   cuadra el conteo físico. El producto en sí (🛒 Productos) es solo catálogo
+   y precios; el stock siempre nace en cero y se carga desde aquí, para que
+   nunca haya una cifra de almacén que nadie pueda explicar de dónde salió. */
+function abrirIngresos(productoId = '') {
   llenarSelectoresProducto();
-  $('#kdx-form').reset();
-  $('#kdx-fecha').value = hoyISO();
-  $('#kdx-producto').value = productoId || '';
-  $('#kdx-tipo').value = 'entrada';
-  $('#kdx-motivo').value = 'compra';
-  $('#kdx-ayuda-ajuste').hidden = true;
-  const p = productoId ? productoPorId(productoId) : null;
-  $('#kdx-form-title').textContent = p ? `Stock de ${p.nombre}` : 'Stock del producto';
-  actualizarSaldoPrevio();
-  abrirSinTeclado($('#modal-kardex'));
+  resetIngresoForm(productoId);
+  renderIngresos();
+  mostrarSeccion('ingresos');
 }
 
-function actualizarSaldoPrevio() {
-  const id = $('#kdx-producto').value;
-  const caja = $('#kdx-saldo-previo');
-  if (!id) { caja.textContent = ''; return; }
+function resetIngresoForm(productoId = '') {
+  $('#ing-form').reset();
+  $('#ing-fecha').value = hoyISO();
+  $('#ing-producto').value = productoId || '';
+  $('#ing-tipo').value = 'entrada';
+  llenarMotivos('entrada');
+  $('#ing-motivo').value = 'compra';
+  $('#ing-ayuda-ajuste').hidden = true;
+  actualizarPreviewIngreso();
+}
+
+/* Antes de guardar nada, se ve cuánto hay ahora y cuánto va a quedar: es lo
+   primero que pidió el dueño para esta sección. */
+function actualizarPreviewIngreso() {
+  const id = $('#ing-producto').value;
+  const caja = $('#ing-preview');
+  if (!id) { caja.hidden = true; return; }
   const p = productoPorId(id);
-  caja.innerHTML = `📦 Stock actual de <strong>${escapeHtml(p ? p.nombre : '')}</strong>: <strong>${stockDe(id)}</strong>`;
+  const stockActual = stockDe(id);
+  const tipo = $('#ing-tipo').value;
+  const cantidad = Number($('#ing-cantidad').value) || 0;
+  // En un ajuste, la cantidad escrita ES el conteo final, no lo que se suma
+  const resultante = tipo === 'ajuste' ? cantidad
+    : tipo === 'salida' ? stockActual - cantidad
+    : stockActual + cantidad;
+  $('#ing-stock-actual').textContent = stockActual;
+  $('#ing-stock-resultante').textContent = resultante;
+  $('#ing-stock-resultante').closest('.ing-preview-resultado').classList.toggle('ing-preview-negativo', resultante < 0);
+  caja.hidden = false;
+  if (p) caja.dataset.producto = p.nombre;
 }
 
-async function guardarKardexForm(ev) {
+async function guardarIngresoForm(ev) {
   ev.preventDefault();
-  if (!puede('productos')) { toast('🔒 No tienes permiso para mover el almacén'); return; }
-  const productoId = $('#kdx-producto').value;
+  if (!puede('productos')) { toast('🔒 No tienes permiso para registrar ingresos'); return; }
+  const productoId = $('#ing-producto').value;
   if (!productoId) { toast('⚠️ Elige el producto'); return; }
-  const tipo = $('#kdx-tipo').value;
-  const cantidad = Number($('#kdx-cantidad').value);
+  const tipo = $('#ing-tipo').value;
+  const cantidad = Number($('#ing-cantidad').value);
   if (!Number.isFinite(cantidad) || (tipo !== 'ajuste' && cantidad <= 0)) {
     toast('⚠️ Escribe una cantidad válida'); return;
   }
   if (tipo === 'ajuste' && cantidad < 0) { toast('⚠️ El conteo físico no puede ser negativo'); return; }
 
+  const p = productoPorId(productoId);
   // No se deja dejar el stock en negativo: casi siempre es un error de tipeo
   if (tipo === 'salida' && cantidad > stockDe(productoId)) {
-    const p = productoPorId(productoId);
     if (!confirm(`Solo hay ${stockDe(productoId)} de "${p.nombre}" y estás sacando ${cantidad}.\n\n` +
       '¿Registrar igual y dejar el stock en negativo?')) return;
   }
@@ -6023,22 +6038,66 @@ async function guardarKardexForm(ev) {
   try {
     await registrarMovimiento({
       productoId,
-      fecha: $('#kdx-fecha').value || hoyISO(),
+      fecha: $('#ing-fecha').value || hoyISO(),
       tipo,
       cantidad,
-      motivo: $('#kdx-motivo').value,
-      documento: $('#kdx-documento').value.trim(),
-      nota: $('#kdx-nota').value.trim(),
+      motivo: $('#ing-motivo').value,
+      documento: $('#ing-documento').value.trim(),
+      nota: $('#ing-nota').value.trim(),
     });
   } catch (e) {
     console.error(e);
-    toast(avisoDeFallo(e, '❌ No se pudo registrar el movimiento. Revisa tu conexión.'));
+    toast(avisoDeFallo(e, '❌ No se pudo registrar el ingreso. Revisa tu conexión.'));
     return;
   }
-  $('#modal-kardex').close();
-  renderKardex();
+  toast(`✅ Ingreso registrado. Stock de ${p ? p.nombre : 'este producto'}: ${stockDe(productoId)}`);
+  resetIngresoForm();
+  renderIngresos();
   renderProductos();
-  toast('✅ Movimiento registrado');
+  renderKardex();
+}
+
+/* Historial de esta sección: solo lo que se anotó a mano aquí (entradas,
+   ajustes y salidas manuales), sin las salidas por venta, que ya se ven en el
+   Kardex completo y no son parte de "lo que registraste". */
+function movimientosIngresados() {
+  return kardexConSaldo()
+    .filter(m => m.motivo !== 'venta')
+    .reverse();
+}
+
+function renderIngresos() {
+  const cuerpo = $('#ing-body');
+  if (!cuerpo) return;
+  const lista = movimientosIngresados().slice(0, 100);
+
+  const hoy = hoyISO();
+  const deHoy = lista.filter(m => m.fecha === hoy);
+  $('#ing-chips').innerHTML = [
+    `<span class="chip">📄 ${lista.length} movimiento${lista.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip chip-entrada">📅 Hoy: ${deHoy.length}</span>`,
+  ].join('');
+
+  $('#ing-vacio').hidden = !!lista.length;
+  $('.ing-tabla-wrap').hidden = !lista.length;
+  if (!lista.length) { cuerpo.innerHTML = ''; return; }
+
+  cuerpo.innerHTML = lista.map(m => {
+    const p = productoPorId(m.productoId);
+    const c = cantidadConSigno(m);
+    const t = TIPOS_KARDEX[m.tipo] || TIPOS_KARDEX.entrada;
+    return `<tr>
+      <td class="kdx-fecha">${formatoFecha(m.fecha)}<small>${horaDeTimestamp(m.creado) || ''}</small></td>
+      <td class="col-cod"><code>${escapeHtml(p ? p.codigo : '—')}</code></td>
+      <td>${escapeHtml(p ? p.nombre : 'producto borrado')}</td>
+      <td><span class="kdx-tipo kdx-${m.tipo}">${t.icono} ${t.nombre}</span></td>
+      <td>${escapeHtml(MOTIVOS_KARDEX[m.motivo] || '—')}${m.nota ? `<small>${escapeHtml(m.nota)}</small>` : ''}</td>
+      <td>${escapeHtml(m.documento || '—')}</td>
+      <td class="col-num">${c > 0 ? '+' : ''}${c}</td>
+      <td class="col-num kdx-saldo">${m.saldo}</td>
+      <td>${escapeHtml(m.usuario || '—')}</td>
+    </tr>`;
+  }).join('');
 }
 
 async function borrarMovimiento(id) {
@@ -6879,25 +6938,30 @@ function inicializarEventos() {
   $('#prod-buscar').addEventListener('input', renderProductos);
   $('#prod-body').addEventListener('click', ev => {
     const editar = ev.target.closest('[data-editar-producto]');
-    const mover = ev.target.closest('[data-mover-producto]');
+    const ingreso = ev.target.closest('[data-ingreso-producto]');
     const borrar = ev.target.closest('[data-borrar-producto]');
     if (editar) abrirFormProducto(productoPorId(editar.dataset.editarProducto));
-    else if (mover) abrirFormKardex(mover.dataset.moverProducto);
+    else if (ingreso) abrirIngresos(ingreso.dataset.ingresoProducto);
     else if (borrar) borrarProducto(borrar.dataset.borrarProducto);
+  });
+
+  // ────────── Ingreso de productos ──────────
+  $('#btn-ingresos').addEventListener('click', () => abrirIngresos());
+  $('#nav-ingresos').addEventListener('click', () => abrirIngresos());
+  $('#ing-form').addEventListener('submit', guardarIngresoForm);
+  $('#ing-producto').addEventListener('change', actualizarPreviewIngreso);
+  $('#ing-cantidad').addEventListener('input', actualizarPreviewIngreso);
+  $('#ing-tipo').addEventListener('change', () => {
+    const tipo = $('#ing-tipo').value;
+    $('#ing-ayuda-ajuste').hidden = tipo !== 'ajuste';
+    llenarMotivos(tipo);
+    actualizarPreviewIngreso();
   });
 
   // ────────── Kardex ──────────
   $('#btn-kardex').addEventListener('click', abrirKardex);
   $('#nav-kardex').addEventListener('click', abrirKardex);
   $('#btn-kardex-imprimir').addEventListener('click', imprimirKardex);
-  $('#btn-kdx-cancelar').addEventListener('click', () => $('#modal-kardex').close());
-  $('#kdx-form').addEventListener('submit', guardarKardexForm);
-  $('#kdx-producto').addEventListener('change', actualizarSaldoPrevio);
-  $('#kdx-tipo').addEventListener('change', () => {
-    const tipo = $('#kdx-tipo').value;
-    $('#kdx-ayuda-ajuste').hidden = tipo !== 'ajuste';
-    llenarMotivos(tipo);
-  });
   for (const [id, campo] of [['#kdx-fil-producto', 'producto'], ['#kdx-fil-tipo', 'tipo'],
     ['#kdx-fil-desde', 'desde'], ['#kdx-fil-hasta', 'hasta']]) {
     $(id).addEventListener('change', () => { kdxFiltros[campo] = $(id).value; renderKardex(); });

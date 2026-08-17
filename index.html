@@ -49,6 +49,7 @@
     <button type="button" class="nav-item" id="nav-inicio"><span class="nav-ico">📋</span> Créditos</button>
     <button type="button" class="nav-item" id="nav-ventas"><span class="nav-ico">🧮</span> Notas de venta</button>
     <button type="button" class="nav-item" id="nav-productos"><span class="nav-ico">🛒</span> Productos</button>
+    <button type="button" class="nav-item" id="nav-ingresos"><span class="nav-ico">📥</span> Ingreso de productos</button>
     <button type="button" class="nav-item" id="nav-kardex"><span class="nav-ico">📒</span> Kardex</button>
     <button type="button" class="nav-item" id="nav-despachos"><span class="nav-ico">📦</span> Despachos</button>
     <button type="button" class="nav-item" id="nav-clientes"><span class="nav-ico">🧑‍🤝‍🧑</span> Clientes</button>
@@ -86,6 +87,7 @@
         <button id="btn-creditos" class="btn-icon" title="Créditos" aria-label="Créditos">📋</button>
         <button id="btn-ventas" class="btn-icon" title="Notas de venta" aria-label="Notas de venta">🧮</button>
         <button id="btn-productos" class="btn-icon" title="Productos" aria-label="Productos">🛒</button>
+        <button id="btn-ingresos" class="btn-icon" title="Ingreso de productos" aria-label="Ingreso de productos">📥</button>
         <button id="btn-kardex" class="btn-icon" title="Kardex" aria-label="Kardex">📒</button>
         <button id="btn-despachos" class="btn-icon" title="Despachos" aria-label="Despachos">📦</button>
         <button id="btn-clientes" class="btn-icon" title="Clientes" aria-label="Clientes">🧑‍🤝‍🧑</button>
@@ -962,7 +964,7 @@
         <label class="field"><span>Nombre del producto *</span>
           <input type="text" id="prod-nombre" class="input" required autocapitalize="characters" placeholder="Ej: HARINA ITALIANA X50KG"></label>
       </div>
-      <div class="field-row prod-fila-3">
+      <div class="field-row">
         <label class="field"><span>Presentación *</span>
           <select id="prod-presentacion" class="input" required>
             <option value="balde">Balde (BLD)</option>
@@ -971,11 +973,13 @@
             <option value="paquete">Paquete (PQT)</option>
             <option value="unidad" selected>Unidad (UND)</option>
           </select></label>
-        <label class="field" id="prod-stock-inicial-box"><span>Stock inicial <small>lo que hay hoy en el almacén</small></span>
-          <input type="number" id="prod-stock-inicial" class="input" min="0" step="1" value="0"></label>
         <label class="field"><span>Stock mínimo <small>avisa cuando baje de aquí</small></span>
           <input type="number" id="prod-stockmin" class="input" min="0" step="1" value="0"></label>
       </div>
+      <p class="kdx-explica-mini" id="prod-ayuda-stock" hidden>
+        El producto se crea con <strong>0 de stock</strong>. Para cargarle mercadería, ve a
+        <strong>📥 Ingreso de productos</strong> una vez guardado.
+      </p>
 
       <fieldset class="prod-precios">
         <legend>Precios por categoría de cliente</legend>
@@ -1015,9 +1019,9 @@
     </div>
 
     <p class="kdx-explica">
-      Esta hoja <strong>se llena sola</strong>: cada nota de venta descuenta lo vendido y cada producto nuevo
-      entra con su stock inicial. Si te llegó mercadería o quieres cuadrar con el conteo físico,
-      hazlo desde <strong>🛒 Productos</strong>, con el botón <strong>📥 Stock</strong> del producto.
+      Esta hoja <strong>se llena sola</strong>: cada nota de venta descuenta lo vendido y cada
+      ingreso que registras queda anotado aquí. Si te llegó mercadería o quieres cuadrar con el
+      conteo físico, hazlo desde <strong>📥 Ingreso de productos</strong>.
     </p>
 
     <div class="kdx-filtros">
@@ -1063,44 +1067,79 @@
     <p class="sec-vacio" id="kdx-vacio" hidden>Todavía no hay movimientos de almacén.</p>
   </section>
 
-  <!-- Modal: registrar movimiento de kardex -->
-  <dialog id="modal-kardex" class="modal modal-kardex" tabindex="-1">
-    <form id="kdx-form">
-      <h3 id="kdx-form-title">Stock del producto</h3>
+  <!-- ══════════ Sección: Ingreso de productos ══════════ -->
+  <section id="view-ingresos" class="vista" hidden>
+    <div class="sec-cab">
+      <h2>📥 Ingreso de productos</h2>
+    </div>
+
+    <div class="nv-bloque">
+      <h3 class="nv-bloque-tit">Registrar ingreso</h3>
       <p class="kdx-explica-mini">Las salidas por venta las anota la app sola al guardar cada nota de venta.
-        Aquí se registra lo que <strong>entra</strong> al almacén y las <strong>correcciones</strong>.</p>
-      <div class="field-row">
-        <label class="field"><span>Producto *</span>
-          <select id="kdx-producto" class="input" required></select></label>
-        <label class="field"><span>Fecha *</span>
-          <input type="date" id="kdx-fecha" class="input" required></label>
+        Aquí anotas lo que <strong>llega al almacén</strong> y las <strong>correcciones</strong> del conteo físico.</p>
+      <form id="ing-form">
+        <div class="field-row prod-fila-3">
+          <label class="field"><span>Producto *</span>
+            <select id="ing-producto" class="input" required></select></label>
+          <label class="field"><span>Fecha *</span>
+            <input type="date" id="ing-fecha" class="input" required></label>
+          <label class="field"><span>Cantidad *</span>
+            <input type="number" id="ing-cantidad" class="input" step="1" required placeholder="0"></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>¿Qué pasó? *</span>
+            <select id="ing-tipo" class="input" required>
+              <option value="entrada">📥 Entró mercadería (compra o devolución)</option>
+              <option value="ajuste">⚖️ Cuadrar con el conteo físico</option>
+              <option value="salida">📤 Salió sin vender (merma, traslado…)</option>
+            </select></label>
+          <label class="field"><span>Motivo *</span>
+            <select id="ing-motivo" class="input" required></select></label>
+        </div>
+        <p class="kdx-ayuda" id="ing-ayuda-ajuste" hidden>En un ajuste, escribe la cantidad <strong>real contada</strong> en el almacén: el sistema calcula solo la diferencia.</p>
+        <div class="field-row">
+          <label class="field"><span>Proveedor / Documento <small>opcional</small></span>
+            <input type="text" id="ing-documento" class="input" placeholder="Ej: Distribuidora ABC — Factura F001-1234"></label>
+          <label class="field"><span>Nota <small>opcional</small></span>
+            <input type="text" id="ing-nota" class="input" placeholder="Ej: llegó con 2 sacos rotos"></label>
+        </div>
+
+        <div class="ing-preview" id="ing-preview" hidden>
+          <div class="ing-preview-dato"><span>Stock actual</span><strong id="ing-stock-actual">0</strong></div>
+          <div class="ing-preview-flecha">→</div>
+          <div class="ing-preview-dato ing-preview-resultado"><span>Quedará en</span><strong id="ing-stock-resultante">0</strong></div>
+        </div>
+
+        <div class="modal-buttons">
+          <button type="submit" class="btn btn-primary">💾 Registrar ingreso</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="nv-bloque">
+      <h3 class="nv-bloque-tit">Últimos ingresos y correcciones</h3>
+      <div class="sec-chips" id="ing-chips"></div>
+      <div class="table-wrap ing-tabla-wrap">
+        <table class="prod-tabla" id="ing-tabla">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th class="col-cod">Código</th>
+              <th>Producto</th>
+              <th>Movimiento</th>
+              <th>Motivo</th>
+              <th>Proveedor / Documento</th>
+              <th class="col-num">Cantidad</th>
+              <th class="col-num">Stock resultante</th>
+              <th>Registró</th>
+            </tr>
+          </thead>
+          <tbody id="ing-body"></tbody>
+        </table>
       </div>
-      <div class="field-row">
-        <label class="field"><span>¿Qué pasó? *</span>
-          <select id="kdx-tipo" class="input" required>
-            <option value="entrada">📥 Entró mercadería (suma al stock)</option>
-            <option value="ajuste">⚖️ Cuadrar con el conteo físico</option>
-            <option value="salida">📤 Salió sin vender (merma, traslado…)</option>
-          </select></label>
-        <label class="field"><span>Cantidad *</span>
-          <input type="number" id="kdx-cantidad" class="input" step="1" required placeholder="0"></label>
-      </div>
-      <p class="kdx-ayuda" id="kdx-ayuda-ajuste" hidden>En un ajuste, escribe la cantidad <strong>real contada</strong> en el almacén: el sistema calcula solo la diferencia.</p>
-      <div class="field-row">
-        <label class="field"><span>Motivo *</span>
-          <select id="kdx-motivo" class="input" required></select></label>
-        <label class="field"><span>Documento <small>opcional</small></span>
-          <input type="text" id="kdx-documento" class="input" placeholder="Ej: Factura F001-1234"></label>
-      </div>
-      <label class="field"><span>Nota <small>opcional</small></span>
-        <input type="text" id="kdx-nota" class="input" placeholder="Ej: llegó con 2 sacos rotos"></label>
-      <p class="kdx-saldo-previo" id="kdx-saldo-previo"></p>
-      <div class="modal-buttons">
-        <button type="button" id="btn-kdx-cancelar" class="btn btn-secondary">Cancelar</button>
-        <button type="submit" class="btn btn-primary">💾 Guardar</button>
-      </div>
-    </form>
-  </dialog>
+      <p class="sec-vacio" id="ing-vacio" hidden>Todavía no se registró ningún ingreso.</p>
+    </div>
+  </section>
 
   <!-- ══════════ Sección: Notas de venta ══════════ -->
   <section id="view-ventas" class="vista" hidden>

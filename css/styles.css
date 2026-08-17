@@ -2597,7 +2597,6 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   /* Formularios de producto y de cliente: más anchos todavía */
   .modal-producto { width: min(880px, calc(100vw - 4rem)); }
   .modal-cliente-form { width: min(820px, calc(100vw - 4rem)); }
-  .modal-kardex { width: min(720px, calc(100vw - 4rem)); }
   /* Los botones quedan abajo a la derecha, con aire */
   .modal .modal-buttons { margin-top: 1.4rem; }
 }
@@ -2644,3 +2643,21 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   color: var(--muted);
   margin: 0 0 1rem;
 }
+
+/* Vista previa del ingreso: stock actual → stock resultante, bien visible
+   porque es lo que responde a "cuánto va a quedar" antes de guardar nada. */
+.ing-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4rem;
+  background: var(--bg-tint);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1.2rem;
+  margin: 0 0 1rem;
+}
+.ing-preview-dato { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.ing-preview-dato span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
+.ing-preview-dato strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.ing-preview-flecha { font-size: 1.3rem; color: var(--gray); }
+.ing-preview-resultado strong { color: var(--ok); }
