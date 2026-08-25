@@ -1568,6 +1568,32 @@ function aplicarPermisos() {
 }
 
 /* El panel lateral (escritorio) refleja los mismos permisos que la cabecera */
+/* ---- Contraer el panel lateral ----
+   La preferencia se guarda en el equipo: quien trabaja en una pantalla justa
+   lo deja contraído y no tiene que volver a plegarlo cada vez que abre. */
+const CLAVE_NAV_PLEGADA = 'creditos-nav-plegada';
+
+function aplicarPlegadoNav(plegada) {
+  document.body.classList.toggle('nav-plegada', plegada);
+  const btn = $('#btn-plegar-nav');
+  if (btn) {
+    btn.title = plegada ? 'Desplegar el menú' : 'Contraer el menú';
+    btn.setAttribute('aria-label', btn.title);
+  }
+  const menu = $('#btn-menu');
+  if (menu) menu.setAttribute('aria-expanded', String(!plegada));
+  // Las tablas se miden solas contra el ancho disponible, que acaba de cambiar
+  if (typeof ajustarTablasFijas === 'function') requestAnimationFrame(ajustarTablasFijas);
+}
+
+function alternarNav() {
+  const plegada = !document.body.classList.contains('nav-plegada');
+  localStorage.setItem(CLAVE_NAV_PLEGADA, plegada ? '1' : '0');
+  aplicarPlegadoNav(plegada);
+  // Al terminar la transición el ancho ya es el definitivo: se vuelve a medir
+  setTimeout(ajustarTablasFijas, 280);
+}
+
 function sincronizarNavLateral() {
   const items = {
     'nav-dashboard': puedeVerDashboard(),
@@ -1584,6 +1610,11 @@ function sincronizarNavLateral() {
     const el = document.getElementById(id);
     if (el) el.hidden = !visible;
   }
+  // Un grupo sin ningún destino visible dejaría su subtítulo colgando solo
+  // (le pasa al empleado que no gestiona almacén): se oculta entero.
+  document.querySelectorAll('.nav-grupo').forEach(grupo => {
+    grupo.hidden = !grupo.querySelector('.nav-item:not([hidden])');
+  });
 }
 
 /* ====== Router de apartados (cada uno es una sección de página, no un modal) ====== */
@@ -5943,8 +5974,8 @@ function renderKardex() {
       <td class="col-num kdx-salida">${c < 0 ? -c : ''}</td>
       <td class="col-num kdx-saldo">${m.saldo}</td>
       <td>${escapeHtml(m.usuario || '—')}</td>
-      <td class="col-acc">${permitido && m.motivo !== 'venta'
-        ? `<button type="button" class="btn btn-danger btn-small" data-borrar-kardex="${escapeHtml(m.id)}" title="Anular movimiento">🗑️</button>` : ''}</td>
+      <td class="col-acc">${mandaComoAdmin() && m.motivo !== 'venta'
+        ? `<button type="button" class="btn btn-danger btn-small" data-borrar-kardex="${escapeHtml(m.id)}" title="Anular movimiento (pide tu código)">🗑️</button>` : ''}</td>
     </tr>`;
   }).join('');
 }
@@ -6335,9 +6366,15 @@ function renderIngresos() {
           <span class="ing-grupo-meta">${formatoFecha(g.fecha)} · ${horaDeTimestamp(g.creado) || ''}
             · ${escapeHtml(g.usuario || '—')}</span>
         </div>
-        <span class="chip ${g.tipo === 'entrada' ? 'chip-entrada' : 'chip-salida'}">
-          ${esLote ? `${g.movimientos.length} productos · ` : ''}${unidades} unidad${unidades === 1 ? '' : 'es'}
-        </span>
+        <div class="ing-grupo-acciones">
+          <span class="chip ${g.tipo === 'entrada' ? 'chip-entrada' : 'chip-salida'}">
+            ${esLote ? `${g.movimientos.length} productos · ` : ''}${unidades} unidad${unidades === 1 ? '' : 'es'}
+          </span>
+          ${mandaComoAdmin()
+            ? `<button type="button" class="btn btn-danger btn-small" data-borrar-lote="${escapeHtml(g.clave)}"
+                 title="Anular este ingreso (pide tu código)">🗑️</button>`
+            : ''}
+        </div>
       </div>
       ${g.nota ? `<p class="ing-grupo-nota">📝 ${escapeHtml(g.nota)}</p>` : ''}
       <table class="ing-grupo-tabla">
@@ -6356,23 +6393,64 @@ function renderIngresos() {
   }).join('');
 }
 
+/* Anular un movimiento de almacén cambia el stock hacia atrás, así que es
+   cosa del administrador y se pide el mismo código de seguridad que para
+   borrar un crédito o una "a cuenta". */
 async function borrarMovimiento(id) {
-  if (!puede('productos')) return;
+  if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede anular movimientos'); return; }
   const m = kardex.find(x => x.id === id);
   if (!m) return;
   const p = productoPorId(m.productoId);
-  if (!confirm(`¿Anular este movimiento de "${p ? p.nombre : 'producto'}"?\n\n` +
-    'El stock se recalcula solo.')) return;
+  const nombre = p ? p.nombre : 'producto';
+  const c = cantidadConSigno(m);
+  if (!confirm(`¿Anular este movimiento de "${nombre}"?\n\n` +
+    `${c >= 0 ? 'Entrada' : 'Salida'} de ${Math.abs(c)} · ${formatoFecha(m.fecha)}\n` +
+    `El stock quedará en ${stockDe(m.productoId) - c}.`)) return;
+
+  const autorizado = await pedirPin(
+    `Vas a anular un movimiento de almacén de "${nombre}" (${c >= 0 ? '+' : ''}${c}).`);
+  if (!autorizado) { toast('🔒 Anulación cancelada'); return; }
+
   try {
     await eliminarKardexDeStore(id);
   } catch (e) {
-    toast('❌ No se pudo anular. Revisa tu conexión.');
+    toast(avisoDeFallo(e, '❌ No se pudo anular. Revisa tu conexión.'));
     return;
   }
   kardex = kardex.filter(x => x.id !== id);
   renderKardex();
   renderProductos();
+  renderIngresos();
   toast('🗑️ Movimiento anulado');
+}
+
+/* Anula de una vez todos los productos que entraron con la misma factura */
+async function borrarLoteIngreso(loteId) {
+  if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede anular ingresos'); return; }
+  const delLote = kardex.filter(m => (m.loteId || m.id) === loteId);
+  if (!delLote.length) return;
+  const unidades = delLote.reduce((s, m) => s + Math.abs(cantidadConSigno(m)), 0);
+  const doc = delLote[0].documento || 'este ingreso';
+
+  if (!confirm(`¿Anular ${doc}?\n\n` +
+    `Se van a deshacer ${delLote.length} movimiento(s), ${unidades} unidad(es).\n` +
+    'El stock de cada producto se recalcula solo.')) return;
+
+  const autorizado = await pedirPin(`Vas a anular ${doc}: ${delLote.length} producto(s), ${unidades} unidad(es).`);
+  if (!autorizado) { toast('🔒 Anulación cancelada'); return; }
+
+  try {
+    await Promise.all(delLote.map(m => eliminarKardexDeStore(m.id)));
+  } catch (e) {
+    toast(avisoDeFallo(e, '❌ No se pudo anular. Revisa tu conexión.'));
+    return;
+  }
+  const ids = new Set(delLote.map(m => m.id));
+  kardex = kardex.filter(m => !ids.has(m.id));
+  renderIngresos();
+  renderProductos();
+  renderKardex();
+  toast(`🗑️ Ingreso anulado (${delLote.length} producto(s))`);
 }
 
 function imprimirKardex() {
@@ -7240,6 +7318,10 @@ function inicializarEventos() {
     resetIngresoFactura();
   });
   $('#btn-ing-guardar').addEventListener('click', guardarIngresoFactura);
+  $('#ing-historial').addEventListener('click', ev => {
+    const borrar = ev.target.closest('[data-borrar-lote]');
+    if (borrar) borrarLoteIngreso(borrar.dataset.borrarLote);
+  });
 
   // Buscador y formulario del ajuste / salida
   $('#aj-buscar').addEventListener('input', ev => {
@@ -7553,6 +7635,11 @@ function inicializarEventos() {
   $('#nav-cobranza').addEventListener('click', () => { if (puede('cobranza')) abrirCobranza(); });
   $('#nav-usuarios').addEventListener('click', () => { if (esAdmin()) abrirUsuarios(); });
   $('#nav-settings').addEventListener('click', () => $('#btn-settings').click());
+
+  // Contraer / desplegar el panel lateral
+  aplicarPlegadoNav(localStorage.getItem(CLAVE_NAV_PLEGADA) === '1');
+  $('#btn-plegar-nav').addEventListener('click', alternarNav);
+  $('#btn-menu').addEventListener('click', alternarNav);
 
   // Configuración
   $('#btn-settings').addEventListener('click', () => {

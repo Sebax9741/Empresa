@@ -1931,36 +1931,52 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .combo-codigo { color: var(--primary-dark); font-size: 0.76rem; }
 
 /* ====== Panel lateral de navegación (escritorio) ====== */
+/* El ancho vive en una variable para que el contenido y el panel se muevan
+   juntos: al contraer, el panel se estrecha y el área de trabajo se ensancha
+   en la misma transición, sin saltos. */
+:root { --ancho-nav: 252px; --ancho-nav-min: 68px; }
 .nav-lateral { display: none; }
+.btn-menu { display: none; }
 
 @media (min-width: 1000px) {
-  body { padding-left: 246px; }
+  body {
+    padding-left: var(--ancho-nav);
+    transition: padding-left 0.25s var(--ease);
+  }
+  body.nav-plegada { --ancho-nav: var(--ancho-nav-min); }
+
   .nav-lateral {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
     position: fixed;
     top: 0; left: 0; bottom: 0;
-    width: 246px;
-    padding: 0 0.75rem 1.2rem;
+    width: var(--ancho-nav);
+    padding: 0 0.6rem 0.6rem;
     background: var(--side);
-    border-right: none;
     z-index: 20;
+    overflow-x: hidden;
     overflow-y: auto;
+    transition: width 0.25s var(--ease);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   }
+  .nav-lateral::-webkit-scrollbar { width: 6px; }
+  .nav-lateral::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
+
   /* Marca del negocio, arriba del todo */
   .nav-marca {
     font-size: 0.92rem;
     font-weight: 800;
     letter-spacing: -0.01em;
     line-height: 1.15;
-    padding: 1rem 0.55rem 0.85rem;
-    margin-bottom: 0.5rem;
+    padding: 1rem 0.5rem 0.85rem;
+    margin-bottom: 0.35rem;
     color: #fff;
     display: flex; align-items: center; gap: 0.6rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
   }
-  .nav-logo { width: 40px; height: 40px; flex-shrink: 0; }
+  .nav-logo { width: 38px; height: 38px; flex-shrink: 0; }
   .nav-marca span { display: block; min-width: 0; }
   .nav-marca small {
     display: block;
@@ -1970,45 +1986,153 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
     color: var(--side-text);
     letter-spacing: 0;
   }
+
+  /* Los destinos van agrupados por el trabajo que resuelven */
+  .nav-grupo { display: flex; flex-direction: column; gap: 0.12rem; margin-bottom: 0.5rem; }
   .nav-titulo {
-    font-size: 0.66rem;
-    font-weight: 700;
-    letter-spacing: 0.09em;
+    font-size: 0.63rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: #6b7c93;
-    padding: 0.55rem 0.6rem 0.35rem;
+    color: #64748b;
+    padding: 0.7rem 0.65rem 0.3rem;
+    white-space: nowrap;
   }
+
   .nav-item {
     display: flex;
     align-items: center;
-    gap: 0.7rem;
+    gap: 0.75rem;
     width: 100%;
     text-align: left;
     background: transparent;
     border: none;
-    border-radius: 10px;
-    padding: 0.68rem 0.7rem;
+    border-radius: 9px;
+    padding: 0.6rem 0.65rem;
     font-family: inherit;
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: var(--side-text);
     cursor: pointer;
     position: relative;
-    transition: background 0.18s var(--ease), color 0.18s var(--ease), transform 0.18s var(--ease);
+    white-space: nowrap;
+    transition: background 0.18s var(--ease), color 0.18s var(--ease);
   }
-  .nav-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; transform: translateX(2px); }
-  .nav-item .nav-ico { font-size: 1.1rem; line-height: 1; width: 1.35rem; text-align: center; }
-  /* Destino activo: relleno coral, como en el sistema de referencia */
+  .nav-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+
+  /* Iconos de trazo, del mismo grosor y sin color propio: heredan el del
+     texto, así el panel se lee como un sistema y no como un tablero de emojis. */
+  .nav-ico {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.85;
+  }
+  .nav-item.activo .nav-ico { opacity: 1; }
+  .nav-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Destino activo: relleno coral */
   .nav-item.activo,
   .nav-item.activo:hover {
     background: var(--side-activo);
     color: #fff;
     box-shadow: 0 6px 16px rgba(224, 113, 74, 0.35);
-    transform: none;
   }
+
+  /* Botón de contraer, al final del panel */
+  .nav-plegar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: auto;
+    padding: 0.6rem 0.65rem;
+    background: transparent;
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.18s var(--ease);
+  }
+  .nav-plegar:hover { color: #fff; }
+  .nav-plegar .nav-ico { transition: transform 0.25s var(--ease); }
+
+  /* ── Panel contraído: solo los iconos ── */
+  body.nav-plegada .nav-lateral { padding-left: 0.5rem; padding-right: 0.5rem; }
+  body.nav-plegada .nav-txt,
+  body.nav-plegada .nav-marca span,
+  body.nav-plegada .nav-titulo { display: none; }
+  body.nav-plegada .nav-marca { justify-content: center; padding-left: 0; padding-right: 0; }
+  body.nav-plegada .nav-item,
+  body.nav-plegada .nav-plegar { justify-content: center; padding-left: 0; padding-right: 0; }
+  body.nav-plegada .nav-plegar .nav-ico { transform: rotate(180deg); }
+  /* Sin los títulos, una línea separa un grupo del siguiente */
+  body.nav-plegada .nav-grupo + .nav-grupo {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 0.5rem;
+  }
+  /* Con el panel contraído el nombre aparece al pasar el ratón */
+  body.nav-plegada .nav-item::after {
+    content: attr(data-nombre);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--side-alt);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.35rem 0.7rem;
+    border-radius: 7px;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s var(--ease);
+    z-index: 30;
+  }
+  body.nav-plegada .nav-item:hover::after { opacity: 1; }
+
+  /* Botón ☰ de la cabecera */
+  .btn-menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex: none;
+    margin-right: 0.15rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .btn-menu:hover { background: var(--bg-tint); color: var(--text); border-color: var(--gray); }
+  .btn-menu svg {
+    width: 20px; height: 20px;
+    fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round;
+  }
+
   /* En escritorio, el panel lateral reemplaza a estos botones de la cabecera */
-  #btn-dashboard, #btn-creditos,
-  #btn-despachos, #btn-clientes, #btn-cobranza, #btn-usuarios, #btn-settings { display: none; }
+  #btn-dashboard, #btn-creditos, #btn-ventas, #btn-productos, #btn-ingresos,
+  #btn-kardex, #btn-despachos, #btn-clientes, #btn-cobranza, #btn-usuarios,
+  #btn-settings { display: none; }
+}
+
+/* Quien prefiere menos movimiento no ve la transición del panel */
+@media (prefers-reduced-motion: reduce) {
+  body, .nav-lateral, .nav-plegar .nav-ico { transition: none; }
 }
 
 /* ====== Despachos ====== */
