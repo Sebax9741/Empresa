@@ -564,40 +564,76 @@
 
   <!-- Modal: administración de usuarios (solo admin) -->
   <section id="view-usuarios" class="vista modal-usuarios" hidden>
-    <h2>👥 Usuarios y accesos</h2>
-
-    <form id="u-form-nuevo" class="u-nuevo">
-      <h3>Crear usuario</h3>
-      <div class="field-row">
-        <label class="field"><span>Usuario *</span>
-          <input type="text" id="u-usuario" class="input" required autocapitalize="none" placeholder="ej: juan"></label>
-        <label class="field"><span>Nombre</span>
-          <input type="text" id="u-nombre" class="input" placeholder="opcional"></label>
+    <div class="sec-cab">
+      <h2>👥 Usuarios y accesos</h2>
+      <div class="sec-cab-acciones">
+        <button type="button" id="btn-usuarios-cerrar" class="btn btn-secondary btn-small">◀ Volver a créditos</button>
       </div>
-      <label class="field"><span>Contraseña *</span>
-        <input type="text" id="u-pass" class="input" required minlength="6" placeholder="mínimo 6 caracteres"></label>
-      <label class="field field-check"><input type="checkbox" id="u-admin">
-        <span>Administrador <small>(todos los permisos, puede gestionar usuarios)</small></span></label>
-      <div id="u-permisos-detalle" class="u-permisos-detalle">
-        <span class="field-label">Permisos</span>
-        <label class="u-perm"><input type="checkbox" id="u-perm-crear" checked> Crear créditos</label>
-        <label class="u-perm"><input type="checkbox" id="u-perm-editar" checked> Editar créditos</label>
-        <label class="u-perm"><input type="checkbox" id="u-perm-pagos" checked> Registrar pagos</label>
-        <label class="u-perm"><input type="checkbox" id="u-perm-borrar"> Borrar créditos</label>
-        <label class="u-perm"><input type="checkbox" id="u-perm-cobranza" checked> Ver/exportar cobranza</label>
-        <label class="u-perm"><input type="checkbox" id="u-perm-clientes" checked> Registrar/editar clientes</label>
-        <label class="u-perm"><input type="checkbox" id="u-perm-hojaCrear"> Crear la hoja de cobranza del día</label>
-        <label class="u-perm"><input type="checkbox" id="u-perm-vencimiento"> Cambiar la fecha de vencimiento</label>
-        <label class="u-perm"><input type="checkbox" id="u-perm-despachos"> Armar despachos de reparto</label>
+    </div>
+
+    <!-- En computadora va a dos columnas: el alta a la izquierda, siempre a la
+         vista, y el equipo a la derecha, que es lo que más crece. -->
+    <div class="usr-layout">
+      <form id="u-form-nuevo" class="doc usr-alta">
+        <header class="doc-cab">
+          <div class="doc-cab-id">
+            <span class="doc-cab-etq">Alta de acceso</span>
+            <strong>Nuevo usuario</strong>
+          </div>
+        </header>
+
+        <section class="doc-parte">
+          <h3 class="doc-parte-tit"><span class="doc-paso">1</span>Con qué entra</h3>
+          <div class="usr-campos">
+            <label class="field"><span>Usuario *</span>
+              <input type="text" id="u-usuario" class="input" required autocapitalize="none"
+                     autocomplete="off" placeholder="Ej: juan"></label>
+            <label class="field"><span>Cómo lo muestra el sistema</span>
+              <input type="text" id="u-nombre" class="input" autocomplete="off" placeholder="Ej: Juan Pérez"></label>
+            <label class="field usr-campo-ancho"><span>Contraseña *</span>
+              <input type="text" id="u-pass" class="input" required minlength="6"
+                     autocomplete="off" placeholder="Mínimo 6 caracteres"></label>
+          </div>
+        </section>
+
+        <section class="doc-parte">
+          <h3 class="doc-parte-tit"><span class="doc-paso">2</span>Qué puede hacer</h3>
+          <label class="usr-admin">
+            <input type="checkbox" id="u-admin">
+            <span><strong>Administrador</strong>
+              <small>Todos los permisos, gestiona usuarios y borra clientes y movimientos</small></span>
+          </label>
+          <!-- Los permisos se pintan desde la lista del programa: así el alta y
+               la ficha de cada usuario nunca quedan desfasadas entre sí. -->
+          <div id="u-permisos-detalle" class="usr-permisos">
+            <span class="usr-permisos-tit">Permisos del empleado</span>
+            <div class="usr-perms" id="u-perms-nuevo"></div>
+          </div>
+        </section>
+
+        <footer class="doc-pie">
+          <div class="doc-pie-botones">
+            <button type="submit" id="btn-u-crear" class="btn btn-primary">Crear usuario</button>
+          </div>
+        </footer>
+      </form>
+
+      <div class="usr-col">
+        <!-- La cuenta con la que se dio de alta el negocio: no es un empleado
+             más, es la llave maestra, así que va aparte del equipo. -->
+        <div class="usr-dueno" id="usr-dueno" hidden>
+          <div class="usr-dueno-cab">
+            <span class="usr-dueno-etq">Cuenta de dueño</span>
+            <strong id="usr-dueno-nombre">—</strong>
+          </div>
+          <p class="usr-dueno-txt">Con esta cuenta se dio de alta el negocio. Tiene todos los permisos
+            y <strong>no se puede quitar</strong>: es la llave de respaldo para volver a entrar.</p>
+        </div>
+
+        <h3 class="usr-tit">Usuarios del equipo</h3>
+        <div id="usuarios-list" class="usuarios-list"></div>
+        <p class="sec-vacio" id="usuarios-vacio" hidden>Todavía no has dado de alta a nadie del equipo.</p>
       </div>
-      <button type="submit" id="btn-u-crear" class="btn btn-primary btn-block">➕ Crear usuario</button>
-    </form>
-
-    <h3>Usuarios existentes</h3>
-    <div id="usuarios-list" class="usuarios-list"></div>
-
-    <div class="modal-buttons">
-      <button type="button" id="btn-usuarios-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
     </div>
   </section>
 

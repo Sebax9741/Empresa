@@ -1779,10 +1779,34 @@ const PERMISOS_LISTA = [
 // vencimiento es solo del administrador; los empleados anotan la fecha de
 // compromiso de pago, que no altera el vencimiento real del crédito.
 
+/* Los permisos que se marcan al dar de alta salen de PERMISOS_LISTA, no de una
+   copia escrita a mano en el HTML: así no vuelve a pasar que la lista del alta
+   se quede corta cuando aparece un permiso nuevo. */
+const PERMISOS_POR_DEFECTO = ['crear', 'editar', 'pagos', 'cobranza', 'clientes', 'ventas'];
+
+function pintarPermisosDelAlta() {
+  const caja = $('#u-perms-nuevo');
+  if (!caja || caja.childElementCount) return;
+  caja.innerHTML = PERMISOS_LISTA.map(([k, etiqueta]) => `
+    <label class="u-perm"><input type="checkbox" id="u-perm-${k}"
+      ${PERMISOS_POR_DEFECTO.includes(k) ? 'checked' : ''}>
+      <span>${escapeHtml(etiqueta)}</span></label>`).join('');
+}
+
+/* Un administrador los tiene todos, así que las casillas sueltas sobran.
+   Se mira la casilla en vez de recordarlo aparte: tras un reset del formulario
+   el estado vuelve a cuadrar solo. */
+function sincronizarPermisosDelAlta() {
+  const detalle = $('#u-permisos-detalle');
+  if (detalle) detalle.hidden = $('#u-admin').checked;
+}
+
 async function abrirUsuarios() {
   if (!esAdmin()) return;
+  pintarPermisosDelAlta();
   await renderUsuarios();
   $('#u-form-nuevo').reset();
+  sincronizarPermisosDelAlta();
   mostrarSeccion('usuarios');
 }
 
@@ -1797,21 +1821,48 @@ async function renderUsuarios() {
     cont.innerHTML = '<p class="abonos-vacio">No se pudo cargar la lista.</p>';
     return;
   }
-  docs.sort((a, b) => (a.rol === 'admin' ? -1 : 1) - (b.rol === 'admin' ? -1 : 1));
-  cont.innerHTML = docs.map(m => {
-    const esDueno = m.uid === ownerUid;
-    const permisosHtml = esDueno ? '<em>Todos los permisos</em>' : PERMISOS_LISTA.map(([k, etiqueta]) => `
-      <label class="u-perm"><input type="checkbox" data-perm="${k}" data-uid="${m.uid}" ${m.permisos && m.permisos[k] ? 'checked' : ''}> ${etiqueta}</label>`).join('');
+  // La cuenta del dueño se muestra aparte: no es un empleado al que dar o
+  // quitar permisos, es con la que se dio de alta el negocio.
+  const dueno = docs.find(m => m.uid === ownerUid);
+  const cajaDueno = $('#usr-dueno');
+  if (cajaDueno) {
+    cajaDueno.hidden = !dueno;
+    if (dueno) $('#usr-dueno-nombre').textContent = dueno.nombre && dueno.nombre !== dueno.usuario
+      ? `${dueno.nombre} · ${dueno.usuario}`
+      : (dueno.usuario || 'administrador');
+  }
+
+  const equipo = docs.filter(m => m.uid !== ownerUid);
+  equipo.sort((a, b) => (a.rol === 'admin' ? -1 : 1) - (b.rol === 'admin' ? -1 : 1)
+    || String(a.usuario || '').localeCompare(String(b.usuario || '')));
+  $('#usuarios-vacio').hidden = !!equipo.length;
+
+  cont.innerHTML = equipo.map(m => {
+    const esJefe = m.rol === 'admin';
+    // A un administrador no se le marcan permisos uno a uno: los tiene todos,
+    // y las casillas hacían creer que alguno le faltaba.
+    const permisosHtml = esJefe
+      ? '<p class="usuario-todos">Todos los permisos</p>'
+      : `<div class="usuario-perms">${PERMISOS_LISTA.map(([k, etiqueta]) => `
+        <label class="u-perm"><input type="checkbox" data-perm="${k}" data-uid="${m.uid}"
+          ${m.permisos && m.permisos[k] ? 'checked' : ''}><span>${escapeHtml(etiqueta)}</span></label>`).join('')}</div>`;
     return `
-      <div class="usuario-item">
+      <article class="usuario-item${esJefe ? ' usuario-item-admin' : ''}">
         <div class="usuario-cab">
-          <strong>${escapeHtml(m.usuario || '(sin nombre)')}</strong>
-          <span class="usuario-rol">${m.rol === 'admin' ? '👑 Administrador' : '👤 Empleado'}</span>
-          ${esDueno ? '' : `<button type="button" class="btn btn-secondary btn-small" data-resetear-clave="${m.uid}" data-usuario-nombre="${escapeHtml(m.usuario || '')}" title="Poner una contraseña nueva sin necesitar la anterior">🔑 Restablecer clave</button>
-          <button type="button" class="btn btn-danger btn-small" data-borrar-usuario="${m.uid}">Quitar</button>`}
+          <div class="usuario-id">
+            <strong>${escapeHtml(m.usuario || '(sin nombre)')}</strong>
+            ${m.nombre && m.nombre !== m.usuario ? `<span class="usuario-alias">${escapeHtml(m.nombre)}</span>` : ''}
+          </div>
+          <span class="usuario-rol">${esJefe ? '👑 Administrador' : '👤 Empleado'}</span>
         </div>
-        <div class="usuario-perms">${permisosHtml}</div>
-      </div>`;
+        <div class="usuario-acciones">
+          <button type="button" class="btn btn-secondary btn-small" data-resetear-clave="${m.uid}"
+            data-usuario-nombre="${escapeHtml(m.usuario || '')}"
+            title="Poner una contraseña nueva sin necesitar la anterior">🔑 Restablecer clave</button>
+          <button type="button" class="btn btn-danger btn-small" data-borrar-usuario="${m.uid}">Quitar</button>
+        </div>
+        ${permisosHtml}
+      </article>`;
   }).join('');
 }
 
@@ -1836,7 +1887,10 @@ async function crearUsuario(ev) {
   if (usuario.includes('@') || /\s/.test(usuario)) { toast('⚠️ El usuario no debe tener espacios ni @'); return; }
 
   const permisos = {};
-  for (const [k] of PERMISOS_LISTA) permisos[k] = rolAdmin || $(`#u-perm-${k}`).checked;
+  for (const [k] of PERMISOS_LISTA) {
+    const casilla = $(`#u-perm-${k}`);
+    permisos[k] = rolAdmin || !!(casilla && casilla.checked);
+  }
 
   const boton = $('#btn-u-crear');
   boton.disabled = true;
@@ -1847,6 +1901,7 @@ async function crearUsuario(ev) {
     });
     toast(`✅ Usuario "${usuario}" creado`);
     $('#u-form-nuevo').reset();
+    sincronizarPermisosDelAlta();
     await renderUsuarios();
   } catch (e) {
     console.error(e);
@@ -3084,7 +3139,7 @@ function renderClientes() {
         ${permitido ? `
         <div class="cliente-acciones">
           <button type="button" class="btn btn-secondary btn-small" data-editar-cliente="${escapeHtml(c.id)}">✏️</button>
-          <button type="button" class="btn btn-danger btn-small" data-borrar-cliente="${escapeHtml(c.id)}">🗑️</button>
+          ${mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-borrar-cliente="${escapeHtml(c.id)}">🗑️</button>` : ''}
         </div>` : ''}
       </div>`;
   }).join('');
@@ -3186,7 +3241,9 @@ async function guardarClienteForm(ev) {
 }
 
 async function borrarCliente(id) {
-  if (!puede('clientes')) return;
+  // Registrar y corregir clientes lo hace el empleado; borrarlos, solo el
+  // administrador (la base de datos lo rechaza igual si se intenta a la fuerza).
+  if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede borrar clientes'); return; }
   const cli = clientePorId(id);
   if (!cli) return;
   const usados = creditosDeCliente(id).length;
@@ -7939,7 +7996,7 @@ function inicializarEventos() {
   $('#btn-usuarios').addEventListener('click', abrirUsuarios);
   $('#btn-usuarios-cerrar').addEventListener('click', () => mostrarSeccion('creditos'));
   $('#u-form-nuevo').addEventListener('submit', crearUsuario);
-  $('#u-admin').addEventListener('change', ev => { $('#u-permisos-detalle').style.display = ev.target.checked ? 'none' : ''; });
+  $('#u-admin').addEventListener('change', () => sincronizarPermisosDelAlta());
   $('#usuarios-list').addEventListener('change', ev => {
     const cb = ev.target.closest('[data-perm]');
     if (cb) cambiarPermiso(cb.dataset.uid, cb.dataset.perm, cb.checked);

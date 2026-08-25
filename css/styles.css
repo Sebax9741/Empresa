@@ -1488,20 +1488,97 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   .cuenta-alias-campos { grid-template-columns: 1fr; }
 }
 
-/* Panel de usuarios */
-.modal-usuarios { width: min(560px, calc(100vw - 1.5rem)); }
-.modal-usuarios h3 { font-size: 0.95rem; margin: 1rem 0 0.5rem; }
-.u-nuevo { background: var(--bg-tint); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.9rem; }
-.u-nuevo h3 { margin-top: 0; }
-.u-permisos-detalle { margin: 0.3rem 0 0.8rem; }
-.u-perm { display: flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; padding: 0.15rem 0; }
-.u-perm input { width: 16px; height: 16px; }
+/* ====== Usuarios y accesos ====== */
+/* En computadora, el alta a la izquierda —siempre a la vista mientras se
+   repasa el equipo— y la lista a la derecha, que es la que crece. */
+.usr-layout { display: grid; grid-template-columns: 1fr; gap: 1.1rem; align-items: start; }
+@media (min-width: 1150px) {
+  .usr-layout { grid-template-columns: minmax(400px, 30rem) 1fr; }
+  .usr-alta { position: sticky; top: calc(var(--alto-cabecera, 0px) + 0.8rem); }
+}
+.usr-alta { margin-bottom: 0; }
+.usr-col { min-width: 0; }
 
-.usuarios-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.7rem; }
-.usuario-item { border: 1px solid var(--border); border-radius: 10px; padding: 0.7rem; }
-.usuario-cab { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
-.usuario-rol { font-size: 0.8rem; color: var(--gray); margin-right: auto; }
-.usuario-perms { display: grid; grid-template-columns: 1fr 1fr; gap: 0.1rem 0.6rem; }
+.usr-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.2rem 1rem; }
+.usr-campos .field { margin-bottom: 0.6rem; }
+.usr-campo-ancho { grid-column: span 2; }
+
+/* "Administrador" es una decisión aparte de los permisos sueltos: se destaca */
+.usr-admin {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tint);
+  cursor: pointer;
+}
+.usr-admin input { width: 18px; height: 18px; flex: none; margin-top: 0.1rem; }
+.usr-admin small { display: block; font-weight: 500; color: var(--muted); font-size: 0.78rem; }
+.usr-permisos-tit {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  font-weight: 800;
+}
+/* Los permisos en dos columnas: nueve en fila vertical obligaban a bajar */
+.usr-perms, .usuario-perms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.15rem 1rem; }
+.u-perm { display: flex; align-items: flex-start; gap: 0.45rem; font-size: 0.86rem; padding: 0.2rem 0; cursor: pointer; }
+.u-perm input { width: 16px; height: 16px; flex: none; margin-top: 0.15rem; }
+
+/* La cuenta con la que se dio de alta el negocio */
+.usr-dueno {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  padding: 0.8rem 1rem;
+  margin-bottom: 1.1rem;
+}
+.usr-dueno-etq {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  font-weight: 800;
+}
+.usr-dueno-cab strong { font-size: 1.02rem; }
+.usr-dueno-txt { margin: 0.35rem 0 0; font-size: 0.83rem; color: var(--muted); }
+
+.usr-tit {
+  margin: 0 0 0.6rem;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 800;
+}
+.usuarios-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 0.8rem; }
+.usuario-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  padding: 0.85rem 1rem;
+}
+.usuario-item-admin { border-left: 3px solid var(--ok); }
+.usuario-cab { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.usuario-id strong { font-size: 1.02rem; }
+.usuario-alias { display: block; font-size: 0.8rem; color: var(--muted); }
+.usuario-rol { font-size: 0.78rem; color: var(--muted); margin-left: auto; white-space: nowrap; }
+.usuario-acciones { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.6rem 0 0.7rem; }
+.usuario-todos { margin: 0; font-size: 0.86rem; color: var(--muted); font-style: italic; }
+
+@media (max-width: 700px) {
+  .usr-campos, .usr-perms, .usuario-perms { grid-template-columns: 1fr; }
+  .usr-campo-ancho { grid-column: auto; }
+  .usuarios-list { grid-template-columns: 1fr; }
+}
 
 /* ====== Hoja de cobranza ====== */
 .modal-cobranza { width: min(1000px, calc(100vw - 1.5rem)); }
