@@ -1464,6 +1464,30 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .cuenta-email { margin: 0.2rem 0 0.5rem; font-weight: 600; }
 .cuenta-botones { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
+/* Crear un usuario corto para entrar sin escribir el correo entero */
+.cuenta-alias {
+  margin-top: 0.9rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tint);
+}
+.cuenta-alias-tit {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 800;
+}
+.cuenta-alias-txt { margin: 0 0 0.8rem; font-size: 0.86rem; color: var(--muted); }
+.cuenta-alias-campos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cuenta-alias-campos .field { margin-bottom: 0.6rem; }
+
+@media (max-width: 760px) {
+  .cuenta-alias-campos { grid-template-columns: 1fr; }
+}
+
 /* Panel de usuarios */
 .modal-usuarios { width: min(560px, calc(100vw - 1.5rem)); }
 .modal-usuarios h3 { font-size: 0.95rem; margin: 1rem 0 0.5rem; }

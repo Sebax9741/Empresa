@@ -1500,6 +1500,27 @@
           <button type="button" id="btn-cambiar-pass" class="btn btn-secondary btn-small">🔑 Cambiar mi contraseña</button>
           <button type="button" id="btn-logout" class="btn btn-secondary btn-small">🚪 Cerrar sesión</button>
         </div>
+
+        <!-- Entrar con un usuario corto en vez del correo. Solo se ofrece al
+             administrador que todavía entra escribiendo su correo entero. -->
+        <div class="cuenta-alias" id="cuenta-alias" hidden>
+          <h4 class="cuenta-alias-tit">Entrar con un usuario en vez del correo</h4>
+          <p class="cuenta-alias-txt">Ahora entras escribiendo <strong id="cuenta-alias-correo">tu correo</strong>.
+            Puedes crear un usuario corto con los <strong>mismos permisos de administrador</strong>
+            y entrar con él. Tu correo sigue funcionando: guárdalo por si olvidas la contraseña nueva.</p>
+          <div class="field-row cuenta-alias-campos">
+            <label class="field"><span>Usuario para entrar</span>
+              <input type="text" id="alias-usuario" class="input" value="admin" autocomplete="off"
+                     placeholder="admin"></label>
+            <label class="field"><span>Cómo te muestra el sistema</span>
+              <input type="text" id="alias-nombre" class="input" value="Admin" autocomplete="off"
+                     placeholder="Admin"></label>
+            <label class="field"><span>Contraseña</span>
+              <input type="password" id="alias-pass" class="input" autocomplete="new-password"
+                     placeholder="Mínimo 6 caracteres"></label>
+          </div>
+          <button type="button" id="btn-alias-crear" class="btn btn-primary btn-small">Crear mi usuario de acceso</button>
+        </div>
       </section>
 
       <!-- ▸ Uso sin internet -->

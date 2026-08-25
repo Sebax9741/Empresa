@@ -169,7 +169,21 @@ const MOTIVOS_KARDEX = {
 };
 
 /* Quién está usando la app ahora (para dejar constancia en cada "a cuenta") */
-function quienSoy() { return (modoNube && yo && yo.usuario) ? yo.usuario : 'dueño'; }
+/* Con qué nombre queda firmado lo que uno hace. Se usa el nombre visible
+   ("Admin"), no el usuario con el que se entra ("admin"): es el que se lee en
+   las notas de venta, en el kardex y en las hojas de cobranza. */
+function quienSoy() {
+  if (!modoNube || !yo) return 'dueño';
+  return yo.nombre || yo.usuario || 'dueño';
+}
+
+/* ¿Esta anotación la hizo el que está usando la app ahora? Se compara contra
+   el nombre visible y contra el usuario, porque lo anotado antes de que el
+   nombre fuera lo que se firma guardó el usuario. */
+function esMio(quien) {
+  if (!modoNube || !yo || !quien) return false;
+  return quien === (yo.nombre || '') || quien === (yo.usuario || '');
+}
 
 /* ====== Despachos de pedidos ======
    Cada despacho es UN pedido / una boleta que sale a reparto: cliente,
@@ -247,7 +261,7 @@ function puedeQuitarAbono(a) {
   if (esAdmin()) return true;
   if (a && a.fecha && hojaCerrada(a.fecha)) return false;
   if (!a || !a.registradoFecha) return false;   // "a cuenta" antigua: solo el admin
-  return a.registradoFecha === hoyISO() && a.registradoPor === quienSoy();
+  return a.registradoFecha === hoyISO() && esMio(a.registradoPor);
 }
 
 /* Marca las "a cuenta" cuya fecha de pago no coincide con el día en que
@@ -1426,6 +1440,7 @@ function abrirSesionEnPantalla() {
   $('#auth-screen').hidden = true;
   $('#settings-cuenta').hidden = false;
   $('#cuenta-email').textContent = `${yo.usuario}${esAdmin() ? ' (administrador)' : ''}`;
+  mostrarAliasDeAcceso();
   banner(null);
   aplicarPermisos();
   cargarSeguridad();        // copia local mientras llega la de la nube
@@ -1443,12 +1458,20 @@ function sesionCerrada() {
   if (unsubDespachos) { unsubDespachos(); unsubDespachos = null; }
   if (unsubRepartidores) { unsubRepartidores(); unsubRepartidores = null; }
   if (unsubAnulados) { unsubAnulados(); unsubAnulados = null; }
+  // Almacén: sin cancelarlos se quedaban escuchando los datos del que se fue,
+  // y su catálogo y su stock seguían en pantalla al entrar otro usuario.
+  if (unsubProductos) { unsubProductos(); unsubProductos = null; }
+  if (unsubKardex) { unsubKardex(); unsubKardex = null; }
+  if (unsubNotas) { unsubNotas(); unsubNotas = null; }
   creditos = [];
   clientes = [];
   hojas = [];
   despachos = [];
   repartidores = [];
   anulados = [];
+  productos = [];
+  kardex = [];
+  notas = [];
   ownerUid = null;
   yo = null;
   migracionRevisada = false;
@@ -1457,6 +1480,12 @@ function sesionCerrada() {
   avisarConexionServidor = null;
   actualizarAvisoConexion();
   render();
+  // Y se repintan las tablas del almacén: si no, sus filas se quedan puestas
+  // aunque los datos ya se hayan vaciado.
+  renderProductos();
+  renderKardex();
+  renderIngresos();
+  renderVentas();
   $('#settings-cuenta').hidden = true;
   $('#usuario-chip').hidden = true;
   $('#auth-screen').hidden = false;
@@ -1873,6 +1902,55 @@ async function borrarUsuario(uid) {
     await renderUsuarios();
   } catch (e) {
     toast('❌ No se pudo quitar el acceso');
+  }
+}
+
+/* Entrar con un usuario corto en vez del correo.
+   Firebase solo sabe iniciar sesión con un correo, así que el usuario que se
+   escribe se convierte en uno interno ("admin" → admin@usuarios…). El correo
+   de verdad con el que se dio de alta el negocio no se puede renombrar desde
+   aquí, así que en su lugar se crea una segunda cuenta de administrador sobre
+   los MISMOS datos: el dueño del negocio no cambia, solo la forma de entrar. */
+function mostrarAliasDeAcceso() {
+  const caja = $('#cuenta-alias');
+  if (!caja) return;
+  // Solo tiene sentido para el administrador que aún entra con un correo
+  const conCorreo = !!(yo && yo.usuario && yo.usuario.includes('@'));
+  caja.hidden = !(esAdmin() && conCorreo);
+  if (!caja.hidden) $('#cuenta-alias-correo').textContent = yo.usuario;
+}
+
+async function crearMiUsuarioDeAcceso() {
+  if (!esAdmin()) { toast('🔒 Solo el administrador'); return; }
+  const usuario = $('#alias-usuario').value.trim().toLowerCase();
+  const nombre = $('#alias-nombre').value.trim();
+  const pass = $('#alias-pass').value;
+  if (!usuario) { toast('⚠️ Escribe el usuario con el que quieres entrar'); $('#alias-usuario').focus(); return; }
+  if (usuario.includes('@') || /\s/.test(usuario)) {
+    toast('⚠️ El usuario no debe tener espacios ni @'); $('#alias-usuario').focus(); return;
+  }
+  if (pass.length < 6) { toast('⚠️ La contraseña debe tener al menos 6 caracteres'); $('#alias-pass').focus(); return; }
+
+  const boton = $('#btn-alias-crear');
+  boton.disabled = true;
+  try {
+    const uid = await crearUsuarioAuthSecundaria(usuarioAEmail(usuario), pass);
+    await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid), {
+      usuario,
+      nombre: nombre || usuario,
+      rol: 'admin',
+      permisos: { ...PERMISOS_TODOS },
+      creado: Date.now(),
+    });
+    $('#alias-pass').value = '';
+    toast(`✅ Listo. Cierra sesión y entra con "${usuario}"`);
+  } catch (e) {
+    console.error(e);
+    toast(e.code === 'auth/email-already-in-use'
+      ? `⚠️ El usuario "${usuario}" ya existe. Prueba con otro.`
+      : avisoDeFallo(e, '❌ No se pudo crear el usuario'));
+  } finally {
+    boton.disabled = false;
   }
 }
 
@@ -7806,6 +7884,7 @@ function inicializarEventos() {
   $('#btn-logout').addEventListener('click', cerrarSesion);
   $('#btn-logout-header').addEventListener('click', cerrarSesion);
   $('#btn-cambiar-pass').addEventListener('click', cambiarMiContrasena);
+  $('#btn-alias-crear').addEventListener('click', crearMiUsuarioDeAcceso);
 
   // Menú del usuario: "Mi perfil" y "Configuración"
   $('#btn-cuenta').addEventListener('click', ev => {
