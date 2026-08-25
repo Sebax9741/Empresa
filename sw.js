@@ -1,5 +1,5 @@
 /* Service worker: permite instalar la app y usarla sin internet */
-const CACHE = 'creditos-v85';
+const CACHE = 'creditos-v86';
 const ARCHIVOS = [
   './',
   './index.html',

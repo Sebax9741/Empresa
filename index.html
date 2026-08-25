@@ -116,7 +116,7 @@
   <!-- Pantalla de inicio de sesión (solo en modo nube) -->
   <div id="auth-screen" class="auth-screen" hidden>
     <div class="auth-box">
-      <h1>💳 Control de Créditos</h1>
+      <h1>Control de Créditos</h1>
       <p class="auth-subtitle" id="auth-subtitle">Inicia sesión con tu usuario y contraseña</p>
       <form id="auth-form">
         <label class="field">
@@ -139,7 +139,6 @@
       <button type="button" id="btn-menu" class="btn-menu" title="Mostrar u ocultar el menú" aria-label="Mostrar u ocultar el menú" aria-expanded="true">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
-      <h1>💳 <span class="titulo-largo">Control de </span>Créditos</h1>
       <div class="header-actions">
         <button id="btn-dashboard" class="btn-icon" title="Dashboard" aria-label="Dashboard">📊</button>
         <button id="btn-creditos" class="btn-icon" title="Créditos" aria-label="Créditos">📋</button>
@@ -153,6 +152,21 @@
         <button id="btn-cobranza" class="btn-icon" title="Hoja de cobranza" aria-label="Hoja de cobranza">🧾</button>
         <button id="btn-settings" class="btn-icon" title="Configuración" aria-label="Configuración">⚙️</button>
         <button id="btn-new" class="btn btn-primary">＋<span class="btn-label"> Nuevo crédito</span></button>
+      </div>
+
+      <!-- El reloj y la cuenta van pegados al borde derecho, en su propio grupo.
+           Así el reloj no se corre cuando "＋ Nuevo crédito" aparece o desaparece
+           al cambiar de sección: queda clavado en el mismo sitio siempre. -->
+      <div class="header-cuenta">
+        <div class="reloj" id="reloj" title="Hora del sistema">
+          <svg class="reloj-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/><path d="M12 6.8V12l3.4 2"/>
+          </svg>
+          <div class="reloj-txt">
+            <strong id="reloj-hora">--:--:--</strong>
+            <span id="reloj-fecha">—</span>
+          </div>
+        </div>
         <div id="usuario-chip" class="usuario-chip" hidden>
           <div class="usuario-menu-wrap">
             <button id="btn-cuenta" class="usuario-cuenta" aria-haspopup="true" aria-expanded="false" title="Mi cuenta">

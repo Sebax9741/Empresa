@@ -89,24 +89,47 @@ body {
   padding: 0.7rem 1.5rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
 }
 
-.app-header h1 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  /* Si no cabe, se recorta el título: los botones nunca se pierden */
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* Los botones del encabezado siempre visibles, aunque la pantalla sea angosta.
+   El margen automático los empuja a la derecha ahora que la cabecera ya no
+   lleva título que ocupe el centro. */
+.header-actions { display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; margin-left: auto; }
 
-/* Los botones del encabezado siempre visibles, aunque la pantalla sea angosta */
-.header-actions { display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; }
+/* Reloj + cuenta, clavados al borde derecho: su sitio no depende de qué botones
+   muestre la sección de al lado. */
+.header-cuenta { display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; }
+
+/* ---- Reloj del sistema ---- */
+.reloj {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.7rem 0.15rem 0.15rem;
+  margin-left: 0.4rem;
+  border-left: 1px solid var(--border);
+  padding-left: 0.8rem;
+  color: var(--text);
+}
+.reloj-ico {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+.reloj-txt { display: flex; flex-direction: column; line-height: 1.15; }
+.reloj-txt strong {
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.reloj-txt span { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
 
 /* ====== Botones ====== */
 .btn {
@@ -1636,8 +1659,10 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   /* Sin quitarle el flex-shrink: 0 de base se quedaría con su ancho entero y
      se saldría de la pantalla en vez de repartirse en dos filas. */
   .header-actions { flex-wrap: wrap; justify-content: flex-end; flex-shrink: 1; min-width: 0; }
-  /* Aquí tampoco hay sitio para "Control de": el título se acorta a "Créditos" */
-  .titulo-largo { display: none; }
+  /* Sin panel lateral la cabecera lleva además los once destinos: el reloj se
+     queda con la hora, que es lo que se mira, y suelta la fecha. */
+  #reloj-fecha { display: none; }
+  .reloj { padding-left: 0.6rem; margin-left: 0.2rem; }
 }
 
 /* ====== Responsive: celular ====== */
@@ -1650,14 +1675,17 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   .desp-tabla-wrap { display: none; }
   #despachos-list { display: flex; }
 
-  /* En móvil el título se quita del todo: el sitio lo necesitan los botones de
-     navegación (Dashboard, Créditos, Despachos...), que aquí son la única
-     forma de moverse por la app (el panel lateral no existe en celular). */
-  .app-header h1 { display: none; }
   .header-inner { padding: 0.5rem 0.6rem; gap: 0.3rem; }
+  /* En celular el sitio lo necesitan los botones de navegación, que aquí son la
+     única forma de moverse por la app: el reloj se queda solo con la hora. */
+  .reloj { border-left: none; padding: 0; margin: 0; gap: 0.3rem; }
+  .reloj-ico { display: none; }
+  .reloj-txt strong { font-size: 0.9rem; }
   /* Con siete destinos + "＋" + la cuenta no entra todo en una línea de 390px:
      se deja que baje a una segunda fila antes que quedar cortado. */
   .header-actions { gap: 0.25rem 0.2rem; flex-wrap: wrap; justify-content: center; width: 100%; }
+  /* El reloj y la cuenta bajan a su propia fila, centrados como los destinos */
+  .header-cuenta { width: 100%; justify-content: center; flex-wrap: wrap; }
   .btn-icon { width: 34px; height: 34px; font-size: 1.05rem; }
   /* En móvil el botón principal muestra solo "＋" para no saturar el header */
   #btn-new .btn-label { display: none; }

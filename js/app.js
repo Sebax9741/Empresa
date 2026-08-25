@@ -367,6 +367,27 @@ function hora12(d) {
   return `${h12}:${mm} ${sufijo}`;
 }
 
+/* Reloj de la cabecera. Va con segundos y con a. m. / p. m., igual que el resto
+   de las horas de la app, para no tener que traducir del formato de 24 horas. */
+function pintarReloj() {
+  const hora = document.getElementById('reloj-hora');
+  if (!hora) return;
+  const ahora = new Date();
+  const h = ahora.getHours();
+  const h12 = h % 12 === 0 ? 12 : h % 12;   // medianoche y mediodía son las 12
+  const mm = String(ahora.getMinutes()).padStart(2, '0');
+  const ss = String(ahora.getSeconds()).padStart(2, '0');
+  hora.textContent = `${h12}:${mm}:${ss} ${h < 12 ? 'a. m.' : 'p. m.'}`;
+
+  const fecha = ahora.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' });
+  document.getElementById('reloj-fecha').textContent = fecha.charAt(0).toUpperCase() + fecha.slice(1);
+}
+
+function arrancarReloj() {
+  pintarReloj();
+  setInterval(pintarReloj, 1000);
+}
+
 /* "29/07/2026 a las 2:32 p. m." — vacío mientras el servidor no confirme la hora */
 function fechaHoraDeTimestamp(ts) {
   const d = momentoDe(ts);
@@ -7662,6 +7683,8 @@ function inicializarEventos() {
   $('#nav-cobranza').addEventListener('click', () => { if (puede('cobranza')) abrirCobranza(); });
   $('#nav-usuarios').addEventListener('click', () => { if (esAdmin()) abrirUsuarios(); });
   $('#nav-settings').addEventListener('click', () => $('#btn-settings').click());
+
+  arrancarReloj();
 
   // Contraer / desplegar el panel lateral
   aplicarPlegadoNav(localStorage.getItem(CLAVE_NAV_PLEGADA) === '1');
