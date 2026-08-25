@@ -270,7 +270,6 @@ body {
 }
 .dash-titulo { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
 .dash-sub { color: var(--muted); font-size: 0.84rem; margin: 0.15rem 0 0; }
-.dash-cab-botones { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 /* Tarjetas de indicadores: 6 en una fila en escritorio, como en la referencia */
 .kpis {

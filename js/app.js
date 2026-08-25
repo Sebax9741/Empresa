@@ -7676,8 +7676,6 @@ function inicializarEventos() {
     document.querySelectorAll('dialog[open]').forEach(d => d.close());
     mostrarSeccion('creditos');
   });
-  $('#btn-dash-nuevo').addEventListener('click', () => abrirFormulario());
-  $('#btn-dash-cobranza').addEventListener('click', () => { if (puede('cobranza')) abrirCobranza(); else toast('🔒 No tienes permiso'); });
   $('#nav-despachos').addEventListener('click', abrirDespachos);
   $('#nav-clientes').addEventListener('click', abrirClientes);
   $('#nav-cobranza').addEventListener('click', () => { if (puede('cobranza')) abrirCobranza(); });
