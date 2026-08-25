@@ -1073,70 +1073,145 @@
       <h2>📥 Ingreso de productos</h2>
     </div>
 
-    <div class="nv-bloque">
-      <h3 class="nv-bloque-tit">Registrar ingreso</h3>
-      <p class="kdx-explica-mini">Las salidas por venta las anota la app sola al guardar cada nota de venta.
-        Aquí anotas lo que <strong>llega al almacén</strong> y las <strong>correcciones</strong> del conteo físico.</p>
-      <form id="ing-form">
+    <!-- Elegir cómo se ingresa: un camión con su factura, o un movimiento suelto -->
+    <div class="ing-modos" role="tablist" aria-label="Tipo de ingreso">
+      <button type="button" class="ing-modo activo" id="ing-modo-factura" role="tab" aria-selected="true">
+        <span class="ing-modo-ico">📄</span>
+        <span class="ing-modo-txt">Ingreso por factura o guía
+          <small>Varios productos de una misma compra</small></span>
+      </button>
+      <button type="button" class="ing-modo" id="ing-modo-ajuste" role="tab" aria-selected="false">
+        <span class="ing-modo-ico">⚖️</span>
+        <span class="ing-modo-txt">Ajuste o salida
+          <small>Conteo físico, merma o traslado</small></span>
+      </button>
+    </div>
+
+    <!-- ═══ Modo 1: ingreso por factura (varios productos) ═══ -->
+    <div id="ing-vista-factura">
+      <div class="nv-bloque">
+        <h3 class="nv-bloque-tit">1 · Documento de la compra</h3>
         <div class="field-row prod-fila-3">
-          <label class="field"><span>Producto *</span>
-            <select id="ing-producto" class="input" required></select></label>
-          <label class="field"><span>Fecha *</span>
-            <input type="date" id="ing-fecha" class="input" required></label>
-          <label class="field"><span>Cantidad *</span>
-            <input type="number" id="ing-cantidad" class="input" step="1" required placeholder="0"></label>
-        </div>
-        <div class="field-row">
-          <label class="field"><span>¿Qué pasó? *</span>
-            <select id="ing-tipo" class="input" required>
-              <option value="entrada">📥 Entró mercadería (compra o devolución)</option>
-              <option value="ajuste">⚖️ Cuadrar con el conteo físico</option>
-              <option value="salida">📤 Salió sin vender (merma, traslado…)</option>
+          <label class="field"><span>Proveedor</span>
+            <input type="text" id="ing-proveedor" class="input" placeholder="Ej: Distribuidora Ramos S.A.C."></label>
+          <label class="field"><span>Tipo de documento</span>
+            <select id="ing-doc-tipo" class="input">
+              <option value="factura">Factura</option>
+              <option value="guia">Guía de remisión</option>
+              <option value="boleta">Boleta</option>
+              <option value="sin">Sin documento</option>
             </select></label>
-          <label class="field"><span>Motivo *</span>
-            <select id="ing-motivo" class="input" required></select></label>
+          <label class="field"><span>N.º de documento</span>
+            <input type="text" id="ing-doc-numero" class="input" placeholder="Ej: F001-1234"></label>
         </div>
-        <p class="kdx-ayuda" id="ing-ayuda-ajuste" hidden>En un ajuste, escribe la cantidad <strong>real contada</strong> en el almacén: el sistema calcula solo la diferencia.</p>
         <div class="field-row">
-          <label class="field"><span>Proveedor / Documento <small>opcional</small></span>
-            <input type="text" id="ing-documento" class="input" placeholder="Ej: Distribuidora ABC — Factura F001-1234"></label>
+          <label class="field"><span>Fecha de ingreso *</span>
+            <input type="date" id="ing-fecha" class="input" required></label>
           <label class="field"><span>Nota <small>opcional</small></span>
             <input type="text" id="ing-nota" class="input" placeholder="Ej: llegó con 2 sacos rotos"></label>
         </div>
+      </div>
 
-        <div class="ing-preview" id="ing-preview" hidden>
-          <div class="ing-preview-dato"><span>Stock actual</span><strong id="ing-stock-actual">0</strong></div>
-          <div class="ing-preview-flecha">→</div>
-          <div class="ing-preview-dato ing-preview-resultado"><span>Quedará en</span><strong id="ing-stock-resultante">0</strong></div>
+      <div class="nv-bloque">
+        <h3 class="nv-bloque-tit">2 · Productos que llegaron</h3>
+        <div class="ing-agregar">
+          <label class="field ing-ag-prod"><span>Buscar producto</span>
+            <div class="combo-wrap">
+              <input type="text" id="ing-buscar" class="input" autocomplete="off"
+                     placeholder="Escribe el nombre o el código del producto…">
+              <div id="ing-sugerencias" class="combo-sugerencias" hidden></div>
+            </div>
+            <input type="hidden" id="ing-producto">
+          </label>
+          <label class="field ing-ag-cant"><span>Cantidad</span>
+            <input type="number" id="ing-cantidad" class="input" min="0.01" step="1" placeholder="0"></label>
+          <button type="button" id="btn-ing-agregar" class="btn btn-primary btn-small">➕ Agregar a la lista</button>
         </div>
 
-        <div class="modal-buttons">
-          <button type="submit" class="btn btn-primary">💾 Registrar ingreso</button>
+        <div class="table-wrap ing-lista-wrap">
+          <table class="prod-tabla" id="ing-lista-tabla">
+            <thead>
+              <tr>
+                <th class="col-cod">Código</th>
+                <th>Producto</th>
+                <th class="col-um">U.M.</th>
+                <th class="col-num">Cantidad</th>
+                <th class="col-num">Stock actual</th>
+                <th class="col-num">Stock resultante</th>
+                <th class="col-acc"></th>
+              </tr>
+            </thead>
+            <tbody id="ing-lista-body"></tbody>
+          </table>
         </div>
-      </form>
+        <p class="sec-vacio" id="ing-lista-vacia">Busca un producto arriba y agrégalo a la lista.</p>
+
+        <div class="ing-resumen" id="ing-resumen" hidden>
+          <div class="ing-resumen-dato"><span>Productos distintos</span><strong id="ing-res-productos">0</strong></div>
+          <div class="ing-resumen-dato"><span>Unidades que entran</span><strong id="ing-res-unidades">0</strong></div>
+        </div>
+
+        <div class="modal-buttons ing-acciones">
+          <button type="button" id="btn-ing-limpiar" class="btn btn-secondary">Vaciar lista</button>
+          <button type="button" id="btn-ing-guardar" class="btn btn-primary">📦 Agregar stock</button>
+        </div>
+      </div>
     </div>
 
+    <!-- ═══ Modo 2: ajuste o salida (un solo producto) ═══ -->
+    <div id="ing-vista-ajuste" hidden>
+      <div class="nv-bloque">
+        <h3 class="nv-bloque-tit">Ajuste o salida de un producto</h3>
+        <p class="kdx-explica-mini">Las salidas por venta las anota la app sola al guardar cada nota de venta.
+          Aquí se corrige el stock con el <strong>conteo físico</strong> o se anota lo que
+          <strong>salió sin venderse</strong>.</p>
+        <form id="ing-form-ajuste">
+          <div class="field-row">
+            <label class="field"><span>Buscar producto *</span>
+              <div class="combo-wrap">
+                <input type="text" id="aj-buscar" class="input" autocomplete="off"
+                       placeholder="Escribe el nombre o el código del producto…">
+                <div id="aj-sugerencias" class="combo-sugerencias" hidden></div>
+              </div>
+              <input type="hidden" id="aj-producto">
+            </label>
+            <label class="field"><span>Fecha *</span>
+              <input type="date" id="aj-fecha" class="input" required></label>
+          </div>
+          <div class="field-row prod-fila-3">
+            <label class="field"><span>¿Qué pasó? *</span>
+              <select id="aj-tipo" class="input" required>
+                <option value="ajuste">⚖️ Cuadrar con el conteo físico</option>
+                <option value="salida">📤 Salió sin vender (merma, traslado…)</option>
+                <option value="entrada">📥 Entró mercadería (sin factura)</option>
+              </select></label>
+            <label class="field"><span>Motivo *</span>
+              <select id="aj-motivo" class="input" required></select></label>
+            <label class="field"><span>Cantidad *</span>
+              <input type="number" id="aj-cantidad" class="input" step="1" required placeholder="0"></label>
+          </div>
+          <p class="kdx-ayuda" id="aj-ayuda-ajuste">En un ajuste, escribe la cantidad <strong>real contada</strong> en el almacén: el sistema calcula solo la diferencia.</p>
+          <label class="field"><span>Nota <small>opcional</small></span>
+            <input type="text" id="aj-nota" class="input" placeholder="Ej: se malograron 3 baldes"></label>
+
+          <div class="ing-preview" id="aj-preview" hidden>
+            <div class="ing-preview-dato"><span>Stock actual</span><strong id="aj-stock-actual">0</strong></div>
+            <div class="ing-preview-flecha">→</div>
+            <div class="ing-preview-dato ing-preview-resultado"><span>Quedará en</span><strong id="aj-stock-resultante">0</strong></div>
+          </div>
+
+          <div class="modal-buttons">
+            <button type="submit" class="btn btn-primary">💾 Registrar movimiento</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ═══ Historial ═══ -->
     <div class="nv-bloque">
       <h3 class="nv-bloque-tit">Últimos ingresos y correcciones</h3>
       <div class="sec-chips" id="ing-chips"></div>
-      <div class="table-wrap ing-tabla-wrap">
-        <table class="prod-tabla" id="ing-tabla">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th class="col-cod">Código</th>
-              <th>Producto</th>
-              <th>Movimiento</th>
-              <th>Motivo</th>
-              <th>Proveedor / Documento</th>
-              <th class="col-num">Cantidad</th>
-              <th class="col-num">Stock resultante</th>
-              <th>Registró</th>
-            </tr>
-          </thead>
-          <tbody id="ing-body"></tbody>
-        </table>
-      </div>
+      <div id="ing-historial"></div>
       <p class="sec-vacio" id="ing-vacio" hidden>Todavía no se registró ningún ingreso.</p>
     </div>
   </section>

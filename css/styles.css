@@ -2661,3 +2661,96 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .ing-preview-dato strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
 .ing-preview-flecha { font-size: 1.3rem; color: var(--gray); }
 .ing-preview-resultado strong { color: var(--ok); }
+.ing-preview-negativo strong { color: var(--danger); }
+
+/* ── Ingreso de productos: elegir entre factura y ajuste ── */
+.ing-modos { display: flex; gap: 0.7rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.ing-modo {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex: 1;
+  min-width: 16rem;
+  padding: 0.8rem 1.1rem;
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.ing-modo:hover { border-color: var(--gray); }
+.ing-modo.activo { border-color: var(--primary); background: var(--primary-light); }
+.ing-modo-ico { font-size: 1.5rem; flex: none; }
+.ing-modo-txt { font-weight: 700; font-size: 0.95rem; }
+.ing-modo-txt small { display: block; font-weight: 500; font-size: 0.78rem; color: var(--muted); }
+.ing-modo.activo .ing-modo-txt small { color: var(--primary-dark); }
+
+/* Buscador + cantidad + botón, en una sola línea */
+.ing-agregar { display: flex; align-items: flex-end; gap: 0.7rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.ing-agregar .field { margin: 0; }
+.ing-ag-prod { flex: 1; min-width: 20rem; }
+.ing-ag-cant { width: 9rem; }
+.ing-agregar .combo-item small code { color: inherit; }
+
+.ing-lista-wrap .input-mini {
+  width: 100%;
+  max-width: 6.5rem;
+  margin: 0;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.9rem;
+  text-align: right;
+}
+.ing-resultante { font-weight: 800; color: var(--ok); }
+
+/* Resumen de lo que se va a agregar, antes de pulsar el botón */
+.ing-resumen {
+  display: flex;
+  gap: 2.5rem;
+  justify-content: flex-end;
+  background: var(--bg-tint);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem 1.4rem;
+  margin-top: 0.9rem;
+}
+.ing-resumen-dato { display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; }
+.ing-resumen-dato span { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
+.ing-resumen-dato strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.ing-acciones { justify-content: flex-end; }
+
+/* Historial agrupado: un camión con su factura es UNA entrada con sus
+   productos debajo, no diez filas sueltas que hay que juntar a ojo. */
+.ing-grupo {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.7rem;
+  overflow: hidden;
+}
+.ing-grupo-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--bg-tint);
+  padding: 0.6rem 0.9rem;
+}
+.ing-grupo-tit strong { display: block; font-size: 0.95rem; }
+.ing-grupo-meta { font-size: 0.76rem; color: var(--muted); }
+.ing-grupo-nota { margin: 0; padding: 0.45rem 0.9rem; font-size: 0.82rem; color: var(--muted); }
+.ing-grupo-tabla { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.ing-grupo-tabla td { padding: 0.4rem 0.9rem; border-top: 1px solid var(--border); }
+.ing-grupo-tabla .col-num { text-align: right; font-variant-numeric: tabular-nums; }
+.ing-grupo-tabla .col-cod { width: 6rem; }
+.ing-grupo-tabla .col-cod code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.85em; color: var(--muted); }
+.ing-grupo-tabla .kdx-entrada { color: var(--ok); font-weight: 700; }
+.ing-grupo-tabla .kdx-salida { color: var(--primary-dark); font-weight: 700; }
+.ing-grupo-tabla .kdx-saldo { font-weight: 800; width: 5rem; }
+
+@media (max-width: 900px) {
+  .ing-ag-prod, .ing-ag-cant { width: 100%; min-width: 0; }
+  .ing-resumen { justify-content: space-between; gap: 1rem; }
+}

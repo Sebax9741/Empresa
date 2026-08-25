@@ -356,13 +356,22 @@ function fechaDeTimestamp(ts) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/* "29/07/2026 a las 14:32" — vacío mientras el servidor no confirme la hora */
+/* Hora en formato de 12 horas con a. m. / p. m. — "2:32 p. m."
+   En 24 horas ("14:32") el equipo tenía que hacer la cuenta mentalmente, y en
+   una hoja de cobranza firmada la hora importa: se escribe como se habla. */
+function hora12(d) {
+  const h = d.getHours();
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const sufijo = h < 12 ? 'a. m.' : 'p. m.';
+  const h12 = h % 12 === 0 ? 12 : h % 12;   // medianoche y mediodía son las 12
+  return `${h12}:${mm} ${sufijo}`;
+}
+
+/* "29/07/2026 a las 2:32 p. m." — vacío mientras el servidor no confirme la hora */
 function fechaHoraDeTimestamp(ts) {
   const d = momentoDe(ts);
   if (!d) return '';
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${formatoFecha(fechaDeTimestamp(ts))} a las ${hh}:${mm}`;
+  return `${formatoFecha(fechaDeTimestamp(ts))} a las ${hora12(d)}`;
 }
 
 /* Fecha y hora en que se registró una "a cuenta". Si es un pago antiguo
@@ -371,13 +380,10 @@ function textoRegistrado(a) {
   return a.registrado ? fechaHoraDeTimestamp(a.registrado) : formatoFecha(a.registradoFecha);
 }
 
-/* Solo la hora "14:32" de un timestamp. Vacío si no se guardó la hora. */
+/* Solo la hora "2:32 p. m." de un timestamp. Vacío si no se guardó la hora. */
 function horaDeTimestamp(ts) {
   const d = momentoDe(ts);
-  if (!d) return '';
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
+  return d ? hora12(d) : '';
 }
 
 async function crearHojaCobranza(fechaISO) {
@@ -2058,7 +2064,7 @@ function ajustarTablasFijas() {
   ajustarCorrimiento('.table-wrap');      // Créditos
   ajustarCorrimiento('.cob-tabla-wrap');  // Hoja de cobranza
   ajustarCorrimiento('.prod-tabla-wrap'); // Productos
-  ajustarCorrimiento('.ing-tabla-wrap');  // Ingreso de productos
+  ajustarCorrimiento('.ing-lista-wrap');  // Ingreso de productos
   ajustarCorrimiento('.kdx-tabla-wrap');  // Kardex
   ajustarCorrimiento('.nv-tabla-wrap');   // Notas de venta
 }
@@ -5852,19 +5858,13 @@ function llenarSelectoresProducto() {
     filtro.innerHTML = '<option value="">Todos los productos</option>' + productos.map(opciones).join('');
     filtro.value = antes;
   }
-  const form = $('#ing-producto');
-  if (form) {
-    const antes = form.value;
-    form.innerHTML = '<option value="">— Elige un producto —</option>' + productos.map(opciones).join('');
-    form.value = antes;
-  }
   const venta = $('#nv-producto');
   if (venta) {
     const antes = venta.value;
     venta.innerHTML = '<option value="">— Elige un producto —</option>' + productosActivos().map(opciones).join('');
     venta.value = antes;
   }
-  llenarMotivos($('#ing-tipo') ? $('#ing-tipo').value : 'entrada');
+  llenarMotivos($('#aj-tipo') ? $('#aj-tipo').value : 'ajuste');
 }
 
 /* Los motivos que tienen sentido cambian según lo que pasó: no se le ofrece
@@ -5875,7 +5875,7 @@ const MOTIVOS_POR_TIPO = {
   ajuste: ['inventario'],
 };
 function llenarMotivos(tipo) {
-  const sel = $('#ing-motivo');
+  const sel = $('#aj-motivo');
   if (!sel) return;
   const antes = sel.value;
   const claves = MOTIVOS_POR_TIPO[tipo] || MOTIVOS_POR_TIPO.entrada;
@@ -5951,7 +5951,8 @@ function renderKardex() {
 
 /* Guarda un movimiento. En un ajuste, `cantidad` es lo CONTADO en el almacén y
    aquí se convierte en la diferencia contra el stock que tenía el sistema. */
-async function registrarMovimiento({ productoId, fecha, tipo, cantidad, motivo, documento, nota, notaId }) {
+async function registrarMovimiento({ productoId, fecha, tipo, cantidad, motivo, documento,
+  nota, notaId, loteId, proveedor }) {
   let cant = Number(cantidad) || 0;
   if (tipo === 'ajuste') cant = cant - stockDe(productoId);
   const mov = {
@@ -5964,6 +5965,10 @@ async function registrarMovimiento({ productoId, fecha, tipo, cantidad, motivo, 
     documento: documento || '',
     nota: nota || '',
     notaId: notaId || '',
+    // Todos los productos que llegaron en la misma factura comparten lote:
+    // así el historial los muestra juntos en vez de como filas sueltas.
+    loteId: loteId || '',
+    proveedor: proveedor || '',
     usuario: quienSoy(),
     creado: Date.now(),
   };
@@ -5976,60 +5981,278 @@ async function registrarMovimiento({ productoId, fecha, tipo, cantidad, motivo, 
    Sección aparte, no un modal: es donde entra la mercadería nueva y donde se
    cuadra el conteo físico. El producto en sí (🛒 Productos) es solo catálogo
    y precios; el stock siempre nace en cero y se carga desde aquí, para que
-   nunca haya una cifra de almacén que nadie pueda explicar de dónde salió. */
+   nunca haya una cifra de almacén que nadie pueda explicar de dónde salió.
+
+   Dos formas de trabajar, porque son dos situaciones distintas:
+     · Por factura → llega un camión con una sola factura y muchos productos.
+       Se arma la lista entera y se agrega todo el stock de una vez.
+     · Ajuste o salida → un solo producto: conteo físico, merma o traslado. */
+
+const DOCS_INGRESO = { factura: 'Factura', guia: 'Guía de remisión', boleta: 'Boleta', sin: 'Sin documento' };
+
+let ingModo = 'factura';        // 'factura' | 'ajuste'
+let ingLista = [];              // [{ productoId, cantidad }] de la factura en curso
+let ingComboIndice = -1;
+let ajComboIndice = -1;
+
 function abrirIngresos(productoId = '') {
   llenarSelectoresProducto();
-  resetIngresoForm(productoId);
+  if (!ingLista.length) resetIngresoFactura();
+  resetAjusteForm();
+  if (productoId) {
+    // Viene del botón 📥 de un producto: queda listo para escribir la cantidad
+    ingModo = 'factura';
+    elegirProductoIngreso(productoId);
+  }
+  aplicarModoIngreso();
   renderIngresos();
   mostrarSeccion('ingresos');
+  if (productoId) $('#ing-cantidad').focus();
 }
 
-function resetIngresoForm(productoId = '') {
-  $('#ing-form').reset();
-  $('#ing-fecha').value = hoyISO();
-  $('#ing-producto').value = productoId || '';
-  $('#ing-tipo').value = 'entrada';
-  llenarMotivos('entrada');
-  $('#ing-motivo').value = 'compra';
-  $('#ing-ayuda-ajuste').hidden = true;
-  actualizarPreviewIngreso();
+function aplicarModoIngreso() {
+  $('#ing-vista-factura').hidden = ingModo !== 'factura';
+  $('#ing-vista-ajuste').hidden = ingModo !== 'ajuste';
+  $('#ing-modo-factura').classList.toggle('activo', ingModo === 'factura');
+  $('#ing-modo-ajuste').classList.toggle('activo', ingModo === 'ajuste');
+  $('#ing-modo-factura').setAttribute('aria-selected', String(ingModo === 'factura'));
+  $('#ing-modo-ajuste').setAttribute('aria-selected', String(ingModo === 'ajuste'));
 }
 
-/* Antes de guardar nada, se ve cuánto hay ahora y cuánto va a quedar: es lo
-   primero que pidió el dueño para esta sección. */
-function actualizarPreviewIngreso() {
-  const id = $('#ing-producto').value;
-  const caja = $('#ing-preview');
-  if (!id) { caja.hidden = true; return; }
+/* ---- Buscador de productos: se escribe el nombre y van saliendo debajo ----
+   Es el mismo gesto que ya se usa para buscar clientes al armar una nota, y
+   con un catálogo largo un desplegable se vuelve inservible. */
+function productosQueCoinciden(texto) {
+  const clave = normalizarNombre(texto);
+  if (!clave) return [];
+  return productos
+    .filter(p => normalizarNombre(p.nombre).includes(clave) || normalizarNombre(p.codigo).includes(clave))
+    .slice(0, 8);
+}
+
+function pintarSugerenciasProducto(cajaId, atributo, texto) {
+  const caja = $(cajaId);
+  if (!caja) return;
+  if (!normalizarNombre(texto)) { caja.hidden = true; caja.innerHTML = ''; return; }
+  const encontrados = productosQueCoinciden(texto);
+  if (!encontrados.length) {
+    caja.innerHTML = '<div class="combo-vacio">Ningún producto coincide</div>';
+    caja.hidden = false;
+    return;
+  }
+  caja.innerHTML = encontrados.map((p, i) => {
+    const stock = stockDe(p.id);
+    const bajo = stock <= (Number(p.stockMin) || 0);
+    return `<button type="button" class="combo-item" ${atributo}="${escapeHtml(p.id)}" data-i="${i}">
+      <span class="combo-nombre">${escapeHtml(p.nombre)}</span>
+      <small><code>${escapeHtml(p.codigo || '')}</code> · ${PRESENTACIONES[presentacionDe(p)].um}
+        · stock <b class="${bajo ? 'prod-stock-bajo' : ''}">${stock}</b></small>
+    </button>`;
+  }).join('');
+  caja.hidden = false;
+}
+
+function cerrarSugerenciasProducto(cajaId) {
+  const caja = $(cajaId);
+  if (caja) { caja.hidden = true; caja.innerHTML = ''; }
+}
+
+/* Mueve el resaltado con las flechas del teclado y devuelve el elegido con Enter */
+function navegarSugerencias(ev, cajaId, atributo, indiceActual, alElegir) {
+  const items = Array.from($(cajaId).querySelectorAll(`[${atributo}]`));
+  if (!items.length) return indiceActual;
+  if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    const siguiente = (indiceActual + (ev.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items.forEach((b, i) => b.classList.toggle('activo', i === siguiente));
+    return siguiente;
+  }
+  if (ev.key === 'Enter' && indiceActual >= 0) {
+    ev.preventDefault();
+    alElegir(items[indiceActual].getAttribute(atributo));
+    return -1;
+  }
+  if (ev.key === 'Escape') { cerrarSugerenciasProducto(cajaId); return -1; }
+  return indiceActual;
+}
+
+/* ---- Modo factura: armar la lista ---- */
+function elegirProductoIngreso(id) {
   const p = productoPorId(id);
+  if (!p) return;
+  $('#ing-producto').value = id;
+  $('#ing-buscar').value = p.nombre;
+  cerrarSugerenciasProducto('#ing-sugerencias');
+  ingComboIndice = -1;
+}
+
+function resetIngresoFactura() {
+  ingLista = [];
+  $('#ing-proveedor').value = '';
+  $('#ing-doc-tipo').value = 'factura';
+  $('#ing-doc-numero').value = '';
+  $('#ing-fecha').value = hoyISO();
+  $('#ing-nota').value = '';
+  limpiarBuscadorIngreso();
+  renderListaIngreso();
+}
+
+function limpiarBuscadorIngreso() {
+  $('#ing-buscar').value = '';
+  $('#ing-producto').value = '';
+  $('#ing-cantidad').value = '';
+  cerrarSugerenciasProducto('#ing-sugerencias');
+}
+
+function agregarALista() {
+  const id = $('#ing-producto').value;
+  if (!id) { toast('⚠️ Busca y elige el producto'); $('#ing-buscar').focus(); return; }
+  const cantidad = Number($('#ing-cantidad').value);
+  if (!Number.isFinite(cantidad) || cantidad <= 0) {
+    toast('⚠️ Escribe cuántas unidades entran'); $('#ing-cantidad').focus(); return;
+  }
+  // Si el producto ya está en la lista se suma, en vez de duplicar la línea
+  const yaEsta = ingLista.find(l => l.productoId === id);
+  if (yaEsta) yaEsta.cantidad += cantidad;
+  else ingLista.push({ productoId: id, cantidad });
+
+  limpiarBuscadorIngreso();
+  renderListaIngreso();
+  $('#ing-buscar').focus();
+}
+
+function renderListaIngreso() {
+  const cuerpo = $('#ing-lista-body');
+  if (!cuerpo) return;
+  $('#ing-lista-vacia').hidden = !!ingLista.length;
+  $('.ing-lista-wrap').hidden = !ingLista.length;
+  $('#ing-resumen').hidden = !ingLista.length;
+  $('#btn-ing-guardar').disabled = !ingLista.length;
+
+  cuerpo.innerHTML = ingLista.map((l, i) => {
+    const p = productoPorId(l.productoId);
+    const actual = stockDe(l.productoId);
+    return `<tr>
+      <td class="col-cod"><code>${escapeHtml(p ? p.codigo : '—')}</code></td>
+      <td class="prod-nombre">${escapeHtml(p ? p.nombre : 'producto borrado')}</td>
+      <td class="col-um">${p ? umDe(p) : ''}</td>
+      <td class="col-num">
+        <input type="number" class="input input-mini" data-ing-cant="${i}" min="0.01" step="1" value="${l.cantidad}">
+      </td>
+      <td class="col-num">${actual}</td>
+      <td class="col-num ing-resultante">${actual + l.cantidad}</td>
+      <td class="col-acc"><button type="button" class="btn btn-danger btn-small" data-ing-quitar="${i}" title="Quitar">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  $('#ing-res-productos').textContent = ingLista.length;
+  $('#ing-res-unidades').textContent = ingLista.reduce((s, l) => s + (Number(l.cantidad) || 0), 0);
+}
+
+/* Guarda toda la lista de una vez. Cada producto es su propio movimiento de
+   kardex (así el saldo de cada uno cuadra fila por fila), pero todos comparten
+   el mismo documento y el mismo lote, para poder verlos juntos después. */
+async function guardarIngresoFactura() {
+  if (!puede('productos')) { toast('🔒 No tienes permiso para registrar ingresos'); return; }
+  if (!ingLista.length) { toast('⚠️ Agrega al menos un producto a la lista'); return; }
+
+  const tipoDoc = $('#ing-doc-tipo').value;
+  const numero = $('#ing-doc-numero').value.trim();
+  const proveedor = $('#ing-proveedor').value.trim();
+  const documento = [
+    tipoDoc !== 'sin' ? `${DOCS_INGRESO[tipoDoc]}${numero ? ' ' + numero : ''}` : '',
+    proveedor,
+  ].filter(Boolean).join(' · ');
+  const fecha = $('#ing-fecha').value || hoyISO();
+  const nota = $('#ing-nota').value.trim();
+  const loteId = nuevoId();
+
+  const boton = $('#btn-ing-guardar');
+  boton.disabled = true;
+  try {
+    await Promise.all(ingLista.map(l => registrarMovimiento({
+      productoId: l.productoId,
+      fecha,
+      tipo: 'entrada',
+      cantidad: Number(l.cantidad) || 0,
+      motivo: 'compra',
+      documento,
+      nota,
+      loteId,
+      proveedor,
+    })));
+  } catch (e) {
+    console.error(e);
+    toast(avisoDeFallo(e, '❌ No se pudo agregar el stock. Revisa tu conexión.'));
+    boton.disabled = false;
+    return;
+  }
+  const unidades = ingLista.reduce((s, l) => s + (Number(l.cantidad) || 0), 0);
+  const cuantos = ingLista.length;
+  resetIngresoFactura();
+  renderIngresos();
+  renderProductos();
+  renderKardex();
+  toast(`✅ Stock agregado: ${cuantos} producto${cuantos === 1 ? '' : 's'}, ${unidades} unidad${unidades === 1 ? '' : 'es'}`);
+}
+
+/* ---- Modo ajuste: un solo producto ---- */
+function elegirProductoAjuste(id) {
+  const p = productoPorId(id);
+  if (!p) return;
+  $('#aj-producto').value = id;
+  $('#aj-buscar').value = p.nombre;
+  cerrarSugerenciasProducto('#aj-sugerencias');
+  ajComboIndice = -1;
+  actualizarPreviewAjuste();
+}
+
+function resetAjusteForm() {
+  const f = $('#ing-form-ajuste');
+  if (f) f.reset();
+  $('#aj-fecha').value = hoyISO();
+  $('#aj-producto').value = '';
+  $('#aj-buscar').value = '';
+  $('#aj-tipo').value = 'ajuste';
+  llenarMotivos('ajuste');
+  $('#aj-ayuda-ajuste').hidden = false;
+  $('#aj-preview').hidden = true;
+  cerrarSugerenciasProducto('#aj-sugerencias');
+}
+
+/* Antes de guardar nada, se ve cuánto hay ahora y cuánto va a quedar */
+function actualizarPreviewAjuste() {
+  const id = $('#aj-producto').value;
+  const caja = $('#aj-preview');
+  if (!id) { caja.hidden = true; return; }
   const stockActual = stockDe(id);
-  const tipo = $('#ing-tipo').value;
-  const cantidad = Number($('#ing-cantidad').value) || 0;
+  const tipo = $('#aj-tipo').value;
+  const cantidad = Number($('#aj-cantidad').value) || 0;
   // En un ajuste, la cantidad escrita ES el conteo final, no lo que se suma
   const resultante = tipo === 'ajuste' ? cantidad
     : tipo === 'salida' ? stockActual - cantidad
     : stockActual + cantidad;
-  $('#ing-stock-actual').textContent = stockActual;
-  $('#ing-stock-resultante').textContent = resultante;
-  $('#ing-stock-resultante').closest('.ing-preview-resultado').classList.toggle('ing-preview-negativo', resultante < 0);
+  $('#aj-stock-actual').textContent = stockActual;
+  $('#aj-stock-resultante').textContent = resultante;
+  $('#aj-stock-resultante').closest('.ing-preview-resultado')
+    .classList.toggle('ing-preview-negativo', resultante < 0);
   caja.hidden = false;
-  if (p) caja.dataset.producto = p.nombre;
 }
 
-async function guardarIngresoForm(ev) {
+async function guardarAjusteForm(ev) {
   ev.preventDefault();
-  if (!puede('productos')) { toast('🔒 No tienes permiso para registrar ingresos'); return; }
-  const productoId = $('#ing-producto').value;
-  if (!productoId) { toast('⚠️ Elige el producto'); return; }
-  const tipo = $('#ing-tipo').value;
-  const cantidad = Number($('#ing-cantidad').value);
+  if (!puede('productos')) { toast('🔒 No tienes permiso para registrar movimientos'); return; }
+  const productoId = $('#aj-producto').value;
+  if (!productoId) { toast('⚠️ Busca y elige el producto'); $('#aj-buscar').focus(); return; }
+  const tipo = $('#aj-tipo').value;
+  const cantidad = Number($('#aj-cantidad').value);
   if (!Number.isFinite(cantidad) || (tipo !== 'ajuste' && cantidad <= 0)) {
     toast('⚠️ Escribe una cantidad válida'); return;
   }
   if (tipo === 'ajuste' && cantidad < 0) { toast('⚠️ El conteo físico no puede ser negativo'); return; }
 
   const p = productoPorId(productoId);
-  // No se deja dejar el stock en negativo: casi siempre es un error de tipeo
+  // No se deja el stock en negativo sin avisar: casi siempre es un error de tipeo
   if (tipo === 'salida' && cantidad > stockDe(productoId)) {
     if (!confirm(`Solo hay ${stockDe(productoId)} de "${p.nombre}" y estás sacando ${cantidad}.\n\n` +
       '¿Registrar igual y dejar el stock en negativo?')) return;
@@ -6038,65 +6261,98 @@ async function guardarIngresoForm(ev) {
   try {
     await registrarMovimiento({
       productoId,
-      fecha: $('#ing-fecha').value || hoyISO(),
+      fecha: $('#aj-fecha').value || hoyISO(),
       tipo,
       cantidad,
-      motivo: $('#ing-motivo').value,
-      documento: $('#ing-documento').value.trim(),
-      nota: $('#ing-nota').value.trim(),
+      motivo: $('#aj-motivo').value,
+      documento: '',
+      nota: $('#aj-nota').value.trim(),
     });
   } catch (e) {
     console.error(e);
-    toast(avisoDeFallo(e, '❌ No se pudo registrar el ingreso. Revisa tu conexión.'));
+    toast(avisoDeFallo(e, '❌ No se pudo registrar el movimiento. Revisa tu conexión.'));
     return;
   }
-  toast(`✅ Ingreso registrado. Stock de ${p ? p.nombre : 'este producto'}: ${stockDe(productoId)}`);
-  resetIngresoForm();
+  toast(`✅ Listo. Stock de ${p ? p.nombre : 'este producto'}: ${stockDe(productoId)}`);
+  resetAjusteForm();
   renderIngresos();
   renderProductos();
   renderKardex();
 }
 
-/* Historial de esta sección: solo lo que se anotó a mano aquí (entradas,
-   ajustes y salidas manuales), sin las salidas por venta, que ya se ven en el
-   Kardex completo y no son parte de "lo que registraste". */
+/* ---- Historial ----
+   Se agrupa por lote: un camión con su factura se ve como UNA entrada con sus
+   productos debajo, no como diez filas sueltas que hay que ir juntando a ojo. */
 function movimientosIngresados() {
-  return kardexConSaldo()
-    .filter(m => m.motivo !== 'venta')
-    .reverse();
+  return kardexConSaldo().filter(m => m.motivo !== 'venta').reverse();
+}
+
+function gruposDeIngreso() {
+  const grupos = [];
+  const porLote = new Map();
+  for (const m of movimientosIngresados()) {
+    const clave = m.loteId || m.id;   // sin lote, cada movimiento es su propio grupo
+    if (!porLote.has(clave)) {
+      const g = { clave, fecha: m.fecha, creado: m.creado, documento: m.documento || '',
+        proveedor: m.proveedor || '', nota: m.nota || '', usuario: m.usuario || '',
+        tipo: m.tipo, motivo: m.motivo, movimientos: [] };
+      porLote.set(clave, g);
+      grupos.push(g);
+    }
+    porLote.get(clave).movimientos.push(m);
+  }
+  return grupos;
 }
 
 function renderIngresos() {
-  const cuerpo = $('#ing-body');
-  if (!cuerpo) return;
-  const lista = movimientosIngresados().slice(0, 100);
+  const cont = $('#ing-historial');
+  if (!cont) return;
+  const grupos = gruposDeIngreso().slice(0, 40);
 
   const hoy = hoyISO();
-  const deHoy = lista.filter(m => m.fecha === hoy);
+  const deHoy = grupos.filter(g => g.fecha === hoy);
+  const unidadesHoy = deHoy.reduce((s, g) =>
+    s + g.movimientos.reduce((t, m) => t + Math.max(0, cantidadConSigno(m)), 0), 0);
   $('#ing-chips').innerHTML = [
-    `<span class="chip">📄 ${lista.length} movimiento${lista.length === 1 ? '' : 's'}</span>`,
-    `<span class="chip chip-entrada">📅 Hoy: ${deHoy.length}</span>`,
+    `<span class="chip">📄 ${grupos.length} registro${grupos.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip chip-entrada">📅 Hoy: ${deHoy.length} · ${unidadesHoy} unidades</span>`,
   ].join('');
 
-  $('#ing-vacio').hidden = !!lista.length;
-  $('.ing-tabla-wrap').hidden = !lista.length;
-  if (!lista.length) { cuerpo.innerHTML = ''; return; }
+  $('#ing-vacio').hidden = !!grupos.length;
+  if (!grupos.length) { cont.innerHTML = ''; return; }
 
-  cuerpo.innerHTML = lista.map(m => {
-    const p = productoPorId(m.productoId);
-    const c = cantidadConSigno(m);
-    const t = TIPOS_KARDEX[m.tipo] || TIPOS_KARDEX.entrada;
-    return `<tr>
-      <td class="kdx-fecha">${formatoFecha(m.fecha)}<small>${horaDeTimestamp(m.creado) || ''}</small></td>
-      <td class="col-cod"><code>${escapeHtml(p ? p.codigo : '—')}</code></td>
-      <td>${escapeHtml(p ? p.nombre : 'producto borrado')}</td>
-      <td><span class="kdx-tipo kdx-${m.tipo}">${t.icono} ${t.nombre}</span></td>
-      <td>${escapeHtml(MOTIVOS_KARDEX[m.motivo] || '—')}${m.nota ? `<small>${escapeHtml(m.nota)}</small>` : ''}</td>
-      <td>${escapeHtml(m.documento || '—')}</td>
-      <td class="col-num">${c > 0 ? '+' : ''}${c}</td>
-      <td class="col-num kdx-saldo">${m.saldo}</td>
-      <td>${escapeHtml(m.usuario || '—')}</td>
-    </tr>`;
+  cont.innerHTML = grupos.map(g => {
+    const t = TIPOS_KARDEX[g.tipo] || TIPOS_KARDEX.entrada;
+    const unidades = g.movimientos.reduce((s, m) => s + Math.abs(cantidadConSigno(m)), 0);
+    const esLote = g.movimientos.length > 1;
+    const titulo = g.documento
+      ? escapeHtml(g.documento)
+      : `${t.icono} ${escapeHtml(MOTIVOS_KARDEX[g.motivo] || t.nombre)}`;
+    return `<div class="ing-grupo">
+      <div class="ing-grupo-cab">
+        <div class="ing-grupo-tit">
+          <strong>${titulo}</strong>
+          <span class="ing-grupo-meta">${formatoFecha(g.fecha)} · ${horaDeTimestamp(g.creado) || ''}
+            · ${escapeHtml(g.usuario || '—')}</span>
+        </div>
+        <span class="chip ${g.tipo === 'entrada' ? 'chip-entrada' : 'chip-salida'}">
+          ${esLote ? `${g.movimientos.length} productos · ` : ''}${unidades} unidad${unidades === 1 ? '' : 'es'}
+        </span>
+      </div>
+      ${g.nota ? `<p class="ing-grupo-nota">📝 ${escapeHtml(g.nota)}</p>` : ''}
+      <table class="ing-grupo-tabla">
+        <tbody>${g.movimientos.map(m => {
+          const p = productoPorId(m.productoId);
+          const c = cantidadConSigno(m);
+          return `<tr>
+            <td class="col-cod"><code>${escapeHtml(p ? p.codigo : '—')}</code></td>
+            <td>${escapeHtml(p ? p.nombre : 'producto borrado')}</td>
+            <td class="col-num ${c >= 0 ? 'kdx-entrada' : 'kdx-salida'}">${c > 0 ? '+' : ''}${c}</td>
+            <td class="col-num kdx-saldo" title="Stock que quedó">${m.saldo}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
   }).join('');
 }
 
@@ -6948,14 +7204,74 @@ function inicializarEventos() {
   // ────────── Ingreso de productos ──────────
   $('#btn-ingresos').addEventListener('click', () => abrirIngresos());
   $('#nav-ingresos').addEventListener('click', () => abrirIngresos());
-  $('#ing-form').addEventListener('submit', guardarIngresoForm);
-  $('#ing-producto').addEventListener('change', actualizarPreviewIngreso);
-  $('#ing-cantidad').addEventListener('input', actualizarPreviewIngreso);
-  $('#ing-tipo').addEventListener('change', () => {
-    const tipo = $('#ing-tipo').value;
-    $('#ing-ayuda-ajuste').hidden = tipo !== 'ajuste';
+  $('#ing-modo-factura').addEventListener('click', () => { ingModo = 'factura'; aplicarModoIngreso(); });
+  $('#ing-modo-ajuste').addEventListener('click', () => { ingModo = 'ajuste'; aplicarModoIngreso(); });
+
+  // Buscador de productos del ingreso por factura
+  $('#ing-buscar').addEventListener('input', ev => {
+    $('#ing-producto').value = '';
+    ingComboIndice = -1;
+    pintarSugerenciasProducto('#ing-sugerencias', 'data-ing-elegir', ev.target.value);
+  });
+  $('#ing-buscar').addEventListener('keydown', ev => {
+    ingComboIndice = navegarSugerencias(ev, '#ing-sugerencias', 'data-ing-elegir',
+      ingComboIndice, elegirProductoIngreso);
+  });
+  $('#ing-sugerencias').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-ing-elegir]');
+    if (b) { elegirProductoIngreso(b.dataset.ingElegir); $('#ing-cantidad').focus(); }
+  });
+  $('#btn-ing-agregar').addEventListener('click', agregarALista);
+  $('#ing-cantidad').addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); agregarALista(); }
+  });
+  $('#ing-lista-body').addEventListener('input', ev => {
+    const cant = ev.target.closest('[data-ing-cant]');
+    if (!cant) return;
+    const l = ingLista[Number(cant.dataset.ingCant)];
+    if (l) { l.cantidad = Number(cant.value) || 0; renderListaIngreso(); }
+  });
+  $('#ing-lista-body').addEventListener('click', ev => {
+    const quitar = ev.target.closest('[data-ing-quitar]');
+    if (quitar) { ingLista.splice(Number(quitar.dataset.ingQuitar), 1); renderListaIngreso(); }
+  });
+  $('#btn-ing-limpiar').addEventListener('click', () => {
+    if (ingLista.length && !confirm('¿Vaciar la lista de productos?')) return;
+    resetIngresoFactura();
+  });
+  $('#btn-ing-guardar').addEventListener('click', guardarIngresoFactura);
+
+  // Buscador y formulario del ajuste / salida
+  $('#aj-buscar').addEventListener('input', ev => {
+    $('#aj-producto').value = '';
+    ajComboIndice = -1;
+    $('#aj-preview').hidden = true;
+    pintarSugerenciasProducto('#aj-sugerencias', 'data-aj-elegir', ev.target.value);
+  });
+  $('#aj-buscar').addEventListener('keydown', ev => {
+    ajComboIndice = navegarSugerencias(ev, '#aj-sugerencias', 'data-aj-elegir',
+      ajComboIndice, elegirProductoAjuste);
+  });
+  $('#aj-sugerencias').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-aj-elegir]');
+    if (b) { elegirProductoAjuste(b.dataset.ajElegir); $('#aj-cantidad').focus(); }
+  });
+  $('#ing-form-ajuste').addEventListener('submit', guardarAjusteForm);
+  $('#aj-cantidad').addEventListener('input', actualizarPreviewAjuste);
+  $('#aj-tipo').addEventListener('change', () => {
+    const tipo = $('#aj-tipo').value;
+    $('#aj-ayuda-ajuste').hidden = tipo !== 'ajuste';
     llenarMotivos(tipo);
-    actualizarPreviewIngreso();
+    actualizarPreviewAjuste();
+  });
+  // Al hacer clic fuera, los desplegables de sugerencias se cierran
+  document.addEventListener('click', ev => {
+    if (!ev.target.closest('#ing-buscar') && !ev.target.closest('#ing-sugerencias')) {
+      cerrarSugerenciasProducto('#ing-sugerencias');
+    }
+    if (!ev.target.closest('#aj-buscar') && !ev.target.closest('#aj-sugerencias')) {
+      cerrarSugerenciasProducto('#aj-sugerencias');
+    }
   });
 
   // ────────── Kardex ──────────
