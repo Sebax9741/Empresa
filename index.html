@@ -1145,75 +1145,94 @@
       </button>
     </div>
 
-    <!-- ═══ Modo 1: ingreso por factura (varios productos) ═══ -->
+    <!-- ═══ Modo 1: ingreso por factura (varios productos) ═══
+         Todo va en un solo recuadro, armado como el comprobante que se está
+         copiando: cabecera con el documento, cuerpo con el detalle y pie con
+         los totales y el botón. Así se llena mirando la factura de arriba
+         abajo, sin saltar entre tarjetas sueltas. -->
     <div id="ing-vista-factura">
-      <div class="nv-bloque">
-        <h3 class="nv-bloque-tit">1 · Documento de la compra</h3>
-        <div class="field-row prod-fila-3">
-          <label class="field"><span>Proveedor</span>
-            <input type="text" id="ing-proveedor" class="input" placeholder="Ej: Distribuidora Ramos S.A.C."></label>
-          <label class="field"><span>Tipo de documento</span>
-            <select id="ing-doc-tipo" class="input">
-              <option value="factura">Factura</option>
-              <option value="guia">Guía de remisión</option>
-              <option value="boleta">Boleta</option>
-              <option value="sin">Sin documento</option>
-            </select></label>
-          <label class="field"><span>N.º de documento</span>
-            <input type="text" id="ing-doc-numero" class="input" placeholder="Ej: F001-1234"></label>
-        </div>
-        <div class="field-row">
-          <label class="field"><span>Fecha de ingreso *</span>
-            <input type="date" id="ing-fecha" class="input" required></label>
-          <label class="field"><span>Nota <small>opcional</small></span>
-            <input type="text" id="ing-nota" class="input" placeholder="Ej: llegó con 2 sacos rotos"></label>
-        </div>
-      </div>
+      <article class="doc">
+        <header class="doc-cab">
+          <div class="doc-cab-id">
+            <span class="doc-cab-etq">Ingreso a almacén</span>
+            <strong id="ing-cab-doc">Factura —</strong>
+            <span class="doc-cab-sub" id="ing-cab-proveedor">Sin proveedor</span>
+          </div>
+          <div class="doc-cab-meta">
+            <div><span>Fecha de ingreso</span><strong id="ing-cab-fecha">—</strong></div>
+            <div><span>Registra</span><strong id="ing-cab-usuario">—</strong></div>
+            <div><span>Productos</span><strong id="ing-cab-items">0</strong></div>
+          </div>
+        </header>
 
-      <div class="nv-bloque">
-        <h3 class="nv-bloque-tit">2 · Productos que llegaron</h3>
-        <div class="ing-agregar">
-          <label class="field ing-ag-prod"><span>Buscar producto</span>
-            <div class="combo-wrap">
-              <input type="text" id="ing-buscar" class="input" autocomplete="off"
-                     placeholder="Escribe el nombre o el código del producto…">
-              <div id="ing-sugerencias" class="combo-sugerencias" hidden></div>
-            </div>
-            <input type="hidden" id="ing-producto">
-          </label>
-          <label class="field ing-ag-cant"><span>Cantidad</span>
-            <input type="number" id="ing-cantidad" class="input" min="0.01" step="1" placeholder="0"></label>
-          <button type="button" id="btn-ing-agregar" class="btn btn-primary btn-small">➕ Agregar a la lista</button>
-        </div>
+        <section class="doc-parte">
+          <h3 class="doc-parte-tit"><span class="doc-paso">1</span>Datos del documento</h3>
+          <div class="doc-campos">
+            <label class="field doc-c-ancho"><span>Proveedor</span>
+              <input type="text" id="ing-proveedor" class="input" placeholder="Ej: Distribuidora Ramos S.A.C."></label>
+            <label class="field"><span>Tipo de documento</span>
+              <select id="ing-doc-tipo" class="input">
+                <option value="factura">Factura</option>
+                <option value="guia">Guía de remisión</option>
+                <option value="boleta">Boleta</option>
+                <option value="sin">Sin documento</option>
+              </select></label>
+            <label class="field"><span>N.º de documento</span>
+              <input type="text" id="ing-doc-numero" class="input" placeholder="Ej: F001-1234"></label>
+            <label class="field"><span>Fecha de ingreso *</span>
+              <input type="date" id="ing-fecha" class="input" required></label>
+            <label class="field doc-c-resto"><span>Nota <small>opcional</small></span>
+              <input type="text" id="ing-nota" class="input" placeholder="Ej: llegó con 2 sacos rotos"></label>
+          </div>
+        </section>
 
-        <div class="table-wrap ing-lista-wrap">
-          <table class="prod-tabla" id="ing-lista-tabla">
-            <thead>
-              <tr>
-                <th class="col-cod">Código</th>
-                <th>Producto</th>
-                <th class="col-um">U.M.</th>
-                <th class="col-num">Cantidad</th>
-                <th class="col-num">Stock actual</th>
-                <th class="col-num">Stock resultante</th>
-                <th class="col-acc"></th>
-              </tr>
-            </thead>
-            <tbody id="ing-lista-body"></tbody>
-          </table>
-        </div>
-        <p class="sec-vacio" id="ing-lista-vacia">Busca un producto arriba y agrégalo a la lista.</p>
+        <section class="doc-parte">
+          <h3 class="doc-parte-tit"><span class="doc-paso">2</span>Detalle de la mercadería</h3>
+          <div class="ing-agregar">
+            <label class="field ing-ag-prod"><span>Buscar producto</span>
+              <div class="combo-wrap">
+                <input type="text" id="ing-buscar" class="input" autocomplete="off"
+                       placeholder="Escribe el nombre o el código del producto…">
+                <div id="ing-sugerencias" class="combo-sugerencias" hidden></div>
+              </div>
+              <input type="hidden" id="ing-producto">
+            </label>
+            <label class="field ing-ag-cant"><span>Cantidad</span>
+              <input type="number" id="ing-cantidad" class="input" min="0.01" step="1" placeholder="0"></label>
+            <button type="button" id="btn-ing-agregar" class="btn btn-primary btn-small">Agregar a la lista</button>
+          </div>
 
-        <div class="ing-resumen" id="ing-resumen" hidden>
-          <div class="ing-resumen-dato"><span>Productos distintos</span><strong id="ing-res-productos">0</strong></div>
-          <div class="ing-resumen-dato"><span>Unidades que entran</span><strong id="ing-res-unidades">0</strong></div>
-        </div>
+          <div class="table-wrap ing-lista-wrap">
+            <table class="prod-tabla doc-tabla" id="ing-lista-tabla">
+              <thead>
+                <tr>
+                  <th class="col-item">Ítem</th>
+                  <th class="col-cod">Código</th>
+                  <th>Producto</th>
+                  <th class="col-um">U.M.</th>
+                  <th class="col-num">Cantidad</th>
+                  <th class="col-num">Stock actual</th>
+                  <th class="col-num">Stock resultante</th>
+                  <th class="col-acc"></th>
+                </tr>
+              </thead>
+              <tbody id="ing-lista-body"></tbody>
+            </table>
+          </div>
+          <p class="doc-vacio" id="ing-lista-vacia">Busca un producto arriba y agrégalo a la lista.</p>
+        </section>
 
-        <div class="modal-buttons ing-acciones">
-          <button type="button" id="btn-ing-limpiar" class="btn btn-secondary">Vaciar lista</button>
-          <button type="button" id="btn-ing-guardar" class="btn btn-primary">📦 Agregar stock</button>
-        </div>
-      </div>
+        <footer class="doc-pie">
+          <div class="ing-resumen" id="ing-resumen" hidden>
+            <div class="ing-resumen-dato"><span>Productos distintos</span><strong id="ing-res-productos">0</strong></div>
+            <div class="ing-resumen-dato"><span>Unidades que entran</span><strong id="ing-res-unidades">0</strong></div>
+          </div>
+          <div class="doc-pie-botones">
+            <button type="button" id="btn-ing-limpiar" class="btn btn-secondary">Vaciar lista</button>
+            <button type="button" id="btn-ing-guardar" class="btn btn-primary">Agregar stock</button>
+          </div>
+        </footer>
+      </article>
     </div>
 
     <!-- ═══ Modo 2: ajuste o salida (un solo producto) ═══ -->

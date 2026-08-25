@@ -2813,6 +2813,139 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .ing-modo-txt small { display: block; font-weight: 500; font-size: 0.78rem; color: var(--muted); }
 .ing-modo.activo .ing-modo-txt small { color: var(--primary-dark); }
 
+/* ══ Comprobante: un solo recuadro con cabecera, cuerpo y pie ══
+   Se usa donde se llena un documento (el ingreso por factura). En vez de
+   varias tarjetas sueltas, una sola hoja que se lee de arriba abajo. */
+.doc {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+.doc-cab {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.2rem 2rem;
+  flex-wrap: wrap;
+  background: var(--side);
+  color: #fff;
+  padding: 1rem 1.4rem;
+}
+.doc-cab-etq {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--side-text);
+  font-weight: 700;
+}
+.doc-cab-id strong {
+  display: block;
+  font-size: 1.35rem;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.doc-cab-sub { font-size: 0.84rem; color: var(--side-text); }
+.doc-cab-meta { display: flex; gap: 2rem; flex-wrap: wrap; }
+.doc-cab-meta > div { display: flex; flex-direction: column; gap: 0.15rem; }
+.doc-cab-meta span {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--side-text);
+  font-weight: 700;
+}
+.doc-cab-meta strong { font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+
+/* Cada parte del documento va separada por una línea, como en una hoja impresa */
+.doc-parte { padding: 1.1rem 1.4rem; }
+.doc-parte + .doc-parte { border-top: 1px solid var(--border); }
+.doc-parte-tit {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.9rem;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  font-weight: 800;
+}
+.doc-paso {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--side);
+  color: #fff;
+  font-size: 0.72rem;
+  letter-spacing: 0;
+}
+/* Rejilla de campos: los anchos siguen el peso del dato, no el orden */
+.doc-campos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.2rem 1rem;
+}
+.doc-campos .field { margin-bottom: 0.6rem; }
+.doc-c-ancho { grid-column: span 2; }
+.doc-c-resto { grid-column: span 3; }
+
+/* Dentro de la hoja la tabla no se pega al borde de la pantalla */
+.doc-tabla th { position: static; }
+.doc-tabla .col-item { width: 3.2rem; text-align: center; color: var(--muted); }
+.doc-tabla td.col-item { font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+
+/* Quitar una línea es corriente mientras se arma el detalle: va discreto, en
+   gris, y solo se pone rojo al apuntarlo. */
+.doc-quitar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.doc-quitar:hover, .doc-quitar:focus-visible {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--card);
+}
+
+.doc-vacio {
+  margin: 0;
+  padding: 1.8rem 1rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.doc-pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  background: var(--bg-tint);
+  padding: 0.9rem 1.4rem;
+}
+.doc-pie-botones { display: flex; gap: 0.6rem; margin-left: auto; }
+
 /* Buscador + cantidad + botón, en una sola línea */
 .ing-agregar { display: flex; align-items: flex-end; gap: 0.7rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
 .ing-agregar .field { margin: 0; }
@@ -2844,6 +2977,16 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .ing-resumen-dato span { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
 .ing-resumen-dato strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
 .ing-acciones { justify-content: flex-end; }
+/* En el pie del comprobante el resumen ya está sobre fondo tintado: va suelto,
+   pegado a la izquierda, con los botones al otro extremo. */
+.doc-pie .ing-resumen {
+  background: none;
+  padding: 0;
+  margin: 0;
+  gap: 2rem;
+  justify-content: flex-start;
+}
+.doc-pie .ing-resumen-dato { align-items: flex-start; }
 
 /* Historial agrupado: un camión con su factura es UNA entrada con sus
    productos debajo, no diez filas sueltas que hay que juntar a ojo. */
@@ -2877,4 +3020,10 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 @media (max-width: 900px) {
   .ing-ag-prod, .ing-ag-cant { width: 100%; min-width: 0; }
   .ing-resumen { justify-content: space-between; gap: 1rem; }
+  .doc-campos { grid-template-columns: 1fr; }
+  .doc-c-ancho, .doc-c-resto { grid-column: auto; }
+  .doc-cab, .doc-parte, .doc-pie { padding-left: 1rem; padding-right: 1rem; }
+  .doc-cab-meta { gap: 1.2rem; }
+  .doc-pie-botones { width: 100%; }
+  .doc-pie-botones .btn { flex: 1; }
 }

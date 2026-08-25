@@ -6128,6 +6128,25 @@ function resetIngresoFactura() {
   renderListaIngreso();
 }
 
+/* La cabecera del recuadro repite, en grande, lo que se va escribiendo abajo:
+   el documento, el proveedor y la fecha. Sirve de comprobación de un vistazo,
+   igual que mirar el encabezado de la factura de papel. */
+function actualizarCabeceraIngreso() {
+  const cab = $('#ing-cab-doc');
+  if (!cab) return;
+  const tipo = $('#ing-doc-tipo').value;
+  const numero = $('#ing-doc-numero').value.trim();
+  cab.textContent = tipo === 'sin'
+    ? 'Sin documento'
+    : `${DOCS_INGRESO[tipo]} ${numero || '—'}`;
+
+  const proveedor = $('#ing-proveedor').value.trim();
+  $('#ing-cab-proveedor').textContent = proveedor || 'Sin proveedor';
+  $('#ing-cab-fecha').textContent = formatoFecha($('#ing-fecha').value) || '—';
+  $('#ing-cab-usuario').textContent = quienSoy();
+  $('#ing-cab-items').textContent = ingLista.length;
+}
+
 function limpiarBuscadorIngreso() {
   $('#ing-buscar').value = '';
   $('#ing-producto').value = '';
@@ -6164,6 +6183,7 @@ function renderListaIngreso() {
     const p = productoPorId(l.productoId);
     const actual = stockDe(l.productoId);
     return `<tr>
+      <td class="col-item">${i + 1}</td>
       <td class="col-cod"><code>${escapeHtml(p ? p.codigo : '—')}</code></td>
       <td class="prod-nombre">${escapeHtml(p ? p.nombre : 'producto borrado')}</td>
       <td class="col-um">${p ? umDe(p) : ''}</td>
@@ -6172,12 +6192,14 @@ function renderListaIngreso() {
       </td>
       <td class="col-num">${actual}</td>
       <td class="col-num ing-resultante">${actual + l.cantidad}</td>
-      <td class="col-acc"><button type="button" class="btn btn-danger btn-small" data-ing-quitar="${i}" title="Quitar">✕</button></td>
+      <td class="col-acc"><button type="button" class="doc-quitar" data-ing-quitar="${i}"
+        title="Quitar del detalle" aria-label="Quitar del detalle">✕</button></td>
     </tr>`;
   }).join('');
 
   $('#ing-res-productos').textContent = ingLista.length;
   $('#ing-res-unidades').textContent = ingLista.reduce((s, l) => s + (Number(l.cantidad) || 0), 0);
+  actualizarCabeceraIngreso();
 }
 
 /* Guarda toda la lista de una vez. Cada producto es su propio movimiento de
@@ -6338,6 +6360,7 @@ function gruposDeIngreso() {
 function renderIngresos() {
   const cont = $('#ing-historial');
   if (!cont) return;
+  actualizarCabeceraIngreso();
   const grupos = gruposDeIngreso().slice(0, 40);
 
   const hoy = hoyISO();
@@ -7298,6 +7321,10 @@ function inicializarEventos() {
   $('#ing-sugerencias').addEventListener('click', ev => {
     const b = ev.target.closest('[data-ing-elegir]');
     if (b) { elegirProductoIngreso(b.dataset.ingElegir); $('#ing-cantidad').focus(); }
+  });
+  // La cabecera del comprobante se va llenando conforme se escribe
+  ['#ing-proveedor', '#ing-doc-tipo', '#ing-doc-numero', '#ing-fecha'].forEach(sel => {
+    $(sel).addEventListener('input', actualizarCabeceraIngreso);
   });
   $('#btn-ing-agregar').addEventListener('click', agregarALista);
   $('#ing-cantidad').addEventListener('keydown', ev => {
