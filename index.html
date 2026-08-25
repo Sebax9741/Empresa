@@ -421,6 +421,11 @@
       <h2 id="form-title">Nuevo crédito</h2>
       <input type="hidden" id="f-id">
 
+      <!-- En computadora va a dos columnas: los datos del crédito a la
+           izquierda y los pagos con la boleta a la derecha, para verlo todo de
+           una vez sin bajar con la rueda. En celular se apila como siempre. -->
+      <div class="form-cuerpo">
+      <div class="form-col">
       <label class="field">
         <span>Nro de boleta *</span>
         <input type="text" id="f-boleta" class="input" required inputmode="numeric" placeholder="Ej: 001234">
@@ -491,6 +496,9 @@
         </label>
       </div>
 
+      </div>
+
+      <div class="form-col">
       <!-- Solo al editar: abonos "a cuenta" y saldo -->
       <div class="field abonos-box" id="abonos-box" hidden>
         <div class="saldo-linea">
@@ -550,6 +558,8 @@
           <img id="foto-preview" class="foto-preview" alt="Vista previa de la boleta">
           <button type="button" id="btn-quitar-foto" class="btn btn-danger btn-small">Quitar foto</button>
         </div>
+      </div>
+      </div>
       </div>
 
       <!-- Motivo por el que no se pudo guardar (queda a la vista hasta corregirlo) -->
@@ -623,11 +633,16 @@
              más, es la llave maestra, así que va aparte del equipo. -->
         <div class="usr-dueno" id="usr-dueno" hidden>
           <div class="usr-dueno-cab">
-            <span class="usr-dueno-etq">Cuenta de dueño</span>
-            <strong id="usr-dueno-nombre">—</strong>
+            <div>
+              <span class="usr-dueno-etq">Cuenta de dueño</span>
+              <strong id="usr-dueno-nombre">—</strong>
+            </div>
+            <button type="button" class="btn btn-secondary btn-small" id="btn-dueno-renombrar">✏️ Cambiar nombre</button>
           </div>
           <p class="usr-dueno-txt">Con esta cuenta se dio de alta el negocio. Tiene todos los permisos
-            y <strong>no se puede quitar</strong>: es la llave de respaldo para volver a entrar.</p>
+            y <strong>no se puede quitar</strong>: es la llave de respaldo para volver a entrar.
+            El nombre es con el que <strong>firma en todo el sistema</strong>, también en lo anotado
+            hace meses.</p>
         </div>
 
         <h3 class="usr-tit">Usuarios del equipo</h3>

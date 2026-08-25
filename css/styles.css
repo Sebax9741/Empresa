@@ -1000,6 +1000,17 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 .modal h2 { margin: 0 0 1.1rem; font-size: 1.2rem; font-weight: 700; letter-spacing: -0.01em; }
 
+/* El formulario del crédito en computadora: dos columnas, para no tener que
+   bajar con la rueda hasta los pagos y la foto. */
+.form-cuerpo { display: grid; grid-template-columns: 1fr; gap: 0 1.6rem; }
+.form-col { min-width: 0; }
+@media (min-width: 900px) {
+  #modal-form { width: min(980px, calc(100vw - 3rem)); }
+  .form-cuerpo { grid-template-columns: 1fr 1fr; }
+  /* La segunda columna arranca a la altura de la primera aunque tenga menos */
+  .form-col > :last-child { margin-bottom: 0; }
+}
+
 .field { display: block; margin-bottom: 0.9rem; }
 .field > span, .field-label {
   display: block;
@@ -1548,7 +1559,8 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   color: var(--muted);
   font-weight: 800;
 }
-.usr-dueno-cab strong { font-size: 1.02rem; }
+.usr-dueno-cab { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
+.usr-dueno-cab strong { display: block; font-size: 1.02rem; }
 .usr-dueno-txt { margin: 0.35rem 0 0; font-size: 0.83rem; color: var(--muted); }
 
 .usr-tit {
@@ -1865,6 +1877,35 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   .info-col-cobro .info-cobro { margin-top: 0; padding-top: 0; border-top: none; }
   /* La columna del cobro es angosta: monto y fecha, uno debajo del otro */
   .info-col-cobro .field-row { grid-template-columns: 1fr; gap: 0; }
+}
+
+/* ---- La ficha se ajusta a lo que hay: sin huecos reservados ----
+   Un crédito pagado no lleva cobro; muchos no llevan foto. En vez de dejar la
+   columna vacía, las que quedan se reparten el ancho y la ficha se estrecha. */
+@media (min-width: 720px) and (min-height: 600px) {
+  .modal-info.sin-foto .info-col-foto,
+  .modal-info.sin-cobro .info-col-cobro { display: none; }
+
+  /* Falta una de las dos: datos y la que queda, a la mitad cada una */
+  .modal-info.sin-foto .info-cuerpo { grid-template-areas: "datos cobro"; }
+  .modal-info.sin-cobro .info-cuerpo { grid-template-areas: "datos foto"; }
+
+  /* Faltan las dos (pagado y sin foto): una sola columna, y la ficha se
+     estrecha en vez de dejar media pantalla vacía */
+  .modal-info.sin-foto.sin-cobro { width: min(560px, calc(100vw - 1.5rem)); }
+  .modal-info.sin-foto.sin-cobro .info-cuerpo {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "datos";
+  }
+}
+@media (min-width: 1000px) and (min-height: 600px) {
+  .modal-info.sin-foto, .modal-info.sin-cobro { width: min(920px, calc(100vw - 2rem)); }
+  .modal-info.sin-foto .info-cuerpo,
+  .modal-info.sin-cobro .info-cuerpo { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  /* Sin la columna del cobro al lado, la boleta puede lucirse más grande */
+  .modal-info.sin-cobro .info-foto { max-height: 56vh; }
+  /* Y sin foto, el cobro recupera sus dos campos en fila */
+  .modal-info.sin-foto .info-col-cobro .field-row { grid-template-columns: 1fr 1fr; gap: 0 0.8rem; }
 }
 .info-cab { display: flex; align-items: flex-start; gap: 0.7rem; justify-content: space-between; }
 .info-cab-txt { min-width: 0; }

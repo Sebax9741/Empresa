@@ -185,6 +185,38 @@ function esMio(quien) {
   return quien === (yo.nombre || '') || quien === (yo.usuario || '');
 }
 
+/* Cómo se enseña una firma guardada. Lo anotado hace meses lleva el usuario
+   con el que se entraba entonces (un correo entero, por ejemplo); aquí se
+   traduce al nombre visible de esa persona, así todo el historial se lee
+   igual sin tener que tocar ni un dato ya guardado. */
+let equipo = {};          // usuario de acceso → cómo lo muestra el sistema
+function mostrarComo(quien) {
+  const q = String(quien || '').trim();
+  return equipo[q] || q;
+}
+
+async function cargarEquipo() {
+  if (!modoNube || !ownerUid) return;
+  try {
+    const snap = await fb.getDocs(fb.collection(fb.db, 'usuarios', ownerUid, 'miembros'));
+    const mapa = {};
+    snap.docs.forEach(d => {
+      const m = d.data();
+      if (!m || !m.nombre) return;
+      // Se traduce tanto el usuario de acceso (lo firmado hace meses llevaba el
+      // correo entero) como los nombres con los que firmó antes de cambiárselo.
+      if (m.usuario) mapa[m.usuario] = m.nombre;
+      (m.nombresPrevios || []).forEach(viejo => { if (viejo) mapa[viejo] = m.nombre; });
+    });
+    equipo = mapa;
+    if (fb.auth.currentUser) {
+      guardarAccesoLocal(fb.auth.currentUser.uid, { ownerUid, yo, equipo });
+    }
+  } catch (e) {
+    // Sin conexión se sigue con el mapa que hubiera guardado el dispositivo
+  }
+}
+
 /* ====== Despachos de pedidos ======
    Cada despacho es UN pedido / una boleta que sale a reparto: cliente,
    Nº de comprobante, monto, fecha de salida y los repartidores que la llevan.
@@ -610,7 +642,7 @@ function hojaCobranza(lista, fechaISO, codigoHoja = '') {
         metodo,
         totalCredito: Number(c.monto) || 0,
         saldo: saldoDe(c),
-        cobradoPor: a.registradoPor || '',
+        cobradoPor: mostrarComo(a.registradoPor) || '',
         firma: a.firma || '',
         registrado: a.registrado || 0,
         fechaEmision: c.fecha,
@@ -1394,6 +1426,7 @@ async function sesionIniciada(usuario) {
     }
     yo = miDoc.data();
     guardarAccesoLocal(usuario.uid, { ownerUid, yo });   // para poder entrar sin internet
+    cargarEquipo();   // los nombres del equipo, para leer las firmas antiguas
   } catch (e) {
     console.error('Error al iniciar sesión:', e);
     // Sin internet, la copia de este dispositivo permite seguir trabajando
@@ -1412,6 +1445,7 @@ function entrarConAccesoGuardado(usuario) {
   if (!guardado || !guardado.ownerUid || !guardado.yo) return false;
   ownerUid = guardado.ownerUid;
   yo = guardado.yo;
+  equipo = guardado.equipo || {};
   abrirSesionEnPantalla();
   servirDeLoGuardado();
   toast('📴 Sin internet: trabajando con los datos de este dispositivo');
@@ -1472,6 +1506,7 @@ function sesionCerrada() {
   productos = [];
   kardex = [];
   notas = [];
+  equipo = {};
   ownerUid = null;
   yo = null;
   migracionRevisada = false;
@@ -1827,9 +1862,13 @@ async function renderUsuarios() {
   const cajaDueno = $('#usr-dueno');
   if (cajaDueno) {
     cajaDueno.hidden = !dueno;
-    if (dueno) $('#usr-dueno-nombre').textContent = dueno.nombre && dueno.nombre !== dueno.usuario
-      ? `${dueno.nombre} · ${dueno.usuario}`
-      : (dueno.usuario || 'administrador');
+    if (dueno) {
+      $('#usr-dueno-nombre').textContent = dueno.nombre && dueno.nombre !== dueno.usuario
+        ? `${dueno.nombre} · ${dueno.usuario}`
+        : (dueno.usuario || 'administrador');
+      $('#btn-dueno-renombrar').dataset.renombrar = dueno.uid;
+      $('#btn-dueno-renombrar').dataset.nombreActual = dueno.nombre || '';
+    }
   }
 
   const equipo = docs.filter(m => m.uid !== ownerUid);
@@ -1856,6 +1895,9 @@ async function renderUsuarios() {
           <span class="usuario-rol">${esJefe ? '👑 Administrador' : '👤 Empleado'}</span>
         </div>
         <div class="usuario-acciones">
+          <button type="button" class="btn btn-secondary btn-small" data-renombrar="${m.uid}"
+            data-nombre-actual="${escapeHtml(m.nombre || '')}"
+            title="Cambiar cómo firma en el sistema">✏️ Nombre</button>
           <button type="button" class="btn btn-secondary btn-small" data-resetear-clave="${m.uid}"
             data-usuario-nombre="${escapeHtml(m.usuario || '')}"
             title="Poner una contraseña nueva sin necesitar la anterior">🔑 Restablecer clave</button>
@@ -1864,6 +1906,41 @@ async function renderUsuarios() {
         ${permisosHtml}
       </article>`;
   }).join('');
+}
+
+/* Cambia con qué nombre firma alguien en todo el sistema. Como las firmas
+   guardadas se traducen al mostrarlas, cambiarlo aquí también arregla de una
+   vez lo anotado hace meses, sin tocar ni un dato ya escrito. */
+async function renombrarMiembro(uid, actual) {
+  if (!esAdmin()) return;
+  const nuevo = prompt('¿Con qué nombre debe firmar en el sistema?\n\n' +
+    'Sale en las notas de venta, en el kardex, en las hojas de cobranza y en los cobros ya registrados.',
+    actual || '');
+  if (nuevo === null) return;
+  const nombre = nuevo.trim();
+  if (!nombre) { toast('⚠️ El nombre no puede quedar vacío'); return; }
+  if (nombre === actual) return;
+  try {
+    // Se guarda con qué nombre firmaba antes: así lo que ya está anotado a su
+    // nombre viejo se sigue leyendo como esta misma persona.
+    const ref = fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid);
+    const ficha = await fb.getDoc(ref);
+    const previos = (ficha.exists() && ficha.data().nombresPrevios) || [];
+    const anterior = ficha.exists() ? ficha.data().nombre : actual;
+    const nombresPrevios = [...new Set([...previos, anterior].filter(n => n && n !== nombre))];
+    await fb.updateDoc(ref, { nombre, nombresPrevios });
+  } catch (e) {
+    console.error(e);
+    toast(avisoDeFallo(e, '❌ No se pudo cambiar el nombre'));
+    return;
+  }
+  // Si me renombré a mí mismo, la cabecera y lo que firme a partir de ahora
+  if (fb.auth.currentUser && fb.auth.currentUser.uid === uid && yo) yo.nombre = nombre;
+  await cargarEquipo();
+  await renderUsuarios();
+  aplicarPermisos();   // la cabecera y el avatar, con el nombre nuevo
+  render();
+  toast(`✅ Ahora firma como "${nombre}"`);
 }
 
 function crearUsuarioAuthSecundaria(email, pass) {
@@ -2465,7 +2542,7 @@ function renderTabla(lista) {
       // Nota de venta anulada: fila tachada, con el motivo a la vista
       if (anul) {
         const quien = anul.anuladoPor
-          ? `${escapeHtml(anul.anuladoPor)}${fechaHoraDeTimestamp(anul.anuladoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(anul.anuladoEn)) : ''}`
+          ? `${escapeHtml(mostrarComo(anul.anuladoPor))}${fechaHoraDeTimestamp(anul.anuladoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(anul.anuladoEn)) : ''}`
           : '';
         return `
         <tr class="credito-anulado" title="Nota de venta anulada">
@@ -2530,7 +2607,7 @@ function abonosResumenHtml(c) {
   if (!lista.length) return '';
   const chips = lista.map((a, i) => {
     const quien = a.registradoPor
-      ? ` — registrado por ${a.registradoPor} el ${textoRegistrado(a)}`
+      ? ` — registrado por ${mostrarComo(a.registradoPor)} el ${textoRegistrado(a)}`
       : '';
     const ojo = abonoConFechaCambiada(a) ? '<span class="chip-ojo" >⚠️</span>' : '';
     return `
@@ -2551,7 +2628,7 @@ function renderTarjetas(lista) {
       const puedeAnular = puede('crear') || puede('editar');
       if (anul) {
         const quien = anul.anuladoPor
-          ? `${escapeHtml(anul.anuladoPor)}${fechaHoraDeTimestamp(anul.anuladoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(anul.anuladoEn)) : ''}`
+          ? `${escapeHtml(mostrarComo(anul.anuladoPor))}${fechaHoraDeTimestamp(anul.anuladoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(anul.anuladoEn)) : ''}`
           : '';
         return `
         <article class="card card-anulado">
@@ -3387,7 +3464,7 @@ function puedeCambiarVencimiento() { return !modoNube || esAdmin(); }
 function filaVencimiento(c) {
   const puedeCambiar = puedeCambiarVencimiento();
   const constancia = c.vencimientoCambiadoPor
-    ? `<span class="venc-constancia">🖊️ ${escapeHtml(c.vencimientoCambiadoPor)}${
+    ? `<span class="venc-constancia">🖊️ ${escapeHtml(mostrarComo(c.vencimientoCambiadoPor))}${
         fechaHoraDeTimestamp(c.vencimientoCambiadoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(c.vencimientoCambiadoEn)) : ''}</span>`
     : '';
 
@@ -3421,7 +3498,7 @@ function textoCompromiso(c) {
 
 function filaCompromiso(c) {
   const constancia = c.compromisoPor
-    ? `<span class="venc-constancia">🖊️ ${escapeHtml(c.compromisoPor)}${
+    ? `<span class="venc-constancia">🖊️ ${escapeHtml(mostrarComo(c.compromisoPor))}${
         fechaHoraDeTimestamp(c.compromisoEn) ? ' · ' + escapeHtml(fechaHoraDeTimestamp(c.compromisoEn)) : ''}</span>`
     : '';
   if (editandoCompromiso) {
@@ -3552,9 +3629,9 @@ function renderInfo() {
           <strong>ACUENTA ${i + 1}: ${formatoMonto(a.monto)}</strong>
           <span class="info-abono-meta">${a.fecha ? formatoFecha(a.fecha) : 'sin fecha'} · ${metodoLabel(metodoDe(a))}</span>
           ${a.registradoPor ? `<span class="info-abono-meta${abonoConFechaCambiada(a) ? ' abono-ojo' : ''}">
-            ${abonoConFechaCambiada(a) ? '⚠️' : '🖊️'} Registrado por ${escapeHtml(a.registradoPor)} · ${textoRegistrado(a)}</span>` : ''}
+            ${abonoConFechaCambiada(a) ? '⚠️' : '🖊️'} Registrado por ${escapeHtml(mostrarComo(a.registradoPor))} · ${textoRegistrado(a)}</span>` : ''}
           ${a.modificadoPor ? `<span class="info-abono-meta abono-modificado">
-            ✏️ Modificado por ${escapeHtml(a.modificadoPor)} · ${fechaHoraDeTimestamp(a.modificadoEn)}</span>` : ''}
+            ✏️ Modificado por ${escapeHtml(mostrarComo(a.modificadoPor))} · ${fechaHoraDeTimestamp(a.modificadoEn)}</span>` : ''}
         </div>
         ${a.firma
           ? `<img src="${a.firma}" class="firma-mini" alt="Firma" data-ver-firma="${i}" title="Ver la firma">`
@@ -3595,6 +3672,13 @@ function renderInfo() {
     bloqueo.hidden = !bloqueado;
     $('#info-cobro-form').hidden = bloqueado;
   }
+
+  // Un crédito ya pagado no lleva cobro, y muchos no llevan foto. Sin avisar de
+  // eso, la ficha reservaba igual sus columnas y quedaban huecos en blanco: se
+  // le dice cuántas zonas hay de verdad para que se repartan el ancho.
+  const ficha = $('#modal-info');
+  ficha.classList.toggle('sin-foto', !c.foto);
+  ficha.classList.toggle('sin-cobro', !puedeCobrar);
 }
 
 /* Con qué fecha se registra el cobro. Solo el administrador puede cambiarla;
@@ -4702,11 +4786,11 @@ function renderEstadoHoja(fecha, filas = []) {
   const abierta = fechaHoraDeTimestamp(h.creadaEn);
   const origen = h.desdePrimerCobro ? ' (con el primer cobro del día)' : '';
   const lineas = [
-    `🕐 Abierta por ${h.creadaPor || '—'} ${abierta ? 'el ' + abierta : '(hora pendiente de confirmar)'}${origen}`,
+    `🕐 Abierta por ${mostrarComo(h.creadaPor) || '—'} ${abierta ? 'el ' + abierta : '(hora pendiente de confirmar)'}${origen}`,
   ];
   const cerrada = fechaHoraDeTimestamp(h.cerradaEn);
   if (h.cerrada) {
-    lineas.push(`🔒 Cerrada por ${h.cerradaPor || '—'} ${cerrada ? 'el ' + cerrada : '(hora pendiente de confirmar)'}`);
+    lineas.push(`🔒 Cerrada por ${mostrarComo(h.cerradaPor) || '—'} ${cerrada ? 'el ' + cerrada : '(hora pendiente de confirmar)'}`);
   }
   detalle.innerHTML = lineas.map(t => `<span>${escapeHtml(t)}</span>`).join('');
   detalle.hidden = false;
@@ -4736,7 +4820,7 @@ function renderCobranza() {
       <tbody>
         ${porUsuario.map(u => `
           <tr>
-            <td class="cob-usuario-nom">${escapeHtml(u.usuario)}</td>
+            <td class="cob-usuario-nom">${escapeHtml(mostrarComo(u.usuario))}</td>
             <td class="col-num">${formatoMonto(u.efectivo)}</td>
             <td class="col-num">${formatoMonto(u.yape)}</td>
             <td class="col-num">${formatoMonto(u.bcp)}</td>
@@ -4834,10 +4918,10 @@ function exportarCobranzaExcel() {
   // Constancia de apertura y cierre (horas puestas por el servidor)
   const hojaDia = hojaDe(fecha);
   const lineaApertura = hojaDia
-    ? `Abierta por ${hojaDia.creadaPor || '—'}${fechaHoraDeTimestamp(hojaDia.creadaEn) ? ' el ' + fechaHoraDeTimestamp(hojaDia.creadaEn) : ''}`
+    ? `Abierta por ${mostrarComo(hojaDia.creadaPor) || '—'}${fechaHoraDeTimestamp(hojaDia.creadaEn) ? ' el ' + fechaHoraDeTimestamp(hojaDia.creadaEn) : ''}`
     : 'Hoja no creada';
   const lineaCierre = hojaDia && hojaDia.cerrada
-    ? `Cerrada por ${hojaDia.cerradaPor || '—'}${fechaHoraDeTimestamp(hojaDia.cerradaEn) ? ' el ' + fechaHoraDeTimestamp(hojaDia.cerradaEn) : ''}`
+    ? `Cerrada por ${mostrarComo(hojaDia.cerradaPor) || '—'}${fechaHoraDeTimestamp(hojaDia.cerradaEn) ? ' el ' + fechaHoraDeTimestamp(hojaDia.cerradaEn) : ''}`
     : 'Sin cerrar';
 
   const filasXlsx = [
@@ -4909,9 +4993,9 @@ function imprimirCobranza() {
   const horaAbierta = hojaDia ? fechaHoraDeTimestamp(hojaDia.creadaEn) : '';
   const horaCerrada = hojaDia ? fechaHoraDeTimestamp(hojaDia.cerradaEn) : '';
   const constanciaHtml = hojaDia
-    ? `<p class="sub">🕐 Abierta por ${escapeHtml(hojaDia.creadaPor || '—')}${horaAbierta ? ' el ' + escapeHtml(horaAbierta) : ''}
+    ? `<p class="sub">🕐 Abierta por ${escapeHtml(mostrarComo(hojaDia.creadaPor) || '—')}${horaAbierta ? ' el ' + escapeHtml(horaAbierta) : ''}
        <br>🔒 ${hojaDia.cerrada
-          ? `Cerrada por ${escapeHtml(hojaDia.cerradaPor || '—')}${horaCerrada ? ' el ' + escapeHtml(horaCerrada) : ''}`
+          ? `Cerrada por ${escapeHtml(mostrarComo(hojaDia.cerradaPor) || '—')}${horaCerrada ? ' el ' + escapeHtml(horaCerrada) : ''}`
           : 'Sin cerrar'}</p>`
     : '<p class="sub">⚠️ Esta hoja no fue creada</p>';
   const filasHtml = filas.map(f => `<tr>
@@ -4949,7 +5033,7 @@ function imprimirCobranza() {
       <th style="text-align:right">Efectivo</th><th style="text-align:right">Yape</th>
       <th style="text-align:right">BCP</th><th style="text-align:right">Total del día</th></tr></thead>
     <tbody>${cobrosPorUsuario(filas).map(u => `<tr>
-      <td>${escapeHtml(u.usuario)}</td>
+      <td>${escapeHtml(mostrarComo(u.usuario))}</td>
       <td style="text-align:right">${formatoMonto(u.efectivo)}</td>
       <td style="text-align:right">${formatoMonto(u.yape)}</td>
       <td style="text-align:right">${formatoMonto(u.bcp)}</td>
@@ -5355,7 +5439,7 @@ function renderDetalleDespacho() {
     ${d.zona ? `<div class="desp-det-fila"><span>📍 Zona</span><strong>${escapeHtml(d.zona)}</strong></div>` : ''}
     <div class="desp-det-fila"><span>🧍 Repartidores</span><strong>${reps.length ? reps.map(escapeHtml).join(', ') : '—'}</strong></div>
     ${d.notas ? `<div class="desp-det-fila"><span>📝 Nota</span><strong>${escapeHtml(d.notas)}</strong></div>` : ''}
-    <div class="desp-det-fila desp-det-meta"><span>Registrado por</span><strong>${escapeHtml(d.creadoPor || '—')}${d.registrado ? ' · ' + (horaDeTimestamp(d.registrado) || '') : ''}</strong></div>`;
+    <div class="desp-det-fila desp-det-meta"><span>Registrado por</span><strong>${escapeHtml(mostrarComo(d.creadoPor) || '—')}${d.registrado ? ' · ' + (horaDeTimestamp(d.registrado) || '') : ''}</strong></div>`;
 
   let acciones = '';
   if (d.estado === 'credito' && d.creditoId) {
@@ -6129,7 +6213,7 @@ function renderKardex() {
       <td class="col-num kdx-entrada">${c > 0 ? c : ''}</td>
       <td class="col-num kdx-salida">${c < 0 ? -c : ''}</td>
       <td class="col-num kdx-saldo">${m.saldo}</td>
-      <td>${escapeHtml(m.usuario || '—')}</td>
+      <td>${escapeHtml(mostrarComo(m.usuario) || '—')}</td>
       <td class="col-acc">${mandaComoAdmin() && m.motivo !== 'venta'
         ? `<button type="button" class="btn btn-danger btn-small" data-borrar-kardex="${escapeHtml(m.id)}" title="Anular movimiento (pide tu código)">🗑️</button>` : ''}</td>
     </tr>`;
@@ -6648,7 +6732,7 @@ function imprimirKardex() {
       <td style="text-align:right">${c > 0 ? c : ''}</td>
       <td style="text-align:right">${c < 0 ? -c : ''}</td>
       <td style="text-align:right"><b>${m.saldo}</b></td>
-      <td>${escapeHtml(m.usuario || '')}</td></tr>`;
+      <td>${escapeHtml(mostrarComo(m.usuario) || '')}</td></tr>`;
   }).join('');
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Kardex</title>
     <style>body{font-family:system-ui,sans-serif;padding:18px;color:#111}
@@ -6790,7 +6874,7 @@ function renderVentas() {
       <td>${n.condicion === 'credito' ? 'CRÉDITO' : 'CONTADO'}</td>
       <td class="col-num">${(n.items || []).length}</td>
       <td class="col-num"><strong>${soles(n.total)}</strong></td>
-      <td>${escapeHtml(n.emitidaPor || '—')}</td>
+      <td>${escapeHtml(mostrarComo(n.emitidaPor) || '—')}</td>
       <td class="col-acc">
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
         <button type="button" class="btn btn-secondary btn-small" data-copiar-nota="${escapeHtml(n.id)}" title="Usar como base para una nota nueva">📋</button>
@@ -7135,7 +7219,7 @@ function imprimirNota(nota) {
           <span class="et et2">F.Pago:</span><span class="va">${nota.fechaPago ? formatoFecha(nota.fechaPago) : ''}</span></div>
         <div class="fila"><span class="et">Ped:</span><span class="va">${escapeHtml(nota.referencia || '')}</span>
           <span class="et et2">Tlfno:</span><span class="va">${escapeHtml(nota.clienteTelefono || '')}</span></div>
-        <div class="fila"><span class="et">Vendedor:</span><span class="va">${escapeHtml(String(nota.emitidaPor || '').toUpperCase())}</span></div>
+        <div class="fila"><span class="et">Vendedor:</span><span class="va">${escapeHtml(mostrarComo(nota.emitidaPor).toUpperCase())}</span></div>
         <div class="fila"><span class="et">Hora:</span><span class="va">${escapeHtml(nota.hora || '')}</span></div>
       </div>
     </div>
@@ -7156,7 +7240,7 @@ function imprimirNota(nota) {
       </div>
     </div>
     <div class="nota-pie">
-      <span>Emitido por ${escapeHtml(nota.emitidaPor || '')} el ${formatoFecha(nota.fecha)} a las ${escapeHtml(nota.hora || '')}</span>
+      <span>Emitido por ${escapeHtml(mostrarComo(nota.emitidaPor))} el ${formatoFecha(nota.fecha)} a las ${escapeHtml(nota.hora || '')}</span>
       <span>Categoría de precio: ${escapeHtml(nota.categoria || '')}</span>
     </div>
     <script>window.onload=function(){window.print();}<\/script>
@@ -8004,8 +8088,13 @@ function inicializarEventos() {
   $('#usuarios-list').addEventListener('click', ev => {
     const btnBorrar = ev.target.closest('[data-borrar-usuario]');
     if (btnBorrar) { borrarUsuario(btnBorrar.dataset.borrarUsuario); return; }
+    const btnNombre = ev.target.closest('[data-renombrar]');
+    if (btnNombre) { renombrarMiembro(btnNombre.dataset.renombrar, btnNombre.dataset.nombreActual); return; }
     const btnClave = ev.target.closest('[data-resetear-clave]');
     if (btnClave) restablecerContrasenaEmpleado(btnClave.dataset.resetearClave, btnClave.dataset.usuarioNombre);
+  });
+  $('#btn-dueno-renombrar').addEventListener('click', ev => {
+    renombrarMiembro(ev.currentTarget.dataset.renombrar, ev.currentTarget.dataset.nombreActual);
   });
 
   sincronizarNavLateral();
