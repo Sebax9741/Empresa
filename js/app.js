@@ -169,28 +169,27 @@ const MOTIVOS_KARDEX = {
   otro: 'Otro',
 };
 
-/* Quién está usando la app ahora (para dejar constancia en cada "a cuenta") */
-/* Con qué nombre queda firmado lo que uno hace. Se usa el nombre visible
-   ("Admin"), no el usuario con el que se entra ("admin"): es el que se lee en
-   las notas de venta, en el kardex y en las hojas de cobranza. */
+/* Quién está usando la app ahora (para dejar constancia en cada "a cuenta").
+   Cada persona es su usuario y nada más: es lo que se lee en las notas de
+   venta, en el kardex y en las hojas de cobranza. */
 function quienSoy() {
   if (!modoNube || !yo) return 'dueño';
-  return yo.nombre || yo.usuario || 'dueño';
+  return yo.usuario || 'dueño';
 }
 
-/* ¿Esta anotación la hizo el que está usando la app ahora? Se compara contra
-   el nombre visible y contra el usuario, porque lo anotado antes de que el
-   nombre fuera lo que se firma guardó el usuario. */
+/* ¿Esta anotación la hizo el que está usando la app ahora? Se compara con la
+   firma ya traducida, así también reconoce lo que quedó anotado con algún
+   nombre que se usara antes. */
 function esMio(quien) {
   if (!modoNube || !yo || !quien) return false;
-  return quien === (yo.nombre || '') || quien === (yo.usuario || '');
+  return mostrarComo(quien) === (yo.usuario || '');
 }
 
-/* Cómo se enseña una firma guardada. Lo anotado hace meses lleva el usuario
-   con el que se entraba entonces (un correo entero, por ejemplo); aquí se
-   traduce al nombre visible de esa persona, así todo el historial se lee
-   igual sin tener que tocar ni un dato ya guardado. */
-let equipo = {};          // usuario de acceso → cómo lo muestra el sistema
+/* Cómo se enseña una firma guardada. Lo anotado hace meses puede llevar el
+   correo entero con el que se entraba entonces, o algún nombre para mostrar
+   de cuando el sistema tenía esa opción; aquí se traduce al usuario de esa
+   persona, así todo el historial se lee igual sin tocar ni un dato guardado. */
+let equipo = {};          // firma antigua → usuario que la hizo
 function mostrarComo(quien) {
   const q = String(quien || '').trim();
   return equipo[q] || q;
@@ -203,11 +202,13 @@ async function cargarEquipo() {
     const mapa = {};
     snap.docs.forEach(d => {
       const m = d.data();
-      if (!m || !m.nombre) return;
-      // Se traduce tanto el usuario de acceso (lo firmado hace meses llevaba el
-      // correo entero) como los nombres con los que firmó antes de cambiárselo.
-      if (m.usuario) mapa[m.usuario] = m.nombre;
-      (m.nombresPrevios || []).forEach(viejo => { if (viejo) mapa[viejo] = m.nombre; });
+      if (!m || !m.usuario) return;
+      // Todo lo que alguna vez identificó a esta persona lleva a su usuario:
+      // el nombre para mostrar que tuvo y los nombres con los que firmó antes.
+      if (m.nombre && m.nombre !== m.usuario) mapa[m.nombre] = m.usuario;
+      (m.nombresPrevios || []).forEach(viejo => {
+        if (viejo && viejo !== m.usuario) mapa[viejo] = m.usuario;
+      });
     });
     equipo = mapa;
     if (fb.auth.currentUser) {
@@ -1644,7 +1645,7 @@ function aplicarPermisos() {
   $('#btn-usuarios').hidden = !esAdmin();
   $('#btn-cliente-nuevo').hidden = !puede('clientes');
   $('#usuario-chip').hidden = !modoNube;
-  const nombreUsuario = (yo && (yo.nombre || yo.usuario)) || '';
+  const nombreUsuario = (yo && yo.usuario) || '';
   $('#hdr-usuario').textContent = nombreUsuario;
   $('#hdr-avatar').textContent = inicialesDe(nombreUsuario);
   sincronizarNavLateral();
@@ -1901,13 +1902,7 @@ async function renderUsuarios() {
   const cajaDueno = $('#usr-dueno');
   if (cajaDueno) {
     cajaDueno.hidden = !dueno;
-    if (dueno) {
-      $('#usr-dueno-nombre').textContent = dueno.nombre && dueno.nombre !== dueno.usuario
-        ? `${dueno.nombre} · ${dueno.usuario}`
-        : (dueno.usuario || 'administrador');
-      $('#btn-dueno-renombrar').dataset.renombrar = dueno.uid;
-      $('#btn-dueno-renombrar').dataset.nombreActual = dueno.nombre || '';
-    }
+    if (dueno) $('#usr-dueno-nombre').textContent = dueno.usuario || 'administrador';
   }
 
   const equipo = docs.filter(m => m.uid !== ownerUid);
@@ -1928,15 +1923,11 @@ async function renderUsuarios() {
       <article class="usuario-item${esJefe ? ' usuario-item-admin' : ''}">
         <div class="usuario-cab">
           <div class="usuario-id">
-            <strong>${escapeHtml(m.usuario || '(sin nombre)')}</strong>
-            ${m.nombre && m.nombre !== m.usuario ? `<span class="usuario-alias">${escapeHtml(m.nombre)}</span>` : ''}
+            <strong>${escapeHtml(m.usuario || '(sin usuario)')}</strong>
           </div>
           <span class="usuario-rol">${esJefe ? '👑 Administrador' : '👤 Empleado'}</span>
         </div>
         <div class="usuario-acciones">
-          <button type="button" class="btn btn-secondary btn-small" data-renombrar="${m.uid}"
-            data-nombre-actual="${escapeHtml(m.nombre || '')}"
-            title="Cambiar cómo firma en el sistema">✏️ Nombre</button>
           <button type="button" class="btn btn-secondary btn-small" data-resetear-clave="${m.uid}"
             data-usuario-nombre="${escapeHtml(m.usuario || '')}"
             title="Poner una contraseña nueva sin necesitar la anterior">🔑 Restablecer clave</button>
@@ -1945,41 +1936,6 @@ async function renderUsuarios() {
         ${permisosHtml}
       </article>`;
   }).join('');
-}
-
-/* Cambia con qué nombre firma alguien en todo el sistema. Como las firmas
-   guardadas se traducen al mostrarlas, cambiarlo aquí también arregla de una
-   vez lo anotado hace meses, sin tocar ni un dato ya escrito. */
-async function renombrarMiembro(uid, actual) {
-  if (!esAdmin()) return;
-  const nuevo = prompt('¿Con qué nombre debe firmar en el sistema?\n\n' +
-    'Sale en las notas de venta, en el kardex, en las hojas de cobranza y en los cobros ya registrados.',
-    actual || '');
-  if (nuevo === null) return;
-  const nombre = nuevo.trim();
-  if (!nombre) { toast('⚠️ El nombre no puede quedar vacío'); return; }
-  if (nombre === actual) return;
-  try {
-    // Se guarda con qué nombre firmaba antes: así lo que ya está anotado a su
-    // nombre viejo se sigue leyendo como esta misma persona.
-    const ref = fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid);
-    const ficha = await fb.getDoc(ref);
-    const previos = (ficha.exists() && ficha.data().nombresPrevios) || [];
-    const anterior = ficha.exists() ? ficha.data().nombre : actual;
-    const nombresPrevios = [...new Set([...previos, anterior].filter(n => n && n !== nombre))];
-    await fb.updateDoc(ref, { nombre, nombresPrevios });
-  } catch (e) {
-    console.error(e);
-    toast(avisoDeFallo(e, '❌ No se pudo cambiar el nombre'));
-    return;
-  }
-  // Si me renombré a mí mismo, la cabecera y lo que firme a partir de ahora
-  if (fb.auth.currentUser && fb.auth.currentUser.uid === uid && yo) yo.nombre = nombre;
-  await cargarEquipo();
-  await renderUsuarios();
-  aplicarPermisos();   // la cabecera y el avatar, con el nombre nuevo
-  render();
-  toast(`✅ Ahora firma como "${nombre}"`);
 }
 
 function crearUsuarioAuthSecundaria(email, pass) {
@@ -1996,7 +1952,6 @@ async function crearUsuario(ev) {
   ev.preventDefault();
   if (!esAdmin()) return;
   const usuario = $('#u-usuario').value.trim().toLowerCase();
-  const nombre = $('#u-nombre').value.trim();
   const pass = $('#u-pass').value;
   const rolAdmin = $('#u-admin').checked;
   if (!usuario || pass.length < 6) { toast('⚠️ Usuario y contraseña (mín. 6) son obligatorios'); return; }
@@ -2013,7 +1968,7 @@ async function crearUsuario(ev) {
   try {
     const uid = await crearUsuarioAuthSecundaria(usuarioAEmail(usuario), pass);
     await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid), {
-      usuario, nombre: nombre || usuario, rol: rolAdmin ? 'admin' : 'empleado', permisos, creado: Date.now(),
+      usuario, rol: rolAdmin ? 'admin' : 'empleado', permisos, creado: Date.now(),
     });
     toast(`✅ Usuario "${usuario}" creado`);
     $('#u-form-nuevo').reset();
@@ -2094,7 +2049,6 @@ function mostrarAliasDeAcceso() {
 async function crearMiUsuarioDeAcceso() {
   if (!esAdmin()) { toast('🔒 Solo el administrador'); return; }
   const usuario = $('#alias-usuario').value.trim().toLowerCase();
-  const nombre = $('#alias-nombre').value.trim();
   const pass = $('#alias-pass').value;
   if (!usuario) { toast('⚠️ Escribe el usuario con el que quieres entrar'); $('#alias-usuario').focus(); return; }
   if (usuario.includes('@') || /\s/.test(usuario)) {
@@ -2108,7 +2062,6 @@ async function crearMiUsuarioDeAcceso() {
     const uid = await crearUsuarioAuthSecundaria(usuarioAEmail(usuario), pass);
     await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid), {
       usuario,
-      nombre: nombre || usuario,
       rol: 'admin',
       permisos: { ...PERMISOS_TODOS },
       creado: Date.now(),
@@ -8161,13 +8114,8 @@ function inicializarEventos() {
   $('#usuarios-list').addEventListener('click', ev => {
     const btnBorrar = ev.target.closest('[data-borrar-usuario]');
     if (btnBorrar) { borrarUsuario(btnBorrar.dataset.borrarUsuario); return; }
-    const btnNombre = ev.target.closest('[data-renombrar]');
-    if (btnNombre) { renombrarMiembro(btnNombre.dataset.renombrar, btnNombre.dataset.nombreActual); return; }
     const btnClave = ev.target.closest('[data-resetear-clave]');
     if (btnClave) restablecerContrasenaEmpleado(btnClave.dataset.resetearClave, btnClave.dataset.usuarioNombre);
-  });
-  $('#btn-dueno-renombrar').addEventListener('click', ev => {
-    renombrarMiembro(ev.currentTarget.dataset.renombrar, ev.currentTarget.dataset.nombreActual);
   });
 
   sincronizarNavLateral();

@@ -1521,7 +1521,6 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 .usr-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.2rem 1rem; }
 .usr-campos .field { margin-bottom: 0.6rem; }
-.usr-campo-ancho { grid-column: span 2; }
 
 /* "Administrador" es una decisión aparte de los permisos sueltos: se destaca */
 .usr-admin {
@@ -1590,14 +1589,12 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .usuario-item-admin { border-left: 3px solid var(--ok); }
 .usuario-cab { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
 .usuario-id strong { font-size: 1.02rem; }
-.usuario-alias { display: block; font-size: 0.8rem; color: var(--muted); }
 .usuario-rol { font-size: 0.78rem; color: var(--muted); margin-left: auto; white-space: nowrap; }
 .usuario-acciones { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.6rem 0 0.7rem; }
 .usuario-todos { margin: 0; font-size: 0.86rem; color: var(--muted); font-style: italic; }
 
 @media (max-width: 700px) {
   .usr-campos, .usr-perms, .usuario-perms { grid-template-columns: 1fr; }
-  .usr-campo-ancho { grid-column: auto; }
   .usuarios-list { grid-template-columns: 1fr; }
 }
 
