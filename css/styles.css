@@ -1773,15 +1773,15 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   text-align: center;
 }
 
-/* Sin panel lateral (celular y tablet) la cabecera carga con TODOS los destinos,
-   así que se deja que bajen de línea antes que salirse de la pantalla. */
+/* Celular y tablet vertical: la cabecera lleva SOLO lo imprescindible —el ☰,
+   la hora y la cuenta—, así que cabe en una sola línea. Antes cargaba también
+   con los once destinos y tenía que repartirlos en tres filas: ocupaba 142px
+   de una pantalla de 844px antes de enseñar un solo dato. Ahora navegar es
+   cosa del cajón. */
 @media (max-width: 999px) {
-  .header-inner { flex-wrap: wrap; }
-  /* Sin quitarle el flex-shrink: 0 de base se quedaría con su ancho entero y
-     se saldría de la pantalla en vez de repartirse en dos filas. */
-  .header-actions { flex-wrap: wrap; justify-content: flex-end; flex-shrink: 1; min-width: 0; }
-  /* Sin panel lateral la cabecera lleva además los once destinos: el reloj se
-     queda con la hora, que es lo que se mira, y suelta la fecha. */
+  .header-inner { flex-wrap: nowrap; }
+  .header-actions { flex-wrap: nowrap; justify-content: flex-end; flex-shrink: 0; }
+  /* De la fecha se prescinde: lo que se mira de reojo es la hora */
   #reloj-fecha { display: none; }
   .reloj { padding-left: 0.6rem; margin-left: 0.2rem; }
 }
@@ -1797,16 +1797,15 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   #despachos-list { display: flex; }
 
   .header-inner { padding: 0.5rem 0.6rem; gap: 0.3rem; }
-  /* En celular el sitio lo necesitan los botones de navegación, que aquí son la
-     única forma de moverse por la app: el reloj se queda solo con la hora. */
+  /* En 390px de ancho la hora se queda sin su icono ni su raya: se lee igual
+     y le devuelve el sitio a la cuenta. */
   .reloj { border-left: none; padding: 0; margin: 0; gap: 0.3rem; }
   .reloj-ico { display: none; }
   .reloj-txt strong { font-size: 0.9rem; }
-  /* Con siete destinos + "＋" + la cuenta no entra todo en una línea de 390px:
-     se deja que baje a una segunda fila antes que quedar cortado. */
-  .header-actions { gap: 0.25rem 0.2rem; flex-wrap: wrap; justify-content: center; width: 100%; }
-  /* El reloj y la cuenta bajan a su propia fila, centrados como los destinos */
-  .header-cuenta { width: 100%; justify-content: center; flex-wrap: wrap; }
+  /* Todo en una línea: ☰ · ＋ · hora · cuenta · Cerrar sesión. El hueco entre
+     el "＋" y la hora es a propósito: pegados parecían un mismo control. */
+  .header-actions { gap: 0.25rem; flex-wrap: nowrap; justify-content: flex-end; width: auto; }
+  .header-cuenta { width: auto; justify-content: flex-end; flex-wrap: nowrap; gap: 0.3rem; margin-left: 0.45rem; }
   .btn-icon { width: 34px; height: 34px; font-size: 1.05rem; }
   /* En móvil el botón principal muestra solo "＋" para no saturar el header */
   #btn-new .btn-label { display: none; }
@@ -2113,8 +2112,27 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
    juntos: al contraer, el panel se estrecha y el área de trabajo se ensancha
    en la misma transición, sin saltos. */
 :root { --ancho-nav: 252px; --ancho-nav-min: 68px; }
-.nav-lateral { display: none; }
-.btn-menu { display: none; }
+
+/* El panel es el mismo en los dos tamaños: los mismos destinos, agrupados
+   igual y con los mismos iconos. Lo único que cambia es cómo se coloca —en
+   PC vive fijo a la izquierda, en el teléfono entra como un cajón—, así que
+   su aspecto se define una sola vez aquí y cada media query se ocupa solo de
+   la colocación. */
+.nav-lateral {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  width: var(--ancho-nav);
+  padding: 0 0.6rem 0.6rem;
+  background: var(--side);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.nav-lateral::-webkit-scrollbar { width: 6px; }
+.nav-lateral::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
 
 @media (min-width: 1000px) {
   body {
@@ -2124,126 +2142,145 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   body.nav-plegada { --ancho-nav: var(--ancho-nav-min); }
 
   .nav-lateral {
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: 0; left: 0; bottom: 0;
-    width: var(--ancho-nav);
-    padding: 0 0.6rem 0.6rem;
-    background: var(--side);
     z-index: 20;
-    overflow-x: hidden;
-    overflow-y: auto;
     transition: width 0.25s var(--ease);
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   }
-  .nav-lateral::-webkit-scrollbar { width: 6px; }
-  .nav-lateral::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
+}
 
-  /* Marca del negocio, arriba del todo */
-  .nav-marca {
-    font-size: 0.92rem;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-    line-height: 1.15;
-    padding: 1rem 0.5rem 0.85rem;
-    margin-bottom: 0.35rem;
-    color: #fff;
-    display: flex; align-items: center; gap: 0.6rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    white-space: nowrap;
-  }
-  .nav-logo { width: 38px; height: 38px; flex-shrink: 0; }
-  .nav-marca span { display: block; min-width: 0; }
-  .nav-marca small {
-    display: block;
-    margin-top: 0.2rem;
-    font-size: 0.66rem;
-    font-weight: 500;
-    color: var(--side-text);
-    letter-spacing: 0;
-  }
+/* Marca del negocio, arriba del todo */
+.nav-marca {
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  padding: 1rem 0.5rem 0.85rem;
+  margin-bottom: 0.35rem;
+  color: #fff;
+  display: flex; align-items: center; gap: 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+.nav-logo { width: 38px; height: 38px; flex-shrink: 0; }
+.nav-marca span { display: block; min-width: 0; }
+.nav-marca small {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.66rem;
+  font-weight: 500;
+  color: var(--side-text);
+  letter-spacing: 0;
+}
 
-  /* Los destinos van agrupados por el trabajo que resuelven */
-  .nav-grupo { display: flex; flex-direction: column; gap: 0.12rem; margin-bottom: 0.5rem; }
-  .nav-titulo {
-    font-size: 0.63rem;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #64748b;
-    padding: 0.7rem 0.65rem 0.3rem;
-    white-space: nowrap;
-  }
+/* Los destinos van agrupados por el trabajo que resuelven */
+.nav-grupo { display: flex; flex-direction: column; gap: 0.12rem; margin-bottom: 0.5rem; }
+.nav-titulo {
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #64748b;
+  padding: 0.7rem 0.65rem 0.3rem;
+  white-space: nowrap;
+}
 
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    width: 100%;
-    text-align: left;
-    background: transparent;
-    border: none;
-    border-radius: 9px;
-    padding: 0.6rem 0.65rem;
-    font-family: inherit;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--side-text);
-    cursor: pointer;
-    position: relative;
-    white-space: nowrap;
-    transition: background 0.18s var(--ease), color 0.18s var(--ease);
-  }
-  .nav-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  padding: 0.6rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--side-text);
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.nav-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
 
-  /* Iconos de trazo, del mismo grosor y sin color propio: heredan el del
-     texto, así el panel se lee como un sistema y no como un tablero de emojis. */
-  .nav-ico {
-    width: 20px;
-    height: 20px;
-    flex: none;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    opacity: 0.85;
-  }
-  .nav-item.activo .nav-ico { opacity: 1; }
-  .nav-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Iconos de trazo, del mismo grosor y sin color propio: heredan el del
+   texto, así el panel se lee como un sistema y no como un tablero de emojis. */
+.nav-ico {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+.nav-item.activo .nav-ico { opacity: 1; }
+.nav-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
-  /* Destino activo: relleno coral */
-  .nav-item.activo,
-  .nav-item.activo:hover {
-    background: var(--side-activo);
-    color: #fff;
-    box-shadow: 0 6px 16px rgba(224, 113, 74, 0.35);
-  }
+/* Destino activo: relleno coral */
+.nav-item.activo,
+.nav-item.activo:hover {
+  background: var(--side-activo);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(224, 113, 74, 0.35);
+}
 
-  /* Botón de contraer, al final del panel */
-  .nav-plegar {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-top: auto;
-    padding: 0.6rem 0.65rem;
-    background: transparent;
-    border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 0;
-    font-family: inherit;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: #64748b;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: color 0.18s var(--ease);
-  }
-  .nav-plegar:hover { color: #fff; }
-  .nav-plegar .nav-ico { transition: transform 0.25s var(--ease); }
+/* Botón de contraer, al final del panel */
+.nav-plegar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding: 0.6rem 0.65rem;
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.18s var(--ease);
+}
+.nav-plegar:hover { color: #fff; }
+.nav-plegar .nav-ico { transition: transform 0.25s var(--ease); }
+/* Botón ☰ de la cabecera. En PC contrae el panel; en el teléfono abre y
+   cierra el cajón. */
+.btn-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  margin-right: 0.15rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.btn-menu:hover { background: var(--bg-tint); color: var(--text); border-color: var(--gray); }
+.btn-menu svg {
+  width: 20px; height: 20px;
+  fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round;
+}
 
+/* Los once botones de apartado que había en la cabecera desaparecen: navegar
+   es cosa del panel, en PC y en el teléfono. En una pantalla de teléfono esa
+   fila obligaba a adivinar once dibujos de 30px, uno al lado del otro. */
+#btn-dashboard, #btn-creditos, #btn-ventas, #btn-productos, #btn-ingresos,
+#btn-kardex, #btn-despachos, #btn-clientes, #btn-cobranza, #btn-usuarios,
+#btn-settings { display: none; }
+
+@media (min-width: 1000px) {
   /* ── Panel contraído: solo los iconos ── */
   body.nav-plegada .nav-lateral { padding-left: 0.5rem; padding-right: 0.5rem; }
   body.nav-plegada .nav-txt,
@@ -2278,34 +2315,77 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
     z-index: 30;
   }
   body.nav-plegada .nav-item:hover::after { opacity: 1; }
+  /* En PC el cajón no existe: el panel siempre está a la vista */
+  .nav-velo { display: none; }
+  .nav-cerrar { display: none; }
+}
 
-  /* Botón ☰ de la cabecera */
-  .btn-menu {
+/* ── Teléfono y tablet vertical: el panel es un cajón ──
+   Entra desde el borde izquierdo por encima del contenido, con un velo
+   detrás. No empuja la página: en 390px de ancho no hay sitio que ceder. */
+@media (max-width: 999px) {
+  /* La barra de arriba se queda a la vista y el cajón entra por debajo: así el
+     ☰ nunca queda tapado y se puede cerrar con el mismo botón con el que se
+     abrió. El alto de la barra lo mide el guion y lo deja en --alto-cabecera,
+     porque cambia según lo que quepa en cada pantalla. */
+  .app-header { z-index: 70; }
+  .nav-lateral {
+    top: var(--alto-cabecera, 0px);
+    width: min(300px, 82vw);
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.28s var(--ease);
+    box-shadow: none;
+    visibility: hidden;
+  }
+  body.nav-abierta .nav-lateral {
+    transform: none;
+    visibility: visible;
+    box-shadow: 12px 0 34px rgba(15, 23, 42, 0.34);
+  }
+  /* El velo vive siempre en la página y se enciende con la clase, en vez de
+     aparecer y desaparecer de golpe: así se desvanece también al cerrar.
+     Apagado no estorba, porque visibility lo saca del alcance del dedo. */
+  .nav-velo {
+    display: block;
+    position: fixed;
+    inset: var(--alto-cabecera, 0px) 0 0 0;
+    z-index: 55;
+    background: rgba(15, 23, 42, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.28s var(--ease), visibility 0.28s var(--ease);
+  }
+  body.nav-abierta .nav-velo { opacity: 1; visibility: visible; }
+  /* Con el cajón abierto, la página de detrás no se mueve al arrastrar */
+  body.nav-abierta { overflow: hidden; }
+
+  /* Contraer no tiene sentido en un cajón: se cierra y ya */
+  .nav-plegar { display: none; }
+
+  /* Cerrar sin tener que atinarle al velo */
+  .nav-cerrar {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
+    width: 34px; height: 34px;
     flex: none;
-    margin-right: 0.15rem;
-    background: transparent;
-    border: 1px solid var(--border);
+    margin-left: auto;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
     border-radius: 9px;
-    color: var(--muted);
+    color: var(--side-text);
     cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
-  .btn-menu:hover { background: var(--bg-tint); color: var(--text); border-color: var(--gray); }
-  .btn-menu svg {
-    width: 20px; height: 20px;
+  .nav-cerrar svg {
+    width: 18px; height: 18px;
     fill: none; stroke: currentColor;
-    stroke-width: 1.8; stroke-linecap: round;
+    stroke-width: 2; stroke-linecap: round;
   }
 
-  /* En escritorio, el panel lateral reemplaza a estos botones de la cabecera */
-  #btn-dashboard, #btn-creditos, #btn-ventas, #btn-productos, #btn-ingresos,
-  #btn-kardex, #btn-despachos, #btn-clientes, #btn-cobranza, #btn-usuarios,
-  #btn-settings { display: none; }
+  /* Los destinos se tocan con el dedo, no con el ratón */
+  .nav-item { padding: 0.72rem 0.7rem; font-size: 0.95rem; }
+  .nav-marca { padding-top: max(1rem, env(safe-area-inset-top)); }
 }
 
 /* Quien prefiere menos movimiento no ve la transición del panel */

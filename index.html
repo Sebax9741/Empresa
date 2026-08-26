@@ -15,7 +15,9 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <!-- Panel lateral de navegación (solo en pantallas anchas: PC/tablet horizontal) -->
+  <!-- Panel lateral de navegación. En PC vive fijo a la izquierda; en el
+       teléfono es un cajón que entra desde el borde al tocar el ☰. -->
+  <div class="nav-velo" id="nav-velo"></div>
   <nav id="nav-lateral" class="nav-lateral" aria-label="Menú principal">
     <div class="nav-marca">
       <svg class="nav-logo" viewBox="0 0 100 100" role="img" aria-label="Importadora Nueva Vista S.A.C.">
@@ -43,6 +45,10 @@
         <rect x="71" y="57" width="16" height="25" rx="5" fill="#e0714a" stroke="#9c3d22" stroke-width="2"/>
       </svg>
       <span>Importadora<br>Nueva Vista<small>S.A.C. · Control de créditos</small></span>
+      <!-- Solo en el teléfono: cerrar el cajón sin tener que atinarle al velo -->
+      <button type="button" class="nav-cerrar" id="btn-nav-cerrar" title="Cerrar el menú" aria-label="Cerrar el menú">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
     <!-- Los apartados van agrupados por el trabajo que resuelven, no en una
          lista corrida: con once destinos, encontrarlos era ir leyendo uno a uno. -->

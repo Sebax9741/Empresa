@@ -1666,8 +1666,10 @@ function aplicarPlegadoNav(plegada) {
     btn.title = plegada ? 'Desplegar el menú' : 'Contraer el menú';
     btn.setAttribute('aria-label', btn.title);
   }
+  // En pantalla angosta el ☰ no habla del panel contraído sino del cajón:
+  // ahí el estado lo lleva abrirCajonNav().
   const menu = $('#btn-menu');
-  if (menu) menu.setAttribute('aria-expanded', String(!plegada));
+  if (menu && !enPantallaAngosta()) menu.setAttribute('aria-expanded', String(!plegada));
   // Las tablas se miden solas contra el ancho disponible, que acaba de cambiar
   if (typeof ajustarTablasFijas === 'function') requestAnimationFrame(ajustarTablasFijas);
 }
@@ -1678,6 +1680,42 @@ function alternarNav() {
   aplicarPlegadoNav(plegada);
   // Al terminar la transición el ancho ya es el definitivo: se vuelve a medir
   setTimeout(ajustarTablasFijas, 280);
+}
+
+/* ---- El panel como cajón (teléfono y tablet vertical) ----
+   En PC el panel está siempre a la vista y el ☰ lo contrae. En una pantalla
+   estrecha no cabe, así que el mismo botón lo abre y lo cierra. */
+function enPantallaAngosta() {
+  return window.matchMedia('(max-width: 999px)').matches;
+}
+
+/* El cajón arranca justo debajo de la barra de arriba, para que el ☰ siga a la
+   vista y cierre con el mismo toque con el que abrió. El alto de esa barra no
+   es fijo —depende de lo que quepa en cada pantalla—, así que se mide y se
+   deja en una variable de CSS. */
+function medirCabecera() {
+  const cab = document.querySelector('.app-header');
+  if (!cab) return;
+  document.documentElement.style.setProperty('--alto-cabecera', Math.round(cab.getBoundingClientRect().height) + 'px');
+}
+
+function abrirCajonNav(abrir) {
+  document.body.classList.toggle('nav-abierta', abrir);
+  const menu = $('#btn-menu');
+  if (menu) menu.setAttribute('aria-expanded', String(abrir));
+  // Con el cajón cerrado sus destinos no deben poder alcanzarse con el
+  // tabulador, que los recorrería fuera de la pantalla.
+  const panel = $('#nav-lateral');
+  if (panel) panel.setAttribute('aria-hidden', String(!abrir));
+}
+
+function cerrarCajonNav() {
+  if (document.body.classList.contains('nav-abierta')) abrirCajonNav(false);
+}
+
+function alternarMenu() {
+  if (enPantallaAngosta()) abrirCajonNav(!document.body.classList.contains('nav-abierta'));
+  else alternarNav();
 }
 
 function sincronizarNavLateral() {
@@ -7908,7 +7946,31 @@ function inicializarEventos() {
   // Contraer / desplegar el panel lateral
   aplicarPlegadoNav(localStorage.getItem(CLAVE_NAV_PLEGADA) === '1');
   $('#btn-plegar-nav').addEventListener('click', alternarNav);
-  $('#btn-menu').addEventListener('click', alternarNav);
+  $('#btn-menu').addEventListener('click', alternarMenu);
+
+  // El cajón del teléfono se cierra al elegir un apartado, al tocar fuera,
+  // con la ✕ o con Escape. Se escucha en el panel entero en vez de en cada
+  // destino: así los que se añadan luego quedan cubiertos solos.
+  abrirCajonNav(false);
+  medirCabecera();
+  // La barra cambia de alto sola (al entrar aparece la cuenta, en Créditos
+  // aparece "＋ Nuevo crédito"), así que se vigila en vez de medirla a mano
+  // desde cada sitio que la toca.
+  if (window.ResizeObserver) new ResizeObserver(medirCabecera).observe(document.querySelector('.app-header'));
+  else window.addEventListener('resize', medirCabecera);
+  $('#nav-velo').addEventListener('click', cerrarCajonNav);
+  $('#btn-nav-cerrar').addEventListener('click', cerrarCajonNav);
+  $('#nav-lateral').addEventListener('click', ev => {
+    if (ev.target.closest('.nav-item')) cerrarCajonNav();
+  });
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape') cerrarCajonNav();
+  });
+  // Si se gira el teléfono o se agranda la ventana hasta el tamaño de PC, el
+  // cajón deja de tener sentido: el panel vuelve a estar siempre a la vista.
+  window.matchMedia('(max-width: 999px)').addEventListener('change', ev => {
+    if (!ev.matches) cerrarCajonNav();
+  });
 
   // Configuración
   $('#btn-settings').addEventListener('click', () => {
