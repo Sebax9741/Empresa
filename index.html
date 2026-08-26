@@ -1461,8 +1461,14 @@
       <!-- Productos -->
       <div class="nv-panel nv-panel-items">
         <div class="nv-ag">
-          <label class="field nv-ag-prod"><span>Producto</span>
-            <select id="nv-producto" class="input"></select></label>
+          <div class="field nv-ag-prod"><span>Producto</span>
+            <div class="combo-wrap">
+              <input type="text" id="nv-buscar-producto" class="input" autocomplete="off"
+                     placeholder="Escribe el nombre o el código del producto…">
+              <div id="nv-prod-sugerencias" class="combo-sugerencias" hidden></div>
+            </div>
+            <input type="hidden" id="nv-producto">
+          </div>
           <label class="field nv-ag-cant"><span>Cantidad</span>
             <input type="number" id="nv-cantidad" class="input" min="0.01" step="1" value="1"></label>
           <button type="button" id="btn-nv-agregar" class="btn btn-primary btn-small">➕ Agregar</button>

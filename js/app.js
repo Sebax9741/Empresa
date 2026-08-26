@@ -6121,12 +6121,8 @@ function llenarSelectoresProducto() {
     filtro.innerHTML = '<option value="">Todos los productos</option>' + productos.map(opciones).join('');
     filtro.value = antes;
   }
-  const venta = $('#nv-producto');
-  if (venta) {
-    const antes = venta.value;
-    venta.innerHTML = '<option value="">— Elige un producto —</option>' + productosActivos().map(opciones).join('');
-    venta.value = antes;
-  }
+  // La nota de venta no aparece aquí: no lleva desplegable, se escribe el
+  // nombre y salen las coincidencias debajo (como en el ingreso).
   llenarMotivos($('#aj-tipo') ? $('#aj-tipo').value : 'ajuste');
 }
 
@@ -6285,19 +6281,40 @@ function aplicarModoIngreso() {
 /* ---- Buscador de productos: se escribe el nombre y van saliendo debajo ----
    Es el mismo gesto que ya se usa para buscar clientes al armar una nota, y
    con un catálogo largo un desplegable se vuelve inservible. */
-function productosQueCoinciden(texto) {
+/* Se ordena por parecido, no por el orden del catálogo: escribiendo "aceite"
+   lo primero que sale es el que se llama así, no el décimo que lo lleva en
+   medio del nombre. Con varias palabras basta que estén todas, en cualquier
+   orden: "soya aceite" encuentra "ACEITE SOYA 20BOTX900ML". */
+function productosQueCoinciden(texto, soloActivos = false) {
   const clave = normalizarNombre(texto);
   if (!clave) return [];
-  return productos
-    .filter(p => normalizarNombre(p.nombre).includes(clave) || normalizarNombre(p.codigo).includes(clave))
-    .slice(0, 8);
+  const palabras = clave.split(/\s+/).filter(Boolean);
+  const lista = soloActivos ? productosActivos() : productos;
+  const puntuados = [];
+  for (const p of lista) {
+    const nombre = normalizarNombre(p.nombre);
+    const codigo = normalizarNombre(p.codigo);
+    let puntos = 0;
+    if (codigo && codigo === clave) puntos = 100;          // el código exacto manda
+    else if (nombre === clave) puntos = 95;
+    else if (nombre.startsWith(clave)) puntos = 80;        // empieza como se escribió
+    else if (codigo && codigo.includes(clave)) puntos = 70;
+    else if (nombre.includes(clave)) puntos = 60;
+    else if (palabras.length > 1 && palabras.every(w => nombre.includes(w))) puntos = 50;
+    if (!puntos) continue;
+    puntuados.push({ p, puntos, largo: nombre.length });
+  }
+  // A igual parecido, primero el nombre más corto: suele ser el que se buscaba
+  puntuados.sort((a, b) => b.puntos - a.puntos || a.largo - b.largo
+    || String(a.p.nombre).localeCompare(String(b.p.nombre), 'es'));
+  return puntuados.slice(0, 8).map(x => x.p);
 }
 
-function pintarSugerenciasProducto(cajaId, atributo, texto) {
+function pintarSugerenciasProducto(cajaId, atributo, texto, soloActivos = false) {
   const caja = $(cajaId);
   if (!caja) return;
   if (!normalizarNombre(texto)) { caja.hidden = true; caja.innerHTML = ''; return; }
-  const encontrados = productosQueCoinciden(texto);
+  const encontrados = productosQueCoinciden(texto, soloActivos);
   if (!encontrados.length) {
     caja.innerHTML = '<div class="combo-vacio">Ningún producto coincide</div>';
     caja.hidden = false;
@@ -6941,7 +6958,7 @@ function abrirNuevaNota(base = null) {
   $('#nv-descuento').value = 0;
   $('#nv-permitir-precios').checked = false;
   $('#nv-cantidad').value = 1;
-  $('#nv-producto').value = '';
+  limpiarBuscadorNota();
   nvSeleccionarCliente(base ? (base.clienteId || '') : '');
   mostrarVistaVenta('form');
   renderNotaItems();
@@ -7028,9 +7045,32 @@ function reponerPreciosDeLista() {
   }
 }
 
+/* ---- Buscador de productos de la nota ---- */
+let nvProdIndice = -1;
+
+function elegirProductoNota(id) {
+  const p = productoPorId(id);
+  if (!p) return;
+  $('#nv-producto').value = id;
+  $('#nv-buscar-producto').value = p.nombre;
+  cerrarSugerenciasProducto('#nv-prod-sugerencias');
+  nvProdIndice = -1;
+}
+
+function limpiarBuscadorNota() {
+  $('#nv-buscar-producto').value = '';
+  $('#nv-producto').value = '';
+  cerrarSugerenciasProducto('#nv-prod-sugerencias');
+  nvProdIndice = -1;
+}
+
 function agregarItemNota() {
   const id = $('#nv-producto').value;
-  if (!id) { toast('⚠️ Elige el producto'); return; }
+  if (!id) {
+    toast('⚠️ Busca y elige el producto');
+    $('#nv-buscar-producto').focus();
+    return;
+  }
   const cantidad = Number($('#nv-cantidad').value);
   if (!Number.isFinite(cantidad) || cantidad <= 0) { toast('⚠️ Escribe una cantidad válida'); return; }
   const p = productoPorId(id);
@@ -7051,8 +7091,9 @@ function agregarItemNota() {
       precioEditado: false,
     });
   }
-  $('#nv-producto').value = '';
+  limpiarBuscadorNota();
   $('#nv-cantidad').value = 1;
+  $('#nv-buscar-producto').focus();   // el siguiente producto se escribe seguido
   renderNotaItems();
 }
 
@@ -7710,6 +7751,9 @@ function inicializarEventos() {
     if (!ev.target.closest('#aj-buscar') && !ev.target.closest('#aj-sugerencias')) {
       cerrarSugerenciasProducto('#aj-sugerencias');
     }
+    if (!ev.target.closest('#nv-buscar-producto') && !ev.target.closest('#nv-prod-sugerencias')) {
+      cerrarSugerenciasProducto('#nv-prod-sugerencias');
+    }
   });
 
   // ────────── Kardex ──────────
@@ -7782,7 +7826,26 @@ function inicializarEventos() {
   });
   $('#btn-nv-cliente-nuevo').addEventListener('click', abrirModalClienteForm);
 
-  // Productos de la nota
+  // Productos de la nota: se escribe el nombre y salen las coincidencias
+  $('#nv-buscar-producto').addEventListener('input', ev => {
+    $('#nv-producto').value = '';
+    nvProdIndice = -1;
+    pintarSugerenciasProducto('#nv-prod-sugerencias', 'data-nv-prod', ev.target.value, true);
+  });
+  $('#nv-buscar-producto').addEventListener('keydown', ev => {
+    nvProdIndice = navegarSugerencias(ev, '#nv-prod-sugerencias', 'data-nv-prod',
+      nvProdIndice, id => { elegirProductoNota(id); $('#nv-cantidad').focus(); });
+  });
+  // Al volver al campo con algo escrito se vuelven a ofrecer las coincidencias
+  $('#nv-buscar-producto').addEventListener('focus', ev => {
+    if (!$('#nv-producto').value && ev.target.value) {
+      pintarSugerenciasProducto('#nv-prod-sugerencias', 'data-nv-prod', ev.target.value, true);
+    }
+  });
+  $('#nv-prod-sugerencias').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-nv-prod]');
+    if (b) { elegirProductoNota(b.dataset.nvProd); $('#nv-cantidad').focus(); }
+  });
   $('#btn-nv-agregar').addEventListener('click', agregarItemNota);
   $('#nv-cantidad').addEventListener('keydown', ev => {
     if (ev.key === 'Enter') { ev.preventDefault(); agregarItemNota(); }
