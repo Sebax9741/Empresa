@@ -176,7 +176,7 @@ Opciones (la app es la misma):
 
 - **¿Cuánto cuesta?** Nada: Firebase (plan Spark), GitHub y Netlify tienen planes gratuitos que sobran para este uso.
 - **¿Puedo compartirla con un socio o familiar?** Sí: que instale el APK y entre con el mismo correo y contraseña, o crea otra cuenta si quieres datos separados.
-- **¿Olvidé mi contraseña?** En la pantalla de entrada toca "Olvidé mi contraseña" y te llega un correo para restablecerla.
+- **¿Olvidé mi contraseña?** Pídesela al administrador: te pone una nueva con el botón **🔑 Restablecer clave** en 👥 Usuarios (ver "Restablecer la contraseña de un empleado"). No hay correo de recuperación para los empleados porque no entran con un correo suyo sino con un usuario corto (`juan`), y la dirección que la app arma por detrás no recibe mensajes.
 - **¿Y si estoy sin señal?** Puedes seguir usando la app; los cambios se sincronizan solos al volver la conexión.
 
 ## Tecnología
