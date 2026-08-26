@@ -3209,3 +3209,26 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   .doc-pie-botones { width: 100%; }
   .doc-pie-botones .btn { flex: 1; }
 }
+
+/* ══════════ Iconos en color (Fluent Emoji, estilo Color) ══════════
+   Sustituyen a los emojis del sistema, que cada equipo dibuja a su manera.
+   Van a la altura de la letra que los acompaña, así que crecen y menguan
+   con ella sin tener que ajustar nada en cada sitio. */
+.emo {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.22em;
+  flex: none;
+  display: inline-block;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* En los botones de acción de las tablas (información, editar, quitar) el
+   icono ES el botón: ahí se agranda para que se distinga de un vistazo. */
+.row-actions .btn .emo,
+.usuario-acciones .btn .emo,
+.cliente-acciones .btn .emo,
+.desp-acciones .btn .emo { width: 1.35em; height: 1.35em; vertical-align: -0.3em; }
+/* Los títulos de sección los llevan grandes, como antes los emojis */
+.vista > h2 .emo, .sec-cab h2 .emo, .info-titulo .emo, .settings-titulo .emo { width: 1.1em; height: 1.1em; }
+/* Dentro del panel lateral no hay emojis: sus iconos son de trazo */

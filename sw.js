@@ -1,5 +1,5 @@
 /* Service worker: permite instalar la app y usarla sin internet */
-const CACHE = 'creditos-v91';
+const CACHE = 'creditos-v92';
 const ARCHIVOS = [
   './',
   './index.html',
@@ -16,12 +16,92 @@ const ARCHIVOS = [
   './icons/icon-512.png',
 ];
 
+/* Los iconos en color. Van aparte porque no son críticos: si alguno fallara
+   al bajar, la app tiene que instalarse igual (se verían los emojis del
+   sistema hasta la próxima vez que haya internet). */
+const ICONOS = [
+  './icons/emoji/1f194.svg',
+  './icons/emoji/1f195.svg',
+  './icons/emoji/1f389.svg',
+  './icons/emoji/1f3e0.svg',
+  './icons/emoji/1f3e6.svg',
+  './icons/emoji/1f441.svg',
+  './icons/emoji/1f44c.svg',
+  './icons/emoji/1f451.svg',
+  './icons/emoji/1f464.svg',
+  './icons/emoji/1f465.svg',
+  './icons/emoji/1f4a1.svg',
+  './icons/emoji/1f4b0.svg',
+  './icons/emoji/1f4b3.svg',
+  './icons/emoji/1f4b5.svg',
+  './icons/emoji/1f4be.svg',
+  './icons/emoji/1f4c4.svg',
+  './icons/emoji/1f4c5.svg',
+  './icons/emoji/1f4c8.svg',
+  './icons/emoji/1f4ca.svg',
+  './icons/emoji/1f4cb.svg',
+  './icons/emoji/1f4cd.svg',
+  './icons/emoji/1f4d2.svg',
+  './icons/emoji/1f4dd.svg',
+  './icons/emoji/1f4de.svg',
+  './icons/emoji/1f4e4.svg',
+  './icons/emoji/1f4e5.svg',
+  './icons/emoji/1f4e6.svg',
+  './icons/emoji/1f4f1.svg',
+  './icons/emoji/1f4f4.svg',
+  './icons/emoji/1f4f7.svg',
+  './icons/emoji/1f504.svg',
+  './icons/emoji/1f50d.svg',
+  './icons/emoji/1f511.svg',
+  './icons/emoji/1f512.svg',
+  './icons/emoji/1f513.svg',
+  './icons/emoji/1f514.svg',
+  './icons/emoji/1f517.svg',
+  './icons/emoji/1f522.svg',
+  './icons/emoji/1f53d.svg',
+  './icons/emoji/1f550.svg',
+  './icons/emoji/1f58a.svg',
+  './icons/emoji/1f5a8.svg',
+  './icons/emoji/1f5bc.svg',
+  './icons/emoji/1f5d1.svg',
+  './icons/emoji/1f5d3.svg',
+  './icons/emoji/1f69a.svg',
+  './icons/emoji/1f6aa.svg',
+  './icons/emoji/1f6ab.svg',
+  './icons/emoji/1f6d2.svg',
+  './icons/emoji/1f7e2.svg',
+  './icons/emoji/1f91d.svg',
+  './icons/emoji/1f9cd.svg',
+  './icons/emoji/1f9ee.svg',
+  './icons/emoji/1f9f9.svg',
+  './icons/emoji/1f9fe.svg',
+  './icons/emoji/1fa99.svg',
+  './icons/emoji/2139.svg',
+  './icons/emoji/21a9.svg',
+  './icons/emoji/23f0.svg',
+  './icons/emoji/23f3.svg',
+  './icons/emoji/2601.svg',
+  './icons/emoji/2696.svg',
+  './icons/emoji/2699.svg',
+  './icons/emoji/26a0.svg',
+  './icons/emoji/26f3.svg',
+  './icons/emoji/2705.svg',
+  './icons/emoji/270d.svg',
+  './icons/emoji/270f.svg',
+  './icons/emoji/274c.svg',
+  './icons/emoji/2795.svg',
+  './icons/emoji/2796.svg',
+  './icons/emoji/2b06.svg',
+  './icons/emoji/2b07.svg',
+];
+
 self.addEventListener('install', ev => {
   ev.waitUntil(
     caches.open(CACHE)
       // 'reload' salta la caché del navegador: si no, al instalarse la versión
       // nueva podría guardar los archivos viejos que aún tenía guardados.
-      .then(cache => cache.addAll(ARCHIVOS.map(u => new Request(u, { cache: 'reload' }))))
+      .then(cache => cache.addAll(ARCHIVOS.map(u => new Request(u, { cache: 'reload' })))
+        .then(() => { cache.addAll(ICONOS).catch(() => {}); }))
       .then(() => self.skipWaiting())
   );
 });

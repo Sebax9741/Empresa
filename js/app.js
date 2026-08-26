@@ -1,4 +1,5 @@
 import { descargarXlsx } from './xlsx-lite.js';
+import { vigilarIconos } from './iconos.js';
 
 /* ====== Estado global ====== */
 let creditos = [];
@@ -7902,6 +7903,7 @@ function inicializarEventos() {
   $('#nav-settings').addEventListener('click', () => $('#btn-settings').click());
 
   arrancarReloj();
+  vigilarIconos();   // los emojis pasan a ser iconos en color, iguales en todo equipo
 
   // Contraer / desplegar el panel lateral
   aplicarPlegadoNav(localStorage.getItem(CLAVE_NAV_PLEGADA) === '1');
