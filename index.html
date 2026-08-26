@@ -1391,135 +1391,127 @@
       <p class="sec-vacio" id="nv-vacio" hidden>Todavía no has emitido notas de venta.</p>
     </div>
 
-    <!-- ▸ Formulario: toma de pedido -->
+    <!-- ▸ Formulario: toma de pedido.
+         Va apretado a propósito: es una pantalla de mostrador, con el cliente
+         delante, y bajar con la rueda para llegar al total costaba tiempo. -->
     <div id="nv-vista-form" class="nv-vista" hidden>
-      <div class="sec-cab">
-        <h2>🧮 Nueva nota de venta</h2>
-        <div class="sec-cab-acciones">
-          <button type="button" id="btn-nv-volver" class="btn btn-secondary btn-small">◀ Volver a la lista</button>
-        </div>
-      </div>
-
-      <!-- Cabecera del comprobante -->
+      <!-- Cabecera del comprobante: el documento y sus condiciones, en una barra.
+           No lleva título de sección encima: la barra ya dice qué documento es,
+           y ese renglón se llevaba 46px de los que hacen falta abajo. -->
       <div class="nv-cab">
-        <div class="nv-cab-numero">
-          <span class="nv-cab-etq">NOTA DE VENTA</span>
-          <strong id="nv-numero">0001-00000001</strong>
+        <div class="nv-cab-doc">
+          <span class="nv-cab-etq">Nota de venta</span>
+          <div class="nv-cab-num">
+            <select id="nv-serie" class="nv-serie" aria-label="Serie del comprobante">
+              <option value="0001">0001</option>
+              <option value="0002">0002</option>
+              <option value="0003">0003</option>
+            </select>
+            <span class="nv-cab-guion">–</span>
+            <strong id="nv-correlativo">00000001</strong>
+          </div>
+          <small class="nv-serie-pista" id="nv-serie-pista">La serie se elige sola según la zona</small>
         </div>
         <div class="nv-cab-meta">
-          <div><span>Fecha de emisión</span><input type="date" id="nv-fecha" class="input"></div>
-          <div><span>Hora de creación</span><strong id="nv-hora">—</strong></div>
+          <label><span>Emisión</span><input type="date" id="nv-fecha" class="input"></label>
+          <div><span>Hora</span><strong id="nv-hora">—</strong></div>
           <div><span>Vendedor</span><strong id="nv-vendedor">—</strong></div>
         </div>
+        <button type="button" id="btn-nv-volver" class="nv-volver">◀ Volver a la lista</button>
       </div>
 
-      <!-- Cliente -->
-      <div class="nv-bloque">
-        <h3 class="nv-bloque-tit">1 · Cliente</h3>
-        <div class="nv-cliente-fila">
-          <label class="field nv-cliente-buscar">
-            <span>Buscar cliente *</span>
+      <!-- Cliente y condición de pago: van juntos porque se llenan juntos, al
+           empezar la venta, y separados dejaban media pantalla en blanco. -->
+      <div class="nv-panel">
+        <div class="nv-cli-fila">
+          <div class="field nv-cli-buscar">
+            <span>Cliente *</span>
             <div class="combo-wrap">
-              <input type="text" id="nv-cliente-buscar" class="input" autocomplete="off" placeholder="Escribe el nombre o el código…">
+              <input type="text" id="nv-cliente-buscar" class="input" autocomplete="off"
+                     placeholder="Escribe el nombre o el código…">
               <div id="nv-cliente-sugerencias" class="combo-sugerencias" hidden></div>
             </div>
             <input type="hidden" id="nv-cliente-id">
-          </label>
-          <button type="button" id="btn-nv-cliente-nuevo" class="btn btn-secondary btn-small">➕ Registrar cliente</button>
-        </div>
-
-        <div class="nv-ficha" id="nv-ficha" hidden>
-          <div class="nv-ficha-cat" id="nv-ficha-cat"></div>
-          <dl class="nv-ficha-datos">
-            <div><dt>Cliente</dt><dd id="nv-fc-nombre">—</dd></div>
-            <div><dt>Código</dt><dd id="nv-fc-codigo">—</dd></div>
-            <div><dt>Zona</dt><dd id="nv-fc-zona">—</dd></div>
-            <div><dt>RUC / DNI</dt><dd id="nv-fc-ruc">—</dd></div>
-            <div><dt>Dirección</dt><dd id="nv-fc-direccion">—</dd></div>
-            <div><dt>Teléfono</dt><dd id="nv-fc-telefono">—</dd></div>
-            <div><dt>Deuda actual</dt><dd id="nv-fc-deuda">—</dd></div>
-            <div><dt>Nota</dt><dd id="nv-fc-notas">—</dd></div>
-          </dl>
-        </div>
-        <p class="nv-sin-cliente" id="nv-sin-cliente">Elige un cliente para ver su categoría y sus datos.</p>
-      </div>
-
-      <!-- Condición de pago -->
-      <div class="nv-bloque">
-        <h3 class="nv-bloque-tit">2 · Condición</h3>
-        <div class="field-row">
-          <label class="field"><span>Condición</span>
+          </div>
+          <button type="button" id="btn-nv-cliente-nuevo" class="btn btn-secondary btn-small">➕ Registrar</button>
+          <label class="field nv-cli-cond"><span>Condición</span>
             <select id="nv-condicion" class="input">
               <option value="contado">CONTADO</option>
               <option value="credito">CRÉDITO</option>
             </select></label>
-          <label class="field"><span>Fecha de pago</span>
+          <label class="field nv-cli-fpago"><span>F. de pago</span>
             <input type="date" id="nv-fpago" class="input"></label>
-          <label class="field"><span>Pedido / referencia <small>opcional</small></span>
-            <input type="text" id="nv-referencia" class="input" placeholder="Ej: 90/1/0"></label>
+          <label class="field nv-cli-ref"><span>Pedido / ref.</span>
+            <input type="text" id="nv-referencia" class="input" placeholder="90/1/0"></label>
+        </div>
+        <p class="nv-sin-cliente" id="nv-sin-cliente">Elige el cliente para ver su categoría de precio, su zona y su deuda.</p>
+
+        <div class="nv-cli-datos" id="nv-ficha" hidden>
+          <span class="nv-cat" id="nv-ficha-cat" title="Categoría de precio">C</span>
+          <div class="nv-dato nv-dato-ancho"><span>Cliente</span><strong id="nv-fc-nombre">—</strong></div>
+          <div class="nv-dato"><span>Código</span><strong id="nv-fc-codigo">—</strong></div>
+          <div class="nv-dato"><span>Zona</span><strong id="nv-fc-zona">—</strong></div>
+          <div class="nv-dato nv-dato-ancho"><span>Ubicación</span><strong id="nv-fc-direccion">—</strong></div>
+          <div class="nv-dato"><span>RUC / DNI</span><strong id="nv-fc-ruc">—</strong></div>
+          <div class="nv-dato"><span>Teléfono</span><strong id="nv-fc-telefono">—</strong></div>
+          <div class="nv-dato"><span>Deuda</span><strong id="nv-fc-deuda">—</strong></div>
         </div>
       </div>
 
       <!-- Productos -->
-      <div class="nv-bloque">
-        <div class="nv-bloque-cab">
-          <h3 class="nv-bloque-tit">3 · Productos</h3>
-          <label class="nv-permiso">
-            <input type="checkbox" id="nv-permitir-precios">
-            <span>🔓 Permitir modificación de precios</span>
-          </label>
-        </div>
-
-        <div class="nv-agregar">
+      <div class="nv-panel nv-panel-items">
+        <div class="nv-ag">
           <label class="field nv-ag-prod"><span>Producto</span>
             <select id="nv-producto" class="input"></select></label>
           <label class="field nv-ag-cant"><span>Cantidad</span>
             <input type="number" id="nv-cantidad" class="input" min="0.01" step="1" value="1"></label>
           <button type="button" id="btn-nv-agregar" class="btn btn-primary btn-small">➕ Agregar</button>
+          <label class="nv-permiso">
+            <input type="checkbox" id="nv-permitir-precios">
+            <span>🔓 Modificar precios</span>
+          </label>
         </div>
 
-        <div class="table-wrap nv-items-wrap">
-          <table class="nv-items" id="nv-items">
+        <div class="nv-items-wrap" hidden>
+          <table class="nv-items">
             <thead>
               <tr>
+                <th class="col-n">#</th>
                 <th class="col-cod">Código</th>
+                <th>Descripción</th>
                 <th class="col-num">Cant.</th>
                 <th class="col-um">U.M.</th>
-                <th>Descripción</th>
                 <th class="col-num">P.U.</th>
                 <th class="col-num">Importe</th>
+                <th class="col-num">Dscto. bonif.</th>
+                <th class="col-num">Total</th>
                 <th class="col-acc"></th>
               </tr>
             </thead>
             <tbody id="nv-items-body"></tbody>
           </table>
         </div>
-        <p class="sec-vacio" id="nv-items-vacio">Todavía no agregaste productos a esta nota.</p>
+        <p class="nv-vacio-items" id="nv-items-vacio">Todavía no agregaste productos a esta nota.</p>
       </div>
 
-      <!-- Totales -->
-      <div class="nv-bloque nv-totales-bloque">
-        <h3 class="nv-bloque-tit">4 · Total</h3>
-        <div class="nv-totales">
-          <div class="nv-letras">
-            <span>Son:</span>
-            <strong id="nv-letras">—</strong>
-          </div>
-          <div class="nv-cifras">
-            <div class="nv-linea"><span>Subtotal</span><strong id="nv-subtotal">0.00</strong></div>
-            <div class="nv-linea">
-              <span>Total descuento</span>
-              <input type="number" id="nv-descuento" class="input" min="0" step="0.01" value="0">
-            </div>
-            <div class="nv-linea nv-linea-total"><span>Total a pagar</span><strong id="nv-total">0.00</strong></div>
-          </div>
+      <!-- Pie: el importe en letras, los totales y los botones, en una barra -->
+      <div class="nv-pie">
+        <div class="nv-letras">
+          <span>Son</span>
+          <strong id="nv-letras">—</strong>
         </div>
-      </div>
-
-      <div class="modal-buttons nv-acciones">
-        <button type="button" id="btn-nv-cancelar" class="btn btn-secondary">Cancelar</button>
-        <button type="button" id="btn-nv-guardar" class="btn btn-secondary">💾 Guardar</button>
-        <button type="button" id="btn-nv-guardar-imprimir" class="btn btn-primary">🖨️ Guardar e imprimir</button>
+        <div class="nv-cifras">
+          <div class="nv-linea"><span>Subtotal</span><strong id="nv-subtotal">0.00</strong></div>
+          <div class="nv-linea nv-linea-bonif"><span>Bonificación</span><strong id="nv-bonif">0.00</strong></div>
+          <div class="nv-linea"><span>Descuento</span>
+            <input type="number" id="nv-descuento" class="input" min="0" step="0.01" value="0"></div>
+          <div class="nv-linea nv-linea-total"><span>Total a pagar</span><strong id="nv-total">0.00</strong></div>
+        </div>
+        <div class="nv-botones">
+          <button type="button" id="btn-nv-cancelar" class="btn btn-secondary btn-small">Cancelar</button>
+          <button type="button" id="btn-nv-guardar" class="btn btn-secondary btn-small">💾 Guardar</button>
+          <button type="button" id="btn-nv-guardar-imprimir" class="btn btn-primary btn-small">🖨️ Guardar e imprimir</button>
+        </div>
       </div>
     </div>
   </section>

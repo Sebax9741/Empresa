@@ -6795,20 +6795,53 @@ function montoEnLetras(monto) {
 
 /* ══════════════════════ Notas de venta ══════════════════════ */
 
-const SERIE_NOTA = '0001';
+/* Cada zona de reparto tiene su propia serie de comprobantes. La serie sale
+   sola al elegir el cliente, pero se puede cambiar a mano: a veces se atiende
+   en el mostrador a alguien de otra zona. */
+const SERIES = ['0001', '0002', '0003'];
+const SERIE_POR_ZONA = {
+  'CIUDAD': '0001', 'MODELO': '0001', 'CARRETERA': '0001', '3 DE MAYO': '0001',
+  'MILAGROS': '0001', 'PADRE ALDAMIZ': '0001', 'ALAMEDA': '0001',
+  'LABERINTO': '0002',
+  'PAMPA': '0003',
+};
+const SERIE_POR_DEFECTO = '0001';
+
+function serieDeZona(zona) {
+  return SERIE_POR_ZONA[String(zona || '').trim().toUpperCase()] || SERIE_POR_DEFECTO;
+}
+
 let nvItems = [];          // líneas de la nota que se está armando
 let nvClienteId = '';
 let nvNumero = '';
 let nvCreadoEn = 0;        // hora en que se empezó la nota
 let nvComboIndice = -1;
 
-function siguienteNumeroNota() {
+/* Cada serie lleva su propio correlativo, como en cualquier talonario: la
+   0002 va por su cuenta aunque la 0001 esté mucho más adelante. */
+function siguienteNumeroNota(serie) {
+  const s = SERIES.includes(serie) ? serie : SERIE_POR_DEFECTO;
   let mayor = 0;
   for (const n of notas) {
-    const m = /-(\d+)$/.exec(String(n.numero || ''));
-    if (m) mayor = Math.max(mayor, Number(m[1]));
+    const m = /^(\d+)-(\d+)$/.exec(String(n.numero || ''));
+    if (m && m[1] === s) mayor = Math.max(mayor, Number(m[2]));
   }
-  return `${SERIE_NOTA}-${String(mayor + 1).padStart(8, '0')}`;
+  return `${s}-${String(mayor + 1).padStart(8, '0')}`;
+}
+
+/* Pinta el número en la cabecera y lo deja guardado para cuando se grabe */
+function nvPonerNumero(serie) {
+  nvNumero = siguienteNumeroNota(serie);
+  const [s, correlativo] = nvNumero.split('-');
+  const sel = $('#nv-serie');
+  if (sel) sel.value = s;
+  const cor = $('#nv-correlativo');
+  if (cor) cor.textContent = correlativo;
+}
+
+function nvSerieElegida() {
+  const sel = $('#nv-serie');
+  return sel && SERIES.includes(sel.value) ? sel.value : SERIE_POR_DEFECTO;
 }
 
 function notasOrdenadas() {
@@ -6825,6 +6858,20 @@ function abrirVentas() {
 function mostrarVistaVenta(cual) {
   $('#nv-vista-lista').hidden = cual !== 'lista';
   $('#nv-vista-form').hidden = cual !== 'form';
+  if (cual === 'form') requestAnimationFrame(nvAjustarAlto);
+}
+
+/* Cuánto alto le queda al formulario. Se mide desde dónde empieza hasta el
+   borde de la ventana, así que se acomoda solo aunque arriba aparezca el
+   aviso de "modo local" o cambie el alto de la cabecera. */
+function nvAjustarAlto() {
+  const f = $('#nv-vista-form');
+  if (!f || f.hidden) return;
+  // En pantalla angosta el formulario se recorre entero: no se le pone tope
+  if (enPantallaAngosta()) { f.style.removeProperty('--nv-alto'); return; }
+  const arriba = f.getBoundingClientRect().top;
+  const libre = Math.max(280, Math.round(window.innerHeight - arriba - 24));
+  f.style.setProperty('--nv-alto', libre + 'px');
 }
 
 function renderVentas() {
@@ -6883,9 +6930,8 @@ function abrirNuevaNota(base = null) {
   }
   llenarSelectoresProducto();
   nvItems = base ? (base.items || []).map(it => ({ ...it })) : [];
-  nvNumero = siguienteNumeroNota();
   nvCreadoEn = Date.now();
-  $('#nv-numero').textContent = nvNumero;
+  nvPonerNumero(base ? serieDeZona(base.zona) : SERIE_POR_DEFECTO);
   $('#nv-fecha').value = hoyISO();
   $('#nv-hora').textContent = horaDeTimestamp(nvCreadoEn);
   $('#nv-vendedor').textContent = quienSoy();
@@ -6942,9 +6988,10 @@ function nvSeleccionarCliente(id) {
   $('#nv-sin-cliente').hidden = !!cli;
   if (cli) {
     const cat = categoriaDe(cli);
-    $('#nv-ficha-cat').innerHTML =
-      `<span class="nv-cat-grande cat-${cat}">${cat}</span>
-       <span class="nv-cat-detalle">Categoría de precio<br><strong>${CATEGORIAS[cat].detalle}</strong></span>`;
+    const insignia = $('#nv-ficha-cat');
+    insignia.textContent = cat;
+    insignia.className = `nv-cat cat-${cat}`;
+    insignia.title = `Categoría de precio ${cat} · ${CATEGORIAS[cat].detalle}`;
     $('#nv-fc-nombre').textContent = cli.nombre;
     $('#nv-fc-codigo').textContent = cli.codigo || '—';
     $('#nv-fc-zona').textContent = cli.zona || '—';
@@ -6954,7 +7001,12 @@ function nvSeleccionarCliente(id) {
     const deuda = creditosDeCliente(cli.id).reduce((s, c) => s + saldoDe(c), 0);
     $('#nv-fc-deuda').textContent = deuda > 0 ? formatoMonto(deuda) : 'sin deuda';
     $('#nv-fc-deuda').className = deuda > 0 ? 'nv-deuda' : '';
-    $('#nv-fc-notas').textContent = cli.notas || '—';
+    // La serie va con la zona del cliente. Se cambia sola aquí; si el usuario
+    // la toca después, manda lo que él eligió.
+    nvPonerNumero(serieDeZona(cli.zona));
+    $('#nv-serie-pista').textContent = `Serie de ${cli.zona || 'la zona'}`;
+  } else {
+    $('#nv-serie-pista').textContent = 'La serie se elige sola según la zona';
   }
   // Al cambiar de cliente cambia la categoría: se repone el precio de lista de
   // las líneas que nadie tocó a mano (las editadas se respetan).
@@ -7004,6 +7056,15 @@ function agregarItemNota() {
   renderNotaItems();
 }
 
+/* Lo que vale una línea. Una bonificación se cobra y se descuenta por el
+   mismo importe: el producto queda con su precio a la vista —para que se sepa
+   qué se está regalando— y el neto de la línea es cero. */
+function cuentaDeLinea(it) {
+  const importe = (Number(it.cantidad) || 0) * (Number(it.precio) || 0);
+  const dsctoBonif = it.bonificacion ? importe : 0;
+  return { importe, dsctoBonif, neto: importe - dsctoBonif };
+}
+
 function renderNotaItems() {
   const cuerpo = $('#nv-items-body');
   if (!cuerpo) return;
@@ -7012,25 +7073,34 @@ function renderNotaItems() {
   $('.nv-items-wrap').hidden = !nvItems.length;
 
   cuerpo.innerHTML = nvItems.map((it, i) => {
-    const importe = (Number(it.cantidad) || 0) * (Number(it.precio) || 0);
+    const { importe, dsctoBonif, neto } = cuentaDeLinea(it);
     const p = productoPorId(it.productoId);
     const stock = p ? stockDe(p.id) : 0;
     const falta = p && (Number(it.cantidad) || 0) > stock;
-    return `<tr>
+    return `<tr class="${it.bonificacion ? 'nv-fila-bonif' : ''}">
+      <td class="col-n">${i + 1}</td>
       <td class="col-cod"><code>${escapeHtml(it.codigo || '—')}</code></td>
+      <td>${escapeHtml(it.descripcion || '')}
+        ${it.bonificacion ? '<span class="nv-etq-bonif">Bonificación</span>' : ''}
+        ${falta ? `<small class="nv-sin-stock">⚠️ solo hay ${stock} en almacén</small>` : ''}
+        ${it.precioEditado ? '<small class="nv-precio-tocado">precio modificado a mano</small>' : ''}</td>
       <td class="col-num">
         <input type="number" class="input input-mini" data-nv-cant="${i}" min="0.01" step="1" value="${it.cantidad}">
       </td>
       <td class="col-um">${escapeHtml(it.um || '')}</td>
-      <td>${escapeHtml(it.descripcion || '')}
-        ${falta ? `<small class="nv-sin-stock">⚠️ solo hay ${stock} en almacén</small>` : ''}
-        ${it.precioEditado ? '<small class="nv-precio-tocado">precio modificado a mano</small>' : ''}</td>
       <td class="col-num">
         <input type="number" class="input input-mini" data-nv-precio="${i}" min="0" step="0.01"
           value="${Number(it.precio).toFixed(2)}" ${editable ? '' : 'readonly'}>
       </td>
       <td class="col-num nv-importe">${soles(importe)}</td>
-      <td class="col-acc"><button type="button" class="btn btn-danger btn-small" data-nv-quitar="${i}" title="Quitar">✕</button></td>
+      <td class="col-num nv-dscto">${dsctoBonif ? '−' + soles(dsctoBonif) : '—'}</td>
+      <td class="col-num nv-neto"><strong>${soles(neto)}</strong></td>
+      <td class="col-acc">
+        <button type="button" class="btn btn-secondary btn-small" data-nv-bonif="${i}"
+          title="${it.bonificacion ? 'Volver a cobrarla' : 'Convertir en bonificación (se regala)'}"
+          aria-pressed="${it.bonificacion ? 'true' : 'false'}">🎁</button>
+        <button type="button" class="btn btn-danger btn-small" data-nv-quitar="${i}" title="Quitar">✕</button>
+      </td>
     </tr>`;
   }).join('');
 
@@ -7038,26 +7108,34 @@ function renderNotaItems() {
 }
 
 function recalcularTotalesNota() {
-  const subtotal = nvItems.reduce((s, it) => s + (Number(it.cantidad) || 0) * (Number(it.precio) || 0), 0);
+  let subtotal = 0, bonificacion = 0;
+  for (const it of nvItems) {
+    const c = cuentaDeLinea(it);
+    subtotal += c.importe;
+    bonificacion += c.dsctoBonif;
+  }
+  const cobrable = subtotal - bonificacion;
   let descuento = Number($('#nv-descuento').value) || 0;
   if (descuento < 0) descuento = 0;
-  if (descuento > subtotal) descuento = subtotal;
-  const total = subtotal - descuento;
+  if (descuento > cobrable) descuento = cobrable;
+  const total = cobrable - descuento;
   $('#nv-subtotal').textContent = soles(subtotal);
+  $('#nv-bonif').textContent = bonificacion ? '−' + soles(bonificacion) : soles(0);
+  $('#nv-bonif').parentElement.hidden = !bonificacion;
   $('#nv-total').textContent = soles(total);
   $('#nv-letras').textContent = nvItems.length ? montoEnLetras(total) : '—';
-  return { subtotal, descuento, total };
+  return { subtotal, bonificacion, descuento, total };
 }
 
 function armarNota() {
   const cli = nvClienteId ? clientePorId(nvClienteId) : null;
   if (!cli) { toast('⚠️ Elige el cliente de la nota'); $('#nv-cliente-buscar').focus(); return null; }
   if (!nvItems.length) { toast('⚠️ Agrega al menos un producto'); return null; }
-  const { subtotal, descuento, total } = recalcularTotalesNota();
+  const { subtotal, bonificacion, descuento, total } = recalcularTotalesNota();
   return {
     id: nuevoId(),
     numero: nvNumero,
-    serie: SERIE_NOTA,
+    serie: nvSerieElegida(),
     fecha: $('#nv-fecha').value || hoyISO(),
     hora: horaDeTimestamp(nvCreadoEn),
     clienteId: cli.id,
@@ -7072,13 +7150,16 @@ function armarNota() {
     fechaPago: $('#nv-fpago').value || '',
     referencia: $('#nv-referencia').value.trim(),
     preciosModificados: $('#nv-permitir-precios').checked && nvItems.some(it => it.precioEditado),
-    items: nvItems.map(it => ({
-      productoId: it.productoId, codigo: it.codigo, descripcion: it.descripcion, um: it.um,
-      cantidad: Number(it.cantidad) || 0, precio: Number(it.precio) || 0,
-      importe: (Number(it.cantidad) || 0) * (Number(it.precio) || 0),
-      precioEditado: !!it.precioEditado,
-    })),
-    subtotal, descuento, total,
+    items: nvItems.map(it => {
+      const { importe, dsctoBonif, neto } = cuentaDeLinea(it);
+      return {
+        productoId: it.productoId, codigo: it.codigo, descripcion: it.descripcion, um: it.um,
+        cantidad: Number(it.cantidad) || 0, precio: Number(it.precio) || 0,
+        importe, bonificacion: !!it.bonificacion, dsctoBonif, neto,
+        precioEditado: !!it.precioEditado,
+      };
+    }),
+    subtotal, bonificacion, descuento, total,
     enLetras: montoEnLetras(total),
     emitidaPor: quienSoy(),
     creado: nvCreadoEn || Date.now(),
@@ -7093,7 +7174,7 @@ async function guardarNota(imprimir) {
   // El número se recalcula al grabar: entre que se abrió el formulario y ahora,
   // otro usuario pudo emitir una nota desde su tablet.
   const enUso = notas.some(n => n.numero === nota.numero);
-  if (enUso) nota.numero = siguienteNumeroNota();
+  if (enUso) nota.numero = siguienteNumeroNota(nota.serie);
 
   const btnG = $('#btn-nv-guardar'), btnI = $('#btn-nv-guardar-imprimir');
   btnG.disabled = btnI.disabled = true;
@@ -7128,18 +7209,23 @@ async function guardarNota(imprimir) {
 /* ══════════ Impresión: media hoja A4 (A5 apaisado) ══════════ */
 function imprimirNota(nota) {
   const emp = settings;
+  // La columna del descuento por bonificación solo aparece si hay alguna: en
+  // una nota normal sería una columna de guiones comiéndose el ancho.
+  const hayBonif = (nota.items || []).some(it => it.bonificacion);
+  const columnas = hayBonif ? 7 : 6;
   const filas = (nota.items || []).map(it => `<tr>
       <td class="c-cod">${escapeHtml(it.codigo || '')}</td>
       <td class="c-cant">${it.cantidad}</td>
       <td class="c-um">${escapeHtml(it.um || '')}</td>
-      <td class="c-desc">${escapeHtml(it.descripcion || '')}</td>
+      <td class="c-desc">${escapeHtml(it.descripcion || '')}${it.bonificacion ? ' <b>(BONIF.)</b>' : ''}</td>
       <td class="c-pu">${soles(it.precio)}</td>
-      <td class="c-imp">${soles(it.importe)}</td>
+      ${hayBonif ? `<td class="c-bon">${it.dsctoBonif ? '-' + soles(it.dsctoBonif) : ''}</td>` : ''}
+      <td class="c-imp">${soles(it.bonificacion ? 0 : it.importe)}</td>
     </tr>`).join('');
   // Renglones en blanco para que el cuadro no quede corto en la hoja
   const enBlanco = Math.max(0, 8 - (nota.items || []).length);
   const vacias = Array.from({ length: enBlanco },
-    () => '<tr class="vacia"><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('');
+    () => `<tr class="vacia">${'<td></td>'.repeat(columnas)}</tr>`).join('');
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
   <title>Nota de venta ${escapeHtml(nota.numero)}</title>
@@ -7182,6 +7268,7 @@ function imprimirNota(nota) {
        para la descripción, que es la que necesita el sitio. */
     .c-cod { width: 14mm; } .c-cant { width: 10mm; text-align: right; }
     .c-um { width: 10mm; } .c-pu { width: 16mm; text-align: right; }
+    .c-bon { width: 17mm; text-align: right; }
     .c-imp { width: 19mm; text-align: right; }
     .c-desc { word-break: break-word; }
     tr.vacia td { height: 4.2mm; }
@@ -7228,7 +7315,8 @@ function imprimirNota(nota) {
     <table>
       <thead><tr>
         <th class="c-cod">Código</th><th class="c-cant">Cant.</th><th class="c-um">U.M.</th>
-        <th class="c-desc">Descripción</th><th class="c-pu">P.U.</th><th class="c-imp">Importe</th>
+        <th class="c-desc">Descripción</th><th class="c-pu">P.U.</th>
+        ${hayBonif ? '<th class="c-bon">Dscto. bonif.</th>' : ''}<th class="c-imp">Importe</th>
       </tr></thead>
       <tbody>${filas}${vacias}</tbody>
     </table>
@@ -7690,7 +7778,7 @@ function inicializarEventos() {
     if (b) nvSeleccionarCliente(b.dataset.nvCliente);
   });
   document.addEventListener('click', ev => {
-    if (!ev.target.closest('.nv-cliente-buscar')) nvCerrarSugerencias();
+    if (!ev.target.closest('.nv-cli-buscar')) nvCerrarSugerencias();
   });
   $('#btn-nv-cliente-nuevo').addEventListener('click', abrirModalClienteForm);
 
@@ -7725,9 +7813,12 @@ function inicializarEventos() {
       recalcularTotalesNota();
       const fila = precio.closest('tr');
       if (!fila) return;
-      fila.querySelector('.nv-importe').textContent = soles((Number(it.cantidad) || 0) * nuevo);
+      const { importe, dsctoBonif, neto } = cuentaDeLinea(it);
+      fila.querySelector('.nv-importe').textContent = soles(importe);
+      fila.querySelector('.nv-dscto').textContent = dsctoBonif ? '−' + soles(dsctoBonif) : '—';
+      fila.querySelector('.nv-neto').innerHTML = `<strong>${soles(neto)}</strong>`;
       // El aviso de "precio modificado a mano" también se pone aquí, por lo mismo
-      const desc = fila.cells[3];
+      const desc = fila.querySelector('td:nth-child(3)');
       let aviso = desc.querySelector('.nv-precio-tocado');
       if (it.precioEditado && !aviso) {
         aviso = document.createElement('small');
@@ -7741,9 +7832,19 @@ function inicializarEventos() {
   });
   $('#nv-items-body').addEventListener('click', ev => {
     const quitar = ev.target.closest('[data-nv-quitar]');
-    if (quitar) { nvItems.splice(Number(quitar.dataset.nvQuitar), 1); renderNotaItems(); }
+    if (quitar) { nvItems.splice(Number(quitar.dataset.nvQuitar), 1); renderNotaItems(); return; }
+    const bonif = ev.target.closest('[data-nv-bonif]');
+    if (bonif) {
+      const it = nvItems[Number(bonif.dataset.nvBonif)];
+      if (it) { it.bonificacion = !it.bonificacion; renderNotaItems(); }
+    }
   });
   $('#nv-descuento').addEventListener('input', recalcularTotalesNota);
+  // La serie se propone según la zona, pero manda lo que elija el usuario
+  $('#nv-serie').addEventListener('change', () => {
+    nvPonerNumero(nvSerieElegida());
+    $('#nv-serie-pista').textContent = 'Serie elegida a mano';
+  });
   $('#nv-condicion').addEventListener('change', () => {
     // A crédito, la fecha de pago se propone según los días configurados
     const dias = $('#nv-condicion').value === 'credito' ? Number(settings.dias) || 30 : 0;
@@ -7920,6 +8021,8 @@ function inicializarEventos() {
   // desde cada sitio que la toca.
   if (window.ResizeObserver) new ResizeObserver(medirCabecera).observe(document.querySelector('.app-header'));
   else window.addEventListener('resize', medirCabecera);
+  // El formulario de la nota se reajusta con la ventana y con el aviso de arriba
+  window.addEventListener('resize', nvAjustarAlto);
   $('#nav-velo').addEventListener('click', cerrarCajonNav);
   $('#btn-nav-cerrar').addEventListener('click', cerrarCajonNav);
   $('#nav-lateral').addEventListener('click', ev => {

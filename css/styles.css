@@ -2725,7 +2725,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .prod-precios-ayuda { display: block; color: var(--muted); font-size: 0.78rem; margin-bottom: 0.6rem; }
 
 /* Etiquetas de categoría: una letra que se reconoce de un vistazo */
-.cat-lbl, .cliente-cat, .nv-cat-grande {
+.cat-lbl, .cliente-cat, .nv-cat {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2794,40 +2794,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   margin: 0 0 0.85rem;
 }
 
-/* ---- Notas de venta: cabecera del comprobante ---- */
-.nv-cab {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.2rem;
-  flex-wrap: wrap;
-  background: var(--side);
-  color: #fff;
-  border-radius: var(--radius);
-  padding: 1rem 1.3rem;
-  margin-bottom: 1rem;
-  box-shadow: var(--shadow);
-}
-.nv-cab-etq {
-  display: block;
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--side-text);
-  font-weight: 700;
-}
-.nv-cab-numero strong {
-  font-size: 1.5rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-}
-.nv-cab-meta { display: flex; gap: 1.6rem; flex-wrap: wrap; }
-.nv-cab-meta > div { display: flex; flex-direction: column; gap: 0.2rem; }
-.nv-cab-meta span { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--side-text); font-weight: 700; }
-.nv-cab-meta strong { font-size: 0.98rem; }
-.nv-cab-meta .input { margin: 0; padding: 0.3rem 0.5rem; font-size: 0.9rem; }
-
-/* Bloques numerados del formulario (cliente, condición, productos, total) */
+/* Bloque con título, en "Ingreso de productos" */
 .nv-bloque {
   background: var(--card);
   border-radius: var(--radius);
@@ -2835,7 +2802,6 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   padding: 1rem 1.2rem;
   margin-bottom: 1rem;
 }
-.nv-bloque-cab { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .nv-bloque-tit {
   margin: 0 0 0.85rem;
   font-size: 0.78rem;
@@ -2844,11 +2810,10 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   color: var(--muted);
   font-weight: 800;
 }
-.nv-bloque-cab .nv-bloque-tit { margin-bottom: 0.85rem; }
 .nv-bloque .field-row { grid-template-columns: repeat(3, 1fr); }
 
-.nv-cliente-fila { display: flex; align-items: flex-end; gap: 0.7rem; flex-wrap: wrap; }
-.nv-cliente-buscar { flex: 1; min-width: 18rem; margin-bottom: 0; }
+/* Buscador con lista desplegable. Lo usan la nota de venta, el crédito y los
+   despachos, así que vive aparte de cualquiera de ellos. */
 .combo-wrap { position: relative; }
 .combo-sugerencias {
   position: absolute;
@@ -2881,99 +2846,251 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .combo-item:hover, .combo-item.activo { background: var(--primary-light); }
 .combo-item small { color: var(--muted); font-size: 0.76rem; margin-left: auto; white-space: nowrap; }
 
-/* Ficha del cliente elegido: la categoría manda, por eso va en grande */
-.nv-ficha {
+/* El formulario se ajusta a la ventana: la cabecera, el cliente y el total
+   quedan siempre a la vista, y lo que crece es el cuadro de productos, que
+   se desplaza por dentro. Así una nota de veinte líneas no obliga a bajar
+   con la rueda para ver cuánto va: el total está donde estaba. */
+#nv-vista-form {
   display: flex;
-  align-items: flex-start;
-  gap: 1.2rem;
-  background: var(--bg-tint);
-  border-radius: var(--radius-sm);
-  padding: 0.9rem 1.1rem;
-  margin-top: 0.9rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.55rem;
+  /* El tope lo mide el guion al abrir el formulario y lo deja aquí: depende
+     de si hay aviso de "modo local", de la cabecera y del margen de la
+     sección, y a ojo se quedaba corto o largo según la pantalla. */
+  max-height: var(--nv-alto, calc(100vh - 170px));
 }
-.nv-ficha-cat { display: flex; align-items: center; gap: 0.7rem; flex: none; }
-.nv-cat-grande { width: 3.2rem; height: 3.2rem; font-size: 1.9rem; border-radius: 14px; }
-.nv-cat-detalle { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
-.nv-cat-detalle strong { font-size: 0.95rem; color: var(--text); text-transform: none; letter-spacing: 0; }
-.nv-ficha-datos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 0.45rem 1.2rem;
-  margin: 0;
-  flex: 1;
-  min-width: 20rem;
-}
-.nv-ficha-datos dt { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
-.nv-ficha-datos dd { margin: 0; font-size: 0.9rem; font-weight: 600; overflow-wrap: break-word; }
-.nv-ficha-datos .nv-deuda { color: var(--danger); }
-.nv-sin-cliente { color: var(--muted); font-size: 0.88rem; margin: 0.9rem 0 0; }
+#nv-vista-form > * { margin-bottom: 0; }
+.nv-panel-items { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.nv-panel-items .nv-items-wrap { overflow-y: auto; min-height: 0; }
+/* La fila de títulos se queda pegada arriba mientras se recorre el cuadro */
+.nv-panel-items .nv-items thead th { position: sticky; top: 0; z-index: 2; }
 
-/* Casilla de permitir modificación de precios: se ve que es una llave abierta */
-.nv-permiso {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--bg-tint);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.35rem 0.9rem;
-  font-size: 0.86rem;
-  font-weight: 600;
-  cursor: pointer;
-  margin-bottom: 0.85rem;
+/* En el teléfono no se ata a la ventana: ahí las partes fijas se apilan y no
+   quedaría sitio para el cuadro. La página se recorre como siempre. */
+@media (max-width: 999px) {
+  #nv-vista-form { display: block; max-height: none; }
+  #nv-vista-form > * { margin-bottom: 0.7rem; }
+  .nv-panel-items .nv-items-wrap { overflow-y: visible; }
 }
-.nv-permiso:has(input:checked) {
-  background: var(--amber-light);
-  border-color: var(--amber);
-  color: var(--warning);
-}
-.nv-permiso input { width: 1rem; height: 1rem; accent-color: var(--primary); }
 
-.nv-agregar { display: flex; align-items: flex-end; gap: 0.7rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
-.nv-agregar .field { margin: 0; }
-.nv-ag-prod { flex: 1; min-width: 18rem; }
-.nv-ag-cant { width: 8rem; }
-
-.nv-items .input-mini {
-  width: 100%;
-  max-width: 6.5rem;
-  margin: 0;
-  padding: 0.25rem 0.4rem;
-  font-size: 0.88rem;
-  text-align: right;
+/* Con el formulario abierto, el marco de la sección sobra: cada panel trae
+   el suyo, y ese doble borde se comía 96px de alto. */
+#view-ventas:has(#nv-vista-form:not([hidden])) {
+  padding: 0.8rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
 }
-.nv-items .input-mini[readonly] { background: var(--bg-tint); color: var(--muted); cursor: not-allowed; }
-.nv-items .nv-importe { font-weight: 700; }
-.nv-sin-stock { display: block; color: var(--danger); font-size: 0.74rem; font-weight: 600; }
-.nv-precio-tocado { display: block; color: var(--warning); font-size: 0.74rem; font-weight: 600; }
 
-/* Totales: las letras a la izquierda, las cifras a la derecha como en la nota */
-.nv-totales { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: flex-start; }
-.nv-letras {
-  flex: 1;
-  min-width: 18rem;
-  background: var(--bg-tint);
-  border-radius: var(--radius-sm);
-  padding: 0.8rem 1rem;
-}
-.nv-letras span { display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; }
-.nv-letras strong { font-size: 0.95rem; }
-.nv-cifras { width: 22rem; max-width: 100%; }
-.nv-linea {
+/* ---- Notas de venta: formulario de mostrador ----
+   Está apretado a propósito. Se llena con el cliente delante, así que todo
+   —documento, cliente, productos y total— tiene que caber de una vez: bajar
+   con la rueda para ver cuánto va costaba tiempo en cada venta. */
+
+/* Cabecera: el documento a la izquierda, sus condiciones a la derecha */
+.nv-cab {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.92rem;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  background: var(--side);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 0.7rem 1.1rem;
+  margin-bottom: 0.7rem;
+  box-shadow: var(--shadow);
 }
-.nv-linea .input { width: 8rem; margin: 0; padding: 0.25rem 0.5rem; text-align: right; }
+.nv-cab-etq {
+  display: block;
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--side-text);
+  font-weight: 700;
+}
+.nv-cab-num { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.1rem; }
+.nv-cab-num strong {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+.nv-cab-guion { font-size: 1.4rem; color: var(--side-text); }
+/* La serie se elige aquí mismo: es parte del número, no un campo aparte */
+.nv-serie {
+  font: inherit;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 0 0.1rem 0 0.35rem;
+  cursor: pointer;
+}
+.nv-serie:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.nv-serie option { color: var(--text); background: #fff; font-size: 1rem; }
+.nv-serie-pista { display: block; font-size: 0.68rem; color: var(--side-text); margin-top: 0.15rem; }
+
+.nv-cab-meta { display: flex; gap: 0.9rem; flex-wrap: wrap; align-items: flex-end; }
+.nv-cab-meta > * { display: flex; flex-direction: column; gap: 0.15rem; margin: 0; }
+.nv-cab-meta span {
+  font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--side-text); font-weight: 700;
+}
+.nv-cab-meta strong { font-size: 0.9rem; }
+.nv-cab-meta .input {
+  margin: 0; padding: 0.28rem 0.45rem; font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.22); color: #fff;
+}
+.nv-cab-meta .input::placeholder { color: rgba(255, 255, 255, 0.45); }
+.nv-cab-meta select.input option { color: var(--text); }
+/* El icono del calendario es negro sobre fondo oscuro: se aclara */
+.nv-cab-meta input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.7; }
+
+/* Volver a la lista, dentro de la misma barra: no merece un renglón propio */
+.nv-volver {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.nv-volver:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* Paneles del formulario */
+.nv-panel {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.7rem;
+}
+
+/* Cliente: el buscador y sus datos, sin bloques ni títulos que ocupen alto */
+.nv-cli-fila { display: flex; align-items: flex-end; gap: 0.55rem; flex-wrap: wrap; }
+.nv-cli-fila .field { margin: 0; }
+.nv-cli-fila .field > span {
+  display: block; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.15rem;
+}
+.nv-cli-fila .input { margin: 0; padding: 0.4rem 0.55rem; font-size: 0.9rem; }
+.nv-cli-buscar { flex: 1; min-width: 16rem; }
+.nv-cli-cond { width: 9rem; }
+.nv-cli-fpago { width: 9.5rem; }
+.nv-cli-ref { width: 8rem; }
+.nv-sin-cliente { color: var(--muted); font-size: 0.8rem; margin: 0.4rem 0 0; }
+
+/* Los datos del cliente en una franja, no en una rejilla de fichas */
+.nv-cli-datos {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem 1.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.45rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--border);
+}
+.nv-cat {
+  width: 2.2rem; height: 2.2rem; flex: none;
+  display: grid; place-items: center;
+  border-radius: 10px; font-size: 1.15rem; font-weight: 800;
+}
+.nv-dato { display: flex; flex-direction: column; gap: 0.05rem; min-width: 0; }
+.nv-dato > span {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); font-weight: 700;
+}
+.nv-dato > strong { font-size: 0.85rem; font-weight: 600; }
+.nv-dato-ancho { max-width: 20rem; }
+.nv-dato-ancho > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-cli-datos .nv-deuda { color: var(--danger); }
+
+/* Alta de productos: todo en una línea */
+.nv-ag { display: flex; align-items: flex-end; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.nv-ag .input { margin: 0; padding: 0.4rem 0.55rem; font-size: 0.9rem; }
+.nv-ag .field { margin: 0; }
+.nv-ag .field > span {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--muted);
+}
+.nv-ag-prod { flex: 1; min-width: 18rem; }
+.nv-ag-cant { width: 7rem; }
+.nv-permiso {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  background: var(--bg-tint); border: 1px solid var(--border); border-radius: 999px;
+  padding: 0.32rem 0.8rem; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  margin-left: auto;
+}
+.nv-permiso:has(input:checked) { background: var(--amber-light); border-color: var(--amber); color: var(--warning); }
+.nv-permiso input { width: 1rem; height: 1rem; accent-color: var(--primary); }
+
+/* Cuadro de productos */
+/* El cuadro de productos se lee de un vistazo, no se estudia: las filas van
+   más juntas que en las tablas de consulta, y así entran las de una nota
+   normal sin tener que recorrerlas. */
+.nv-panel-items .nv-items td { padding-top: 0.28rem; padding-bottom: 0.28rem; }
+.nv-panel-items .nv-items th { padding-top: 0.45rem; padding-bottom: 0.45rem; }
+.nv-items .col-n { width: 2.2rem; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.nv-items .input-mini {
+  width: 100%; max-width: 5.5rem; margin: 0;
+  padding: 0.22rem 0.35rem; font-size: 0.86rem; text-align: right;
+}
+.nv-items .input-mini[readonly] { background: var(--bg-tint); color: var(--muted); cursor: not-allowed; }
+.nv-items .nv-importe { font-weight: 600; }
+.nv-items .nv-dscto { color: var(--muted); }
+.nv-items .nv-neto strong { font-variant-numeric: tabular-nums; }
+/* Una línea regalada: se ve de un vistazo que no se cobra */
+.nv-fila-bonif td { background: var(--success-light, #e2f2ef); }
+.nv-fila-bonif .nv-dscto { color: var(--danger); font-weight: 600; }
+.nv-fila-bonif .nv-neto strong { color: var(--muted); }
+.nv-etq-bonif {
+  display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.4rem;
+  border-radius: 999px; background: var(--ok); color: #fff;
+  font-size: 0.64rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.nv-items [data-nv-bonif][aria-pressed="true"] { background: var(--ok); border-color: var(--ok); }
+.nv-vacio-items { color: var(--muted); font-size: 0.85rem; text-align: center; margin: 0.6rem 0; }
+.nv-sin-stock { display: block; color: var(--danger); font-size: 0.72rem; font-weight: 600; }
+.nv-precio-tocado { display: block; color: var(--warning); font-size: 0.72rem; font-weight: 600; }
+
+/* Pie: letras, cifras y botones en una sola barra */
+.nv-pie {
+  display: flex; align-items: stretch; gap: 0.9rem; flex-wrap: wrap;
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 0.6rem 0.9rem;
+}
+.nv-letras {
+  flex: 1; min-width: 15rem;
+  background: var(--bg-tint); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem;
+}
+.nv-letras span {
+  display: block; font-size: 0.62rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted); font-weight: 700;
+}
+.nv-letras strong { font-size: 0.85rem; }
+.nv-cifras { width: 18rem; max-width: 100%; }
+.nv-linea {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
+  padding: 0.14rem 0; font-size: 0.86rem;
+}
+.nv-linea .input { width: 6.5rem; margin: 0; padding: 0.2rem 0.4rem; text-align: right; font-size: 0.86rem; }
 .nv-linea strong { font-variant-numeric: tabular-nums; }
-.nv-linea-total { border-bottom: none; font-size: 1.15rem; }
+.nv-linea-bonif strong { color: var(--danger); }
+.nv-linea-total {
+  border-top: 1px solid var(--border); margin-top: 0.2rem; padding-top: 0.35rem; font-size: 1.05rem;
+}
 .nv-linea-total strong { color: var(--primary-dark); font-weight: 800; }
-.nv-acciones { justify-content: flex-end; }
+.nv-botones { display: flex; flex-direction: column; justify-content: flex-end; gap: 0.3rem; }
+.nv-botones .btn { padding: 0.32rem 0.7rem; font-size: 0.82rem; }
+
 .nv-num { font-variant-numeric: tabular-nums; }
 .nv-tabla td small { display: block; color: var(--muted); font-size: 0.74rem; }
 
