@@ -1005,10 +1005,19 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .form-cuerpo { display: grid; grid-template-columns: 1fr; gap: 0 1.6rem; }
 .form-col { min-width: 0; }
 @media (min-width: 900px) {
-  #modal-form { width: min(980px, calc(100vw - 3rem)); }
+  #modal-form { width: min(1060px, calc(100vw - 3rem)); }
   .form-cuerpo { grid-template-columns: 1fr 1fr; }
   /* La segunda columna arranca a la altura de la primera aunque tenga menos */
   .form-col > :last-child { margin-bottom: 0; }
+  /* La foto va al lado de sus botones y en pequeño: aquí solo hace falta para
+     comprobar que está puesta —se ve entera en la ficha—, y a tamaño grande
+     empujaba el resto del formulario fuera de la pantalla. */
+  #modal-form .foto-preview-wrap {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.7rem;
+  }
+  #modal-form .foto-preview { max-height: 150px; width: auto; max-width: 60%; }
 }
 
 .field { display: block; margin-bottom: 0.9rem; }
@@ -2882,7 +2891,11 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
    a bajar por campos que cabrían de sobra al lado. A partir de 1000px de
    ancho se ensanchan y los campos se reparten en columnas. */
 @media (min-width: 1000px) {
-  .modal { width: min(760px, calc(100vw - 4rem)); padding: 1.8rem 2rem; }
+  /* Ojo con el :not(): esta regla va después de las que le dan su ancho propio
+     a la ficha y a la firma, y como pesan lo mismo les ganaba por ir más
+     abajo. La ficha se quedaba en 760px y salía toda apretujada. */
+  .modal:not(.modal-info):not(.modal-firma) { width: min(760px, calc(100vw - 4rem)); }
+  .modal { padding: 1.8rem 2rem; }
   .modal-mini { width: min(460px, calc(100vw - 4rem)); }
   .modal-pin { width: min(400px, calc(100vw - 4rem)); }
   .modal h3 { font-size: 1.25rem; }
