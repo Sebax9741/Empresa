@@ -7191,46 +7191,55 @@ function imprimirNota(nota) {
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
   <title>Nota de venta ${escapeHtml(nota.numero)}</title>
   <style>
-    @page { size: A5 landscape; margin: 6mm; }
+    /* Media hoja A4 usada en vertical: eso es un A5 de pie (148 × 210 mm).
+       Estaba puesto en horizontal, así que salía la nota tumbada respecto al
+       papel y había que girar la hoja para leerla. */
+    @page { size: A5 portrait; margin: 6mm; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #000; margin: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 8pt; color: #000; margin: 0; }
     .marco { border: 1px solid #000; }
     /* Cabecera: datos del negocio a la izquierda, el número dentro de su recuadro */
-    .cab { display: flex; align-items: flex-start; gap: 6mm; padding: 0 0 2mm; }
-    .cab-emp { flex: 1; padding-top: 1mm; }
-    .cab-emp .nom { font-weight: bold; font-size: 10pt; }
-    .cab-emp .lin { font-size: 8pt; }
-    .cab-num { border: 1px solid #000; text-align: center; padding: 1.5mm 4mm; min-width: 46mm; }
-    .cab-num .tit { font-weight: bold; font-size: 10pt; letter-spacing: .3px; }
-    .cab-num .num { font-weight: bold; font-size: 10pt; }
-    /* Datos del cliente y del comprobante, en dos columnas dentro de un recuadro */
+    .cab { display: flex; align-items: flex-start; gap: 3mm; padding: 0 0 1.5mm; }
+    .cab-emp { flex: 1; padding-top: .5mm; }
+    .cab-emp .nom { font-weight: bold; font-size: 9pt; }
+    .cab-emp .lin { font-size: 7pt; }
+    .cab-num { border: 1px solid #000; text-align: center; padding: 1.2mm 2mm; min-width: 40mm; }
+    .cab-num .tit { font-weight: bold; font-size: 9pt; letter-spacing: .2px; }
+    .cab-num .num { font-weight: bold; font-size: 9pt; }
+    /* Datos del cliente y del comprobante, en dos columnas dentro de un recuadro.
+       Las etiquetas van justas: en 136mm de ancho, cada milímetro que se lleva
+       la etiqueta se lo quita al nombre del cliente, que es largo y se partía
+       en cuatro líneas. */
     .datos { display: flex; border: 1px solid #000; }
-    .datos > div { padding: 1.5mm 2mm; }
-    .datos .izq { flex: 1.35; border-right: 1px solid #000; }
-    .datos .der { flex: 1; }
-    .fila { display: flex; gap: 2mm; line-height: 1.5; }
-    .fila .et { width: 22mm; flex: none; }
-    .der .fila .et { width: 21mm; }
+    .datos > div { padding: 1.2mm 1.5mm; }
+    .datos .izq { flex: 1.3; border-right: 1px solid #000; min-width: 0; }
+    .datos .der { flex: 1; min-width: 0; }
+    .fila { display: flex; gap: 1.5mm; line-height: 1.45; }
+    .fila .et { width: 16mm; flex: none; }
+    .der .fila .et { width: 15mm; }
     /* Segunda etiqueta de la misma línea (F.Pago, Tlfno): pegada a su valor */
     .der .fila .et2 { width: auto; }
     .fila .va { font-weight: bold; }
     .der .fila .va { flex: none; }
     /* Cuadro de productos */
-    table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
-    th, td { border: 1px solid #000; padding: .8mm 1.5mm; font-size: 8.5pt; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1.5mm; table-layout: fixed; }
+    th, td { border: 1px solid #000; padding: .7mm 1.2mm; font-size: 7.5pt; }
     th { font-weight: normal; text-align: left; }
-    .c-cod { width: 16mm; } .c-cant { width: 12mm; text-align: right; }
-    .c-um { width: 12mm; } .c-pu { width: 18mm; text-align: right; }
-    .c-imp { width: 20mm; text-align: right; }
-    tr.vacia td { height: 4.6mm; }
+    /* Las medidas suman 69mm de los 136mm imprimibles: los 67 que quedan son
+       para la descripción, que es la que necesita el sitio. */
+    .c-cod { width: 14mm; } .c-cant { width: 10mm; text-align: right; }
+    .c-um { width: 10mm; } .c-pu { width: 16mm; text-align: right; }
+    .c-imp { width: 19mm; text-align: right; }
+    .c-desc { word-break: break-word; }
+    tr.vacia td { height: 4.2mm; }
     /* Pie: importe en letras a la izquierda, totales a la derecha */
-    .pie { display: flex; gap: 3mm; align-items: flex-start; }
-    .letras { flex: 1; border: 1px solid #000; border-top: none; padding: 1mm 1.5mm; font-size: 8.5pt; }
-    .totales { width: 46mm; flex: none; }
+    .pie { display: flex; gap: 2mm; align-items: flex-start; }
+    .letras { flex: 1; border: 1px solid #000; border-top: none; padding: 1mm 1.2mm; font-size: 7.5pt; min-width: 0; }
+    .totales { width: 45mm; flex: none; }
     .tot-fila { display: flex; border: 1px solid #000; border-top: none; }
-    .tot-fila .et { flex: 1; text-align: center; border-right: 1px solid #000; padding: .8mm; background: #eee; }
-    .tot-fila .va { width: 22mm; text-align: right; padding: .8mm 1.5mm; font-weight: bold; }
-    .nota-pie { margin-top: 2mm; font-size: 7.5pt; color: #333; display: flex; justify-content: space-between; }
+    .tot-fila .et { flex: 1; text-align: center; border-right: 1px solid #000; padding: .7mm; background: #eee; }
+    .tot-fila .va { width: 20mm; text-align: right; padding: .7mm 1.2mm; font-weight: bold; }
+    .nota-pie { margin-top: 1.5mm; font-size: 6.5pt; color: #333; display: flex; justify-content: space-between; gap: 3mm; }
   </style></head><body>
     <div class="cab">
       <div class="cab-emp">

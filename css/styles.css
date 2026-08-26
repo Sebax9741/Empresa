@@ -1823,6 +1823,31 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   .field-row { grid-template-columns: 1fr; gap: 0; }
 }
 
+/* Teléfonos angostos (360px y por debajo). En Créditos la barra lleva además
+   el "＋", y con la cuenta a la derecha se pasaba tres píxeles del ancho de la
+   pantalla: bastaba para que la página se pudiera arrastrar de lado. Se le
+   quita un poco a cada pieza en vez de esconder ninguna. */
+@media (max-width: 380px) {
+  .header-inner { padding-left: 0.45rem; padding-right: 0.45rem; gap: 0.25rem; }
+  .header-cuenta { margin-left: 0.25rem; }
+  #btn-new { width: 36px; height: 36px; font-size: 1.2rem; }
+  .btn-menu { width: 34px; height: 34px; }
+  .reloj-txt strong { font-size: 0.82rem; }
+  .btn-salir { padding: 0.4rem 0.5rem; font-size: 0.72rem; }
+}
+
+/* Los más angostos que se ven todavía (320px: iPhone SE de la primera hornada
+   y Androids de entrada). Se aprieta otro poco: sin esto la barra se pasaba
+   quince píxeles. */
+@media (max-width: 340px) {
+  .header-inner { padding-left: 0.35rem; padding-right: 0.35rem; gap: 0.2rem; }
+  .header-cuenta { margin-left: 0.15rem; gap: 0.2rem; }
+  #btn-new { width: 33px; height: 33px; font-size: 1.1rem; }
+  .btn-menu { width: 32px; height: 32px; }
+  .reloj-txt strong { font-size: 0.76rem; }
+  .btn-salir { padding: 0.35rem 0.4rem; font-size: 0.68rem; }
+}
+
 .abono-chip .chip-ojo { font-size: 0.72rem; margin-left: 0.1rem; }
 
 .settings-nota-admin {
