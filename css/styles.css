@@ -3231,4 +3231,30 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .desp-acciones .btn .emo { width: 1.35em; height: 1.35em; vertical-align: -0.3em; }
 /* Los títulos de sección los llevan grandes, como antes los emojis */
 .vista > h2 .emo, .sec-cab h2 .emo, .info-titulo .emo, .settings-titulo .emo { width: 1.1em; height: 1.1em; }
+/* Versión con recuadro de color propio. El dibujo ocupa tres cuartos del
+   lienzo (el resto es el recuadro), así que necesita más caja que el suelto
+   para verse del mismo tamaño. */
+.emo-chip { width: 1.9em; height: 1.9em; vertical-align: -0.55em; }
+/* El botón de borrar que es SOLO el tacho: el dibujo ya viene en rojo, así
+   que sobre el fondo rojo del botón se perdía (tapa roja sobre rojo). Se le
+   deja el fondo tenue y el color lo pone el icono, igual que en información
+   y editar. Los botones de borrar CON texto ("🗑️ Borrar", "Quitar") siguen
+   rellenos: ahí el rojo lo aguanta la palabra en blanco, no el dibujo. */
+.row-actions .btn-danger,
+.cliente-acciones .btn-danger,
+.col-acc .btn-danger {
+  background: var(--danger-light);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent);
+}
+.row-actions .btn-danger:hover,
+.cliente-acciones .btn-danger:hover,
+.col-acc .btn-danger:hover {
+  background: color-mix(in srgb, var(--danger) 18%, #fff);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+/* Las tarjetas del Dashboard ya ponen el recuadro (.kpi-ico, teñido del color
+   del indicador). Dentro va el icono suelto, y algo más grande que el texto:
+   a la altura de la letra se quedaba nadando en su propia caja. */
+.kpi-ico .emo { width: 22px; height: 22px; vertical-align: 0; }
 /* Dentro del panel lateral no hay emojis: sus iconos son de trazo */

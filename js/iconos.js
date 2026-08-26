@@ -88,6 +88,19 @@ const ICONOS = {
   '🟢': '1f7e2',
 };
 
+/* El juego viene en dos versiones: el dibujo suelto y el mismo dibujo dentro
+   de un recuadro redondeado de color. Casi toda la app usa el suelto, porque
+   sus iconos van pegados al texto y a esa altura el recuadro se come el
+   dibujo. El recuadro se reserva para donde el icono va solo, en grande y
+   haciendo de símbolo de una tarjeta: ahí sí luce.
+
+   Las tarjetas del Dashboard NO están aquí a propósito: ya se dibujan su
+   propio recuadro en CSS, teñido del color de cada indicador (rojo para los
+   vencidos, verde para lo cobrado). Meterles el recuadro del icono pondría
+   un recuadro dentro de otro y, peor, traería un segundo color que se pelea
+   con el de la tarjeta. */
+const CON_RECUADRO = '.ing-modo-ico';
+
 /* Dentro de estas etiquetas una imagen no pinta nada (o rompe): las listas
    desplegables solo admiten texto, y los campos escribibles no se tocan. */
 const SIN_ICONOS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'SELECT',
@@ -105,10 +118,11 @@ for (const clave of Object.keys(ICONOS)) {
 const CLAVES = Object.keys(ICONOS).sort((a, b) => b.length - a.length);
 const PATRON = new RegExp('(' + CLAVES.map(escapar).join('|') + ')\uFE0F?', 'g');
 
-function imagenDe(emoji) {
+function imagenDe(emoji, padre) {
+  const conRecuadro = !!(padre && padre.closest(CON_RECUADRO));
   const img = document.createElement('img');
-  img.className = 'emo';
-  img.src = `icons/emoji/${ICONOS[emoji]}.svg`;
+  img.className = conRecuadro ? 'emo emo-chip' : 'emo';
+  img.src = `icons/emoji/${conRecuadro ? 'chip/' : ''}${ICONOS[emoji]}.svg`;
   img.alt = emoji;          // el lector de pantalla sigue diciendo lo mismo
   img.draggable = false;
   return img;
@@ -132,13 +146,14 @@ export function iconizar(raiz) {
   while (paseo.nextNode()) pendientes.push(paseo.currentNode);
 
   for (const nodo of pendientes) {
+    const padre = nodo.parentElement;
     const trozos = document.createDocumentFragment();
     let desde = 0;
     PATRON.lastIndex = 0;
     let m;
     while ((m = PATRON.exec(nodo.nodeValue)) !== null) {
       if (m.index > desde) trozos.appendChild(document.createTextNode(nodo.nodeValue.slice(desde, m.index)));
-      trozos.appendChild(imagenDe(m[1]));
+      trozos.appendChild(imagenDe(m[1], padre));
       desde = m.index + m[0].length;
     }
     if (desde < nodo.nodeValue.length) trozos.appendChild(document.createTextNode(nodo.nodeValue.slice(desde)));

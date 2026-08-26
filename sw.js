@@ -1,5 +1,5 @@
 /* Service worker: permite instalar la app y usarla sin internet */
-const CACHE = 'creditos-v92';
+const CACHE = 'creditos-v93';
 const ARCHIVOS = [
   './',
   './index.html',
@@ -18,8 +18,15 @@ const ARCHIVOS = [
 
 /* Los iconos en color. Van aparte porque no son críticos: si alguno fallara
    al bajar, la app tiene que instalarse igual (se verían los emojis del
-   sistema hasta la próxima vez que haya internet). */
+   sistema hasta la próxima vez que haya internet).
+
+   Aquí solo está la versión suelta, que es la que usa casi toda la app, más
+   los dos iconos con recuadro de las tarjetas de "Ingreso de productos". El
+   resto de la carpeta chip/ no se precarga: si algún día se usa en otro
+   sitio, se guarda sola la primera vez que se pida. */
 const ICONOS = [
+  './icons/emoji/chip/1f4c4.svg',
+  './icons/emoji/chip/2696.svg',
   './icons/emoji/1f194.svg',
   './icons/emoji/1f195.svg',
   './icons/emoji/1f389.svg',
@@ -100,8 +107,11 @@ self.addEventListener('install', ev => {
     caches.open(CACHE)
       // 'reload' salta la caché del navegador: si no, al instalarse la versión
       // nueva podría guardar los archivos viejos que aún tenía guardados.
+      // Los iconos también se piden con 'reload'. Los dibujos cambiaron
+      // conservando el nombre del archivo, así que sin esto el navegador
+      // habría vuelto a guardar los viejos que aún tenía en su propia caché.
       .then(cache => cache.addAll(ARCHIVOS.map(u => new Request(u, { cache: 'reload' })))
-        .then(() => { cache.addAll(ICONOS).catch(() => {}); }))
+        .then(() => { cache.addAll(ICONOS.map(u => new Request(u, { cache: 'reload' }))).catch(() => {}); }))
       .then(() => self.skipWaiting())
   );
 });
