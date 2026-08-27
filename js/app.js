@@ -227,6 +227,9 @@ async function cargarEquipo() {
    Los despachos antiguos tipo "viaje" (con lista .pedidos) ya no se muestran. */
 const TIPOS_COMPROBANTE = { boleta: 'Boleta', factura: 'Factura', nota: 'Nota de venta' };
 const ESTADOS_DESPACHO = {
+  // "nota" no es un estado que se guarde en ningún despacho: es la venta que
+  // todavía es solo una nota y aún no salió a reparto.
+  nota:     { etiqueta: '📝 Nota de venta', clase: 'pedido-nota' },
   reparto:  { etiqueta: '🚚 En reparto', clase: 'pedido-pendiente' },
   credito:  { etiqueta: '📄 A crédito', clase: 'pedido-credito' },
   pagado:   { etiqueta: '✅ Pagado', clase: 'pedido-pagado' },
@@ -274,9 +277,9 @@ function despachosOrdenados() {
 
 /* Resumen de una lista de despachos: cuántos hay en cada estado y el monto total */
 function resumenDespachos(lista) {
-  const r = { total: lista.length, reparto: 0, credito: 0, pagado: 0, contado: 0, devuelto: 0, monto: 0 };
+  const r = { total: lista.length, nota: 0, reparto: 0, credito: 0, pagado: 0, contado: 0, devuelto: 0, monto: 0 };
   for (const d of lista) {
-    const e = estadoDespachoEfectivo(d);
+    const e = d.estado && d.tipo ? d.estado : estadoDespachoEfectivo(d);
     r[e] = (r[e] || 0) + 1;
     r.monto += Number(d.monto) || 0;
   }
@@ -1912,6 +1915,7 @@ async function renderUsuarios() {
     cajaDueno.hidden = !dueno;
     if (dueno) $('#usr-dueno-nombre').textContent = dueno.usuario || 'administrador';
   }
+  pintarUnirFirmas(dueno, docs);
 
   const equipo = docs.filter(m => m.uid !== ownerUid);
   equipo.sort((a, b) => (a.rol === 'admin' ? -1 : 1) - (b.rol === 'admin' ? -1 : 1)
@@ -1944,6 +1948,57 @@ async function renderUsuarios() {
         ${permisosHtml}
       </article>`;
   }).join('');
+}
+
+/* Ofrece unir la firma de la cuenta de dueño con la de otro usuario.
+   Solo aparece cuando el dueño entró con un correo y hay otro usuario al que
+   atribuírselo: es el caso del que después se creó un usuario corto y desde
+   entonces firma con dos nombres distintos. Los que ya están unidos no se
+   vuelven a ofrecer. */
+function pintarUnirFirmas(dueno, docs) {
+  const caja = $('#usr-unir');
+  if (!caja) return;
+  const firmaVieja = (dueno && dueno.usuario) || '';
+  const candidatos = docs.filter(m => m.uid !== ownerUid && m.usuario
+    && !(m.nombresPrevios || []).includes(firmaVieja));
+  caja.hidden = !(firmaVieja && candidatos.length);
+  if (caja.hidden) return;
+  $('#usr-unir-destino').innerHTML = candidatos
+    .map(m => `<option value="${escapeHtml(m.uid)}">${escapeHtml(firmaVieja)} → ${escapeHtml(m.usuario)}</option>`)
+    .join('');
+}
+
+async function unirFirmaDelDueno() {
+  if (!esAdmin()) return;
+  const uid = $('#usr-unir-destino').value;
+  if (!uid) return;
+  let dueno, destino;
+  try {
+    const snap = await fb.getDocs(fb.collection(fb.db, 'usuarios', ownerUid, 'miembros'));
+    const docs = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+    dueno = docs.find(m => m.uid === ownerUid);
+    destino = docs.find(m => m.uid === uid);
+  } catch (e) {
+    toast('❌ No se pudo leer la lista de usuarios');
+    return;
+  }
+  if (!dueno || !destino || !dueno.usuario) return;
+  if (!confirm(`¿Todo lo firmado como "${dueno.usuario}" pasa a leerse como "${destino.usuario}"?\n\n`
+    + 'No se cambia ningún dato guardado: solo se anota que son la misma persona.')) return;
+  const previos = [...new Set([...(destino.nombresPrevios || []), dueno.usuario])];
+  try {
+    await fb.updateDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid), { nombresPrevios: previos });
+  } catch (e) {
+    toast('❌ No se pudo guardar. Revisa tu conexión.');
+    return;
+  }
+  await cargarEquipo();
+  await renderUsuarios();
+  // Todo lo que enseña firmas hay que volver a dibujarlo con el nombre unido
+  renderCobranza();
+  renderKardex();
+  renderVentas();
+  toast(`✅ "${dueno.usuario}" y "${destino.usuario}" son la misma persona`);
 }
 
 function crearUsuarioAuthSecundaria(email, pass) {
@@ -2072,8 +2127,13 @@ async function crearMiUsuarioDeAcceso() {
       usuario,
       rol: 'admin',
       permisos: { ...PERMISOS_TODOS },
+      // Es la MISMA persona que ya venía entrando con el correo. Queda anotado
+      // aquí para que lo firmado antes con el correo se lea con el usuario
+      // nuevo: si no, en la hoja de cobranza saldría como dos cobradores.
+      nombresPrevios: [yo.usuario],
       creado: Date.now(),
     });
+    await cargarEquipo();
     $('#alias-pass').value = '';
     toast(`✅ Listo. Cierra sesión y entra con "${usuario}"`);
   } catch (e) {
@@ -5061,24 +5121,51 @@ let despachoFiltroFecha = null; // día seleccionado para filtrar (null = ver to
 
 /* Días que tienen al menos un despacho, del más reciente al más antiguo,
    con la cantidad y el monto de ese día (para el navegador y el desplegable). */
+/* Todo lo que se ve en 📦 Despachos, en una sola lista: las notas de venta
+   que todavía no salieron a reparto y los despachos ya armados. Así una venta
+   se sigue sin cambiar de sección desde que se emite la nota hasta que la
+   boleta vuelve firmada.
+
+   Cada renglón lleva su `tipo` para saber qué abrir al tocarlo: una nota abre
+   el despacho ya prellenado; un despacho abre su detalle. */
+function itemsDespacho() {
+  const deNotas = notasPorDespachar().map(n => ({
+    tipo: 'nota', id: n.id, estado: 'nota',
+    numero: n.numero || '', cliente: n.clienteNombre || '',
+    monto: Number(n.total) || 0, fecha: n.fecha || '', zona: n.zona || '',
+    repartidores: [], orden: numeroDeComprobante(n.numero) || Infinity,
+  }));
+  const deDespachos = despachosOrdenados().map(d => ({
+    tipo: 'despacho', id: d.id, estado: estadoDespachoEfectivo(d),
+    numero: d.boleta || '', cliente: d.cliente || '',
+    monto: Number(d.monto) || 0, fecha: d.fecha || '', zona: d.zona || '',
+    // El mismo criterio que las notas: el número de atrás del comprobante. Con
+    // boletaNumero (que junta todos los dígitos) "0001-00000001" valdría cien
+    // millones y las notas y los despachos no se podrían ordenar entre sí.
+    repartidores: repartidoresDe(d), orden: numeroDeComprobante(d.boleta) || Infinity,
+  }));
+  return [...deNotas, ...deDespachos].sort((a, b) =>
+    a.orden - b.orden || a.fecha.localeCompare(b.fecha));
+}
+
 function diasConDespachos() {
   const mapa = new Map();
-  for (const d of despachos.filter(esDespachoPedido)) {
-    const f = d.fecha || '';
+  for (const it of itemsDespacho()) {
+    const f = it.fecha;
     if (!f) continue;
     const acc = mapa.get(f) || { fecha: f, cantidad: 0, monto: 0 };
     acc.cantidad += 1;
-    acc.monto += Number(d.monto) || 0;
+    acc.monto += it.monto;
     mapa.set(f, acc);
   }
   return [...mapa.values()].sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
-/* Despachos que se muestran ahora mismo: todos, o solo los del día elegido. */
+/* Lo que se muestra ahora mismo: todo, o solo lo del día elegido. */
 function despachosDelDia() {
-  const lista = despachosOrdenados();
+  const lista = itemsDespacho();
   if (!despachoFiltroFecha) return lista;
-  return lista.filter(d => (d.fecha || '') === despachoFiltroFecha);
+  return lista.filter(it => it.fecha === despachoFiltroFecha);
 }
 
 const VISTAS_DESPACHO = ['lista', 'form', 'detalle', 'repartidores'];
@@ -5106,6 +5193,7 @@ function renderDespachos() {
 
 function chipDespachos(res) {
   const partes = [];
+  if (res.nota) partes.push(`<span class="ped-chip pedido-nota">${res.nota} sin despachar</span>`);
   if (res.reparto) partes.push(`<span class="ped-chip pedido-pendiente">${res.reparto} en reparto</span>`);
   if (res.credito) partes.push(`<span class="ped-chip pedido-credito">${res.credito} a crédito</span>`);
   if (res.pagado) partes.push(`<span class="ped-chip pedido-pagado">${res.pagado} pagado${res.pagado === 1 ? '' : 's'}</span>`);
@@ -5116,8 +5204,7 @@ function chipDespachos(res) {
 
 function renderListaDespachos() {
   const lista = despachosDelDia();
-  const hayDespachos = despachos.filter(esDespachoPedido).length > 0;
-  $('#desp-vacio').hidden = hayDespachos;
+  $('#desp-vacio').hidden = itemsDespacho().length > 0;
 
   // Navegador de días (fecha, ◀ ▶, desplegable, Hoy, Ver todos)
   renderNavDespachos();
@@ -5129,42 +5216,47 @@ function renderListaDespachos() {
     : 'Todos los despachos';
   $('#desp-resumen').innerHTML = lista.length
     ? `<div class="desp-chips">${chipDespachos(res)}</div>
-       <div class="desp-resumen-monto">${rotulo} · ${lista.length} despacho${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
-    : `<div class="desp-resumen-monto">${rotulo} · sin despachos</div>`;
+       <div class="desp-resumen-monto">${rotulo} · ${lista.length} venta${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
+    : `<div class="desp-resumen-monto">${rotulo} · sin movimiento</div>`;
 
-  // Tabla (escritorio): N° boleta, cliente, monto, fecha, zona, repartidores y estado
-  $('#desp-tabla-body').innerHTML = lista.map(d => {
-    const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
-    const reps = repartidoresDe(d);
+  // Al tocar el renglón: una nota abre el despacho prellenado; un despacho, su detalle
+  const gancho = it => it.tipo === 'nota'
+    ? `data-despachar-nota="${it.id}"` : `data-abrir-despacho="${it.id}"`;
+  const pista = it => it.tipo === 'nota'
+    ? 'Todavía es solo una nota — tócala para mandarla a reparto'
+    : 'Ver detalle del despacho';
+
+  // Tabla (escritorio): N° comprobante, cliente, monto, fecha, zona, repartidores y estado
+  $('#desp-tabla-body').innerHTML = lista.map(it => {
+    const info = estadoDespachoInfo(it.estado);
     return `
-      <tr class="desp-fila ${info.clase}" data-abrir-despacho="${d.id}" title="${escapeHtml(info.etiqueta)} — ver detalle">
-        <td><strong>${escapeHtml(d.boleta || '—')}</strong></td>
-        <td>${escapeHtml(d.cliente || '(sin cliente)')}</td>
-        <td class="col-num">${formatoMonto(Number(d.monto) || 0)}</td>
-        <td>${formatoFecha(d.fecha)}</td>
-        <td>${d.zona ? escapeHtml(d.zona) : '—'}</td>
-        <td>${reps.length ? reps.map(escapeHtml).join(', ') : '—'}</td>
+      <tr class="desp-fila ${info.clase}" ${gancho(it)} title="${escapeHtml(pista(it))}">
+        <td><strong>${escapeHtml(it.numero || '—')}</strong></td>
+        <td>${escapeHtml(it.cliente || '(sin cliente)')}</td>
+        <td class="col-num">${formatoMonto(it.monto)}</td>
+        <td>${formatoFecha(it.fecha)}</td>
+        <td>${it.zona ? escapeHtml(it.zona) : '—'}</td>
+        <td>${it.repartidores.length ? it.repartidores.map(escapeHtml).join(', ') : '—'}</td>
         <td><span class="ped-chip ${info.clase}">${info.etiqueta}</span></td>
       </tr>`;
   }).join('');
 
   // Tarjetas (celular): misma información en formato compacto
-  $('#despachos-list').innerHTML = lista.map(d => {
-    const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
-    const reps = repartidoresDe(d);
+  $('#despachos-list').innerHTML = lista.map(it => {
+    const info = estadoDespachoInfo(it.estado);
     return `
-      <button type="button" class="despacho-card ${info.clase}" data-abrir-despacho="${d.id}">
+      <button type="button" class="despacho-card ${info.clase}" ${gancho(it)}>
         <div class="despacho-card-cab">
-          <strong>${escapeHtml(d.cliente || '(sin cliente)')}</strong>
+          <strong>${escapeHtml(it.cliente || '(sin cliente)')}</strong>
           <span class="ped-chip ${info.clase}">${info.etiqueta}</span>
         </div>
         <div class="despacho-card-datos">
-          <span>🧾 N° ${escapeHtml(d.boleta || '—')}</span>
-          <span>💵 ${formatoMonto(Number(d.monto) || 0)}</span>
-          <span>📅 ${formatoFecha(d.fecha)}</span>
-          ${d.zona ? `<span>📍 ${escapeHtml(d.zona)}</span>` : ''}
+          <span>🧾 N° ${escapeHtml(it.numero || '—')}</span>
+          <span>💵 ${formatoMonto(it.monto)}</span>
+          <span>📅 ${formatoFecha(it.fecha)}</span>
+          ${it.zona ? `<span>📍 ${escapeHtml(it.zona)}</span>` : ''}
         </div>
-        ${reps.length ? `<div class="despacho-card-rep">🧍 ${reps.map(escapeHtml).join(', ')}</div>` : ''}
+        ${it.repartidores.length ? `<div class="despacho-card-rep">🧍 ${it.repartidores.map(escapeHtml).join(', ')}</div>` : ''}
       </button>`;
   }).join('');
 }
@@ -5173,12 +5265,12 @@ function renderListaDespachos() {
 function renderNavDespachos() {
   const dias = diasConDespachos();
   const sel = $('#desp-dias');
-  const opcTodos = `<option value="">Ver todos — ${dias.reduce((s, d) => s + d.cantidad, 0)} despacho(s)</option>`;
+  const opcTodos = `<option value="">Ver todos — ${dias.reduce((s, d) => s + d.cantidad, 0)} venta(s)</option>`;
   const opciones = dias.map(d =>
-    `<option value="${d.fecha}">${formatoFecha(d.fecha)} — ${d.cantidad} despacho(s) · ${formatoMonto(d.monto)}</option>`).join('');
-  // Si el día elegido no tiene despachos (p. ej. hoy sin nada), igual lo mostramos
+    `<option value="${d.fecha}">${formatoFecha(d.fecha)} — ${d.cantidad} venta(s) · ${formatoMonto(d.monto)}</option>`).join('');
+  // Si el día elegido no tiene nada (p. ej. hoy sin ventas), igual lo mostramos
   const hayFecha = !despachoFiltroFecha || dias.some(d => d.fecha === despachoFiltroFecha);
-  const extra = hayFecha ? '' : `<option value="${despachoFiltroFecha}">${formatoFecha(despachoFiltroFecha)} — sin despachos</option>`;
+  const extra = hayFecha ? '' : `<option value="${despachoFiltroFecha}">${formatoFecha(despachoFiltroFecha)} — sin movimiento</option>`;
   sel.innerHTML = opcTodos + extra + opciones;
   sel.value = despachoFiltroFecha || '';
   $('#desp-fecha-filtro').value = despachoFiltroFecha || '';
@@ -5187,31 +5279,32 @@ function renderNavDespachos() {
 /* Salta al día anterior/siguiente que tenga despachos */
 function saltarDiaDespacho(direccion) {
   const dias = diasConDespachos().map(d => d.fecha);   // del más nuevo al más viejo
-  if (!dias.length) { toast('Todavía no hay despachos registrados'); return; }
+  if (!dias.length) { toast('Todavía no hay ventas registradas'); return; }
   const desde = despachoFiltroFecha || hoyISO();
   const anteriores = dias.filter(d => d < desde);
   const siguientes = dias.filter(d => d > desde);
   const destino = direccion < 0 ? anteriores[0] : siguientes[siguientes.length - 1];
-  if (!destino) { toast(direccion < 0 ? 'No hay días anteriores con despachos' : 'No hay días siguientes con despachos'); return; }
+  if (!destino) { toast(direccion < 0 ? 'No hay días anteriores con movimiento' : 'No hay días siguientes con movimiento'); return; }
   despachoFiltroFecha = destino;
   renderListaDespachos();
 }
 
-/* Genera la hoja de despachos del día (o de todos) lista para imprimir */
+/* Genera la hoja de despachos del día (o de todos) lista para imprimir.
+   Es la hoja que se llevan los repartidores, así que solo entra lo que sale
+   de verdad: las notas que todavía no se asignaron a nadie no van. */
 function imprimirDespachos() {
-  const lista = despachosDelDia();
+  const lista = despachosDelDia().filter(it => it.tipo === 'despacho');
   const res = resumenDespachos(lista);
   const titulo = despachoFiltroFecha ? `del ${formatoFecha(despachoFiltroFecha)}` : '(todos)';
-  const filasHtml = lista.map(d => {
-    const reps = repartidoresDe(d);
-    const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
+  const filasHtml = lista.map(it => {
+    const info = estadoDespachoInfo(it.estado);
     return `<tr>
-      <td>${escapeHtml(d.cliente || '—')}</td>
-      <td>${escapeHtml(d.boleta || '—')}</td>
-      <td style="text-align:right">${formatoMonto(Number(d.monto) || 0)}</td>
-      <td>${formatoFecha(d.fecha)}</td>
-      <td>${escapeHtml(d.zona || '—')}</td>
-      <td>${reps.length ? escapeHtml(reps.join(', ')) : '—'}</td>
+      <td>${escapeHtml(it.cliente || '—')}</td>
+      <td>${escapeHtml(it.numero || '—')}</td>
+      <td style="text-align:right">${formatoMonto(it.monto)}</td>
+      <td>${formatoFecha(it.fecha)}</td>
+      <td>${escapeHtml(it.zona || '—')}</td>
+      <td>${it.repartidores.length ? escapeHtml(it.repartidores.join(', ')) : '—'}</td>
       <td>${escapeHtml(info.etiqueta)}</td></tr>`;
   }).join('');
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Despachos ${titulo}</title>
@@ -5453,16 +5546,22 @@ function renderDetalleDespacho() {
     ${d.notas ? `<div class="desp-det-fila"><span>📝 Nota</span><strong>${escapeHtml(d.notas)}</strong></div>` : ''}
     <div class="desp-det-fila desp-det-meta"><span>Registrado por</span><strong>${escapeHtml(mostrarComo(d.creadoPor) || '—')}${d.registrado ? ' · ' + (horaDeTimestamp(d.registrado) || '') : ''}</strong></div>`;
 
+  // Cuando el reparto vuelve hay tres desenlaces: la boleta vuelve firmada y
+  // se convierte en crédito, el cliente pagó en el momento (contado), o la
+  // mercadería se devolvió. Todos se pueden deshacer volviendo a "en reparto".
   let acciones = '';
   if (d.estado === 'credito' && d.creditoId) {
     acciones = `
       <button type="button" class="btn btn-primary btn-block" id="btn-desp-ver-credito">📄 Ver crédito enlazado</button>
       <button type="button" class="btn btn-secondary btn-block" data-desp-estado="reparto">↩️ Deshacer enlace (volver a “en reparto”)</button>`;
-  } else {
-    // Solo la acción principal: cuando la boleta vuelve firmada, se convierte
-    // en crédito. (Se quitaron "Al contado" y "Devuelto".)
+  } else if (d.estado === 'contado' || d.estado === 'devuelto') {
     acciones = `
-      <button type="button" class="btn btn-primary btn-block" id="btn-desp-a-credito">📄 Volvió firmada → crear crédito</button>`;
+      <button type="button" class="btn btn-secondary btn-block" data-desp-estado="reparto">↩️ Volver a “en reparto”</button>`;
+  } else {
+    acciones = `
+      <button type="button" class="btn btn-primary btn-block" id="btn-desp-a-credito">📄 Volvió firmada → crear crédito</button>
+      <button type="button" class="btn btn-secondary btn-block" data-desp-estado="contado">💵 Se pagó al contado</button>
+      <button type="button" class="btn btn-secondary btn-block" data-desp-estado="devuelto">↩️ Devuelto</button>`;
   }
   $('#desp-det-acciones').innerHTML = acciones;
 }
@@ -7060,6 +7159,13 @@ function renderVentas() {
   }).join('');
 }
 
+/* A crédito la fecha de pago se propone según los días configurados; al
+   contado se cobra el mismo día. */
+function nvProponerFechaPago() {
+  const dias = $('#nv-condicion').value === 'credito' ? Number(settings.dias) || 30 : 0;
+  $('#nv-fpago').value = sumarDias($('#nv-fecha').value || hoyISO(), dias);
+}
+
 function abrirNuevaNota(base = null) {
   if (!puede('ventas')) { toast('🔒 No tienes permiso para emitir notas de venta'); return; }
   if (!productosActivos().length) {
@@ -7073,9 +7179,9 @@ function abrirNuevaNota(base = null) {
   $('#nv-fecha').value = hoyISO();
   $('#nv-hora').textContent = horaDeTimestamp(nvCreadoEn);
   $('#nv-vendedor').textContent = quienSoy();
-  $('#nv-condicion').value = base ? (base.condicion || 'contado') : 'contado';
-  $('#nv-fpago').value = hoyISO();
-  $('#nv-referencia').value = base ? (base.referencia || '') : '';
+  // Casi todo sale a crédito, así que esa es la opción que viene puesta
+  $('#nv-condicion').value = base ? (base.condicion || 'credito') : 'credito';
+  nvProponerFechaPago();
   $('#nv-descuento').value = 0;
   $('#nv-permitir-precios').checked = false;
   $('#nv-cantidad').value = 1;
@@ -7310,7 +7416,6 @@ function armarNota() {
     zona: cli.zona || '',
     condicion: $('#nv-condicion').value,
     fechaPago: $('#nv-fpago').value || '',
-    referencia: $('#nv-referencia').value.trim(),
     preciosModificados: $('#nv-permitir-precios').checked && nvItems.some(it => it.precioEditado),
     items: nvItems.map(it => {
       const { importe, dsctoBonif, neto } = cuentaDeLinea(it);
@@ -7398,7 +7503,8 @@ function despacharNota(notaId) {
   const n = notas.find(x => x.id === notaId);
   if (!n) return;
   if (despachoDeNota(notaId)) { toast('⚠️ Esa nota ya está en un despacho'); return; }
-  abrirDespachos();
+  // Si ya se está en Despachos no se toca el día que se esté mirando
+  if ($('#view-despachos').hidden) abrirDespachos();
   abrirFormDespacho(null, {
     notaId: n.id,
     clienteId: n.clienteId || '',
@@ -7560,8 +7666,8 @@ function imprimirNota(nota) {
         <div class="fila"><span class="et">F.Emisión:</span><span class="va">${formatoFecha(nota.fecha)}</span></div>
         <div class="fila"><span class="et">Condición:</span><span class="va">${nota.condicion === 'credito' ? 'CRÉDITO' : 'CONTADO'}</span>
           <span class="et et2">F.Pago:</span><span class="va">${nota.fechaPago ? formatoFecha(nota.fechaPago) : ''}</span></div>
-        <div class="fila"><span class="et">Ped:</span><span class="va">${escapeHtml(nota.referencia || '')}</span>
-          <span class="et et2">Tlfno:</span><span class="va">${escapeHtml(nota.clienteTelefono || '')}</span></div>
+        ${nota.referencia ? `<div class="fila"><span class="et">Ped:</span><span class="va">${escapeHtml(nota.referencia)}</span></div>` : ''}
+        <div class="fila"><span class="et">Tlfno:</span><span class="va">${escapeHtml(nota.clienteTelefono || '')}</span></div>
         <div class="fila"><span class="et">Vendedor:</span><span class="va">${escapeHtml(mostrarComo(nota.emitidaPor).toUpperCase())}</span></div>
       </div>
     </div>
@@ -8127,11 +8233,7 @@ function inicializarEventos() {
     nvNumero = armarNumeroNota(nvSerieElegida(), nvCorrelativoEscrito());
     nvAvisarNumero();
   });
-  $('#nv-condicion').addEventListener('change', () => {
-    // A crédito, la fecha de pago se propone según los días configurados
-    const dias = $('#nv-condicion').value === 'credito' ? Number(settings.dias) || 30 : 0;
-    $('#nv-fpago').value = sumarDias($('#nv-fecha').value || hoyISO(), dias);
-  });
+  $('#nv-condicion').addEventListener('change', nvProponerFechaPago);
   $('#btn-nv-guardar').addEventListener('click', () => guardarNota(false));
   $('#btn-nv-guardar-imprimir').addEventListener('click', () => guardarNota(true));
 
@@ -8228,10 +8330,13 @@ function inicializarEventos() {
     }
   });
 
-  // Lista de despachos: abrir uno (funciona en la tabla y en las tarjetas)
+  // Lista de despachos: abrir uno (funciona en la tabla y en las tarjetas).
+  // Una nota que todavía no salió a reparto abre el despacho ya prellenado.
   $('#desp-vista-lista').addEventListener('click', ev => {
-    const fila = ev.target.closest('[data-abrir-despacho]');
-    if (fila) abrirDetalleDespacho(fila.dataset.abrirDespacho);
+    const fila = ev.target.closest('[data-abrir-despacho], [data-despachar-nota]');
+    if (!fila) return;
+    if (fila.dataset.despacharNota) despacharNota(fila.dataset.despacharNota);
+    else abrirDetalleDespacho(fila.dataset.abrirDespacho);
   });
 
   // Buscar despachos por día
@@ -8432,6 +8537,7 @@ function inicializarEventos() {
   $('#btn-logout-header').addEventListener('click', cerrarSesion);
   $('#btn-cambiar-pass').addEventListener('click', cambiarMiContrasena);
   $('#btn-alias-crear').addEventListener('click', crearMiUsuarioDeAcceso);
+  $('#btn-usr-unir').addEventListener('click', unirFirmaDelDueno);
 
   // Menú del usuario: "Mi perfil" y "Configuración"
   $('#btn-cuenta').addEventListener('click', ev => {

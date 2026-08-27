@@ -646,6 +646,18 @@
             y <strong>no se puede quitar</strong>: es la llave de respaldo para volver a entrar.
             Su usuario es con el que <strong>firma en todo el sistema</strong>, también en lo anotado
             hace meses.</p>
+          <!-- Si el dueño se creó después un usuario corto para entrar, lo que
+               firmó con el correo sale como si fuera otra persona. Aquí se
+               declara que son la misma y todo el historial se une. -->
+          <div class="usr-unir" id="usr-unir" hidden>
+            <p class="usr-dueno-txt"><strong>¿Esta cuenta y otro usuario son la misma persona?</strong>
+              Lo firmado con el correo aparece aparte en la hoja de cobranza y en el kardex.
+              Únelos y todo el historial pasa a leerse con un solo nombre.</p>
+            <div class="usr-unir-fila">
+              <select id="usr-unir-destino" class="input"></select>
+              <button type="button" id="btn-usr-unir" class="btn btn-secondary btn-small">🔗 Es la misma persona</button>
+            </div>
+          </div>
         </div>
 
         <h3 class="usr-tit">Usuarios del equipo</h3>
@@ -893,7 +905,7 @@
           <button type="button" id="btn-desp-nuevo" class="btn btn-primary btn-small">➕ Nuevo despacho</button>
         </div>
       </div>
-      <p class="desp-intro">Cada despacho es un pedido / una boleta que sale a reparto: cliente, N° de comprobante, monto, fecha y los repartidores que la llevan. Cuando vuelve firmada, la conviertes en crédito. Todos quedan guardados y puedes buscarlos por día.</p>
+      <p class="desp-intro">Aquí está el recorrido completo de cada venta. Las <strong>notas de venta</strong> que emitiste aparecen solas: tócalas para mandarlas a reparto con el cliente, el número y el monto ya puestos. Cuando el reparto vuelve, dices si la boleta volvió firmada (pasa a <strong>crédito</strong>), si <strong>se pagó al contado</strong> o si fue <strong>devuelta</strong>. Todo queda guardado y lo buscas por día.</p>
 
       <!-- Buscar despachos por día (como la hoja de cobranza) -->
       <div class="desp-filtro">
@@ -917,7 +929,7 @@
         <table class="cob-tabla desp-tabla" id="desp-tabla">
           <thead>
             <tr>
-              <th>N° Boleta</th>
+              <th>N° Comprobante</th>
               <th>Cliente</th>
               <th class="col-num">Monto</th>
               <th>Fecha</th>
@@ -932,7 +944,7 @@
       <!-- Tarjetas (celular) -->
       <div id="despachos-list" class="despachos-list"></div>
 
-      <p class="desp-vacio" id="desp-vacio" hidden>Aún no hay despachos. Toca <strong>“➕ Nuevo despacho”</strong> para registrar el primero.</p>
+      <p class="desp-vacio" id="desp-vacio" hidden>Aún no hay nada que despachar. Emite una nota de venta en <strong>🧾 Ventas</strong> y aparecerá aquí, o toca <strong>“➕ Nuevo despacho”</strong> para registrar uno a mano.</p>
       <div class="modal-buttons">
         <button type="button" id="btn-desp-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
         <button type="button" id="btn-desp-imprimir" class="btn btn-secondary">🖨️ Imprimir hoja de despachos</button>
@@ -1440,13 +1452,11 @@
           <button type="button" id="btn-nv-cliente-nuevo" class="btn btn-secondary btn-small">➕ Registrar</button>
           <label class="field nv-cli-cond"><span>Condición</span>
             <select id="nv-condicion" class="input">
+              <option value="credito" selected>CRÉDITO</option>
               <option value="contado">CONTADO</option>
-              <option value="credito">CRÉDITO</option>
             </select></label>
           <label class="field nv-cli-fpago"><span>F. de pago</span>
             <input type="date" id="nv-fpago" class="input"></label>
-          <label class="field nv-cli-ref"><span>Pedido / ref.</span>
-            <input type="text" id="nv-referencia" class="input" placeholder="90/1/0"></label>
         </div>
         <p class="nv-sin-cliente" id="nv-sin-cliente">Elige el cliente para ver su categoría de precio, su zona y su deuda.</p>
 
