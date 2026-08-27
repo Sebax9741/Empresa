@@ -25,11 +25,10 @@ let settings = {
   // El Dashboard lo ve siempre el administrador; a los empleados se lo
   // muestra solo si el administrador activa este ajuste.
   dashboardEmpleados: false,
-  // Cabecera de la nota de venta impresa
-  empresaNombre: 'IMPORTADORA NUEVA VISTA S.A.C.',
+  // Cabecera de la nota de venta impresa. El nombre del negocio y su teléfono
+  // no van: el papel ya los trae impresos de imprenta.
   empresaDireccion: 'MADRE DE DIOS - TAMBOPATA - TAMBOPATA',
   empresaRuc: '',
-  empresaTelefono: '',
 };
 let vencimientoEditadoManual = false;
 
@@ -907,7 +906,7 @@ async function sincronizarAhora() {
    que la app funcione igual sin internet.
    El aviso de vencimiento es de cada dispositivo, así que no se sube. */
 const CLAVES_NEGOCIO = ['dias', 'moneda', 'atajo1', 'atajo2', 'hojaAutoActiva', 'hojaAutoDias', 'hojaAutoHora', 'dashboardEmpleados',
-  'empresaNombre', 'empresaDireccion', 'empresaRuc', 'empresaTelefono'];
+  'empresaDireccion', 'empresaRuc'];
 
 function cargarSettings() {
   try {
@@ -7471,7 +7470,6 @@ function imprimirNota(nota) {
   // La columna del descuento por bonificación solo aparece si hay alguna: en
   // una nota normal sería una columna de guiones comiéndose el ancho.
   const hayBonif = (nota.items || []).some(it => it.bonificacion);
-  const columnas = hayBonif ? 7 : 6;
   const filas = (nota.items || []).map(it => `<tr>
       <td class="c-cod">${escapeHtml(it.codigo || '')}</td>
       <td class="c-cant">${it.cantidad}</td>
@@ -7481,10 +7479,6 @@ function imprimirNota(nota) {
       ${hayBonif ? `<td class="c-bon">${it.dsctoBonif ? '-' + soles(it.dsctoBonif) : ''}</td>` : ''}
       <td class="c-imp">${soles(it.bonificacion ? 0 : it.importe)}</td>
     </tr>`).join('');
-  // Renglones en blanco para que el cuadro no quede corto en la hoja
-  const enBlanco = Math.max(0, 8 - (nota.items || []).length);
-  const vacias = Array.from({ length: enBlanco },
-    () => `<tr class="vacia">${'<td></td>'.repeat(columnas)}</tr>`).join('');
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
   <title>Nota de venta ${escapeHtml(nota.numero)}</title>
@@ -7494,12 +7488,13 @@ function imprimirNota(nota) {
        papel y había que girar la hoja para leerla. */
     @page { size: A5 portrait; margin: 6mm; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 8pt; color: #000; margin: 0; }
-    .marco { border: 1px solid #000; }
-    /* Cabecera: datos del negocio a la izquierda, el número dentro de su recuadro */
+    /* La nota arranca pegada al borde de arriba. Sin esto el navegador reparte
+       el sobrante y la deja flotando a media hoja. */
+    html, body { margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 8pt; color: #000; }
+    /* Cabecera: dirección del negocio a la izquierda, el número en su recuadro */
     .cab { display: flex; align-items: flex-start; gap: 3mm; padding: 0 0 1.5mm; }
     .cab-emp { flex: 1; padding-top: .5mm; }
-    .cab-emp .nom { font-weight: bold; font-size: 9pt; }
     .cab-emp .lin { font-size: 7pt; }
     .cab-num { border: 1px solid #000; text-align: center; padding: 1.2mm 2mm; min-width: 40mm; }
     .cab-num .tit { font-weight: bold; font-size: 9pt; letter-spacing: .2px; }
@@ -7521,8 +7516,12 @@ function imprimirNota(nota) {
     .der .fila .va { flex: none; }
     /* Cuadro de productos */
     table { width: 100%; border-collapse: collapse; margin-top: 1.5mm; table-layout: fixed; }
-    th, td { border: 1px solid #000; padding: .7mm 1.2mm; font-size: 7.5pt; }
-    th { font-weight: normal; text-align: left; }
+    /* Solo rayas de pie a cabeza: los productos van uno debajo de otro sin
+       línea que los separe, como en el talonario. La raya de abajo la pone el
+       último producto, para que el cuadro cierre. */
+    th, td { border-left: 1px solid #000; border-right: 1px solid #000; padding: .7mm 1.2mm; font-size: 7.5pt; }
+    th { font-weight: normal; text-align: left; border-top: 1px solid #000; border-bottom: 1px solid #000; }
+    tbody tr:last-child td { border-bottom: 1px solid #000; }
     /* Las medidas suman 69mm de los 136mm imprimibles: los 67 que quedan son
        para la descripción, que es la que necesita el sitio. */
     .c-cod { width: 14mm; } .c-cant { width: 10mm; text-align: right; }
@@ -7530,7 +7529,6 @@ function imprimirNota(nota) {
     .c-bon { width: 17mm; text-align: right; }
     .c-imp { width: 19mm; text-align: right; }
     .c-desc { word-break: break-word; }
-    tr.vacia td { height: 4.2mm; }
     /* Pie: importe en letras a la izquierda, totales a la derecha */
     .pie { display: flex; gap: 2mm; align-items: flex-start; }
     .letras { flex: 1; border: 1px solid #000; border-top: none; padding: 1mm 1.2mm; font-size: 7.5pt; min-width: 0; }
@@ -7538,13 +7536,11 @@ function imprimirNota(nota) {
     .tot-fila { display: flex; border: 1px solid #000; border-top: none; }
     .tot-fila .et { flex: 1; text-align: center; border-right: 1px solid #000; padding: .7mm; background: #eee; }
     .tot-fila .va { width: 20mm; text-align: right; padding: .7mm 1.2mm; font-weight: bold; }
-    .nota-pie { margin-top: 1.5mm; font-size: 6.5pt; color: #333; display: flex; justify-content: space-between; gap: 3mm; }
   </style></head><body>
     <div class="cab">
       <div class="cab-emp">
-        <div class="nom">${escapeHtml(emp.empresaNombre || '')}</div>
         <div class="lin">${escapeHtml(emp.empresaDireccion || '')}</div>
-        <div class="lin">${emp.empresaRuc ? 'RUC: ' + escapeHtml(emp.empresaRuc) + ' &nbsp; ' : ''}Tlfno: ${escapeHtml(emp.empresaTelefono || '')}</div>
+        ${emp.empresaRuc ? `<div class="lin">RUC: ${escapeHtml(emp.empresaRuc)}</div>` : ''}
       </div>
       <div class="cab-num">
         <div class="tit">NOTA DE VENTA</div>
@@ -7567,7 +7563,6 @@ function imprimirNota(nota) {
         <div class="fila"><span class="et">Ped:</span><span class="va">${escapeHtml(nota.referencia || '')}</span>
           <span class="et et2">Tlfno:</span><span class="va">${escapeHtml(nota.clienteTelefono || '')}</span></div>
         <div class="fila"><span class="et">Vendedor:</span><span class="va">${escapeHtml(mostrarComo(nota.emitidaPor).toUpperCase())}</span></div>
-        <div class="fila"><span class="et">Hora:</span><span class="va">${escapeHtml(nota.hora || '')}</span></div>
       </div>
     </div>
 
@@ -7577,7 +7572,7 @@ function imprimirNota(nota) {
         <th class="c-desc">Descripción</th><th class="c-pu">P.U.</th>
         ${hayBonif ? '<th class="c-bon">Dscto. bonif.</th>' : ''}<th class="c-imp">Importe</th>
       </tr></thead>
-      <tbody>${filas}${vacias}</tbody>
+      <tbody>${filas}</tbody>
     </table>
 
     <div class="pie">
@@ -7586,10 +7581,6 @@ function imprimirNota(nota) {
         <div class="tot-fila"><span class="et">Total Dscto</span><span class="va">${soles(nota.descuento)}</span></div>
         <div class="tot-fila"><span class="et">Total a Pagar</span><span class="va">${soles(nota.total)}</span></div>
       </div>
-    </div>
-    <div class="nota-pie">
-      <span>Emitido por ${escapeHtml(mostrarComo(nota.emitidaPor))} el ${formatoFecha(nota.fecha)} a las ${escapeHtml(nota.hora || '')}</span>
-      <span>Categoría de precio: ${escapeHtml(nota.categoria || '')}</span>
     </div>
     <script>window.onload=function(){window.print();}<\/script>
   </body></html>`;
@@ -8341,13 +8332,10 @@ function inicializarEventos() {
     $('#settings-dashboard').hidden = !esAdmin();
     $('#s-dashboard-empleados').checked = !!settings.dashboardEmpleados;
     // Los ajustes del negocio los define el administrador para todos
-    $('#s-emp-nombre').value = settings.empresaNombre || '';
     $('#s-emp-direccion').value = settings.empresaDireccion || '';
     $('#s-emp-ruc').value = settings.empresaRuc || '';
-    $('#s-emp-telefono').value = settings.empresaTelefono || '';
     const soloAdmin = modoNube && !esAdmin();
-    ['s-dias', 's-moneda', 's-atajo1', 's-atajo2',
-      's-emp-nombre', 's-emp-direccion', 's-emp-ruc', 's-emp-telefono',
+    ['s-dias', 's-moneda', 's-atajo1', 's-atajo2', 's-emp-direccion', 's-emp-ruc',
     ].forEach(id => { $('#' + id).disabled = soloAdmin; });
     $('#settings-nota-admin').hidden = !soloAdmin;
     mostrarSeccion('settings');
@@ -8370,10 +8358,8 @@ function inicializarEventos() {
     settings.atajo1 = Math.min(365, Math.max(1, Number($('#s-atajo1').value) || 15));
     settings.atajo2 = Math.min(365, Math.max(1, Number($('#s-atajo2').value) || 45));
     // Cabecera de la nota de venta impresa
-    settings.empresaNombre = $('#s-emp-nombre').value.trim();
     settings.empresaDireccion = $('#s-emp-direccion').value.trim();
     settings.empresaRuc = $('#s-emp-ruc').value.trim();
-    settings.empresaTelefono = $('#s-emp-telefono').value.trim();
     // Apertura automática de la hoja de cobranza (solo el admin la puede tocar)
     if (esAdmin()) {
       settings.hojaAutoActiva = $('#s-hoja-auto').checked;
