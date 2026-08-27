@@ -1209,6 +1209,15 @@ async function guardarNotaEnStore(n) {
   }
 }
 
+async function eliminarNotaDeStore(id) {
+  if (modoNube) {
+    await escrituraNube(
+      fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'notas', id)), 'borrado de una nota de venta');
+  } else {
+    await DB.deleteNota(id);
+  }
+}
+
 async function eliminarRepartidorDeStore(id) {
   if (modoNube) {
     await escrituraNube(
@@ -5330,24 +5339,35 @@ function repartidoresSeleccionados() {
     .map(c => c.value);
 }
 
-function abrirFormDespacho(despacho = null) {
+/* `desdeNota` llega cuando el despacho nace de una nota de venta ya emitida:
+   trae el cliente, la zona, el número y el monto ya puestos. */
+function abrirFormDespacho(despacho = null, desdeNota = null) {
+  const base = despacho || desdeNota;
   $('#desp-form').reset();
   $('#desp-id').value = despacho ? despacho.id : '';
+  $('#desp-nota-id').value = (base && base.notaId) || '';
   $('#desp-form-title').textContent = despacho ? 'Editar despacho' : 'Nuevo despacho';
   // Cliente: si el despacho ya tiene uno registrado, lo dejamos elegido;
   // si era texto libre, lo mostramos como "libre:".
   let valorCli = '';
-  if (despacho) {
-    if (despacho.clienteId && clientePorId(despacho.clienteId)) valorCli = despacho.clienteId;
-    else if (despacho.cliente) valorCli = `libre:${despacho.cliente}`;
+  if (base) {
+    if (base.clienteId && clientePorId(base.clienteId)) valorCli = base.clienteId;
+    else if (base.cliente) valorCli = `libre:${base.cliente}`;
   }
   llenarComboClienteDespacho(valorCli);
   $('#btn-desp-cliente-nuevo').hidden = !puede('clientes');
-  $('#desp-boleta').value = despacho ? (despacho.boleta || '') : '';
-  $('#desp-monto').value = despacho ? (despacho.monto || '') : '';
-  $('#desp-emision').value = despacho ? (despacho.emision || despacho.fecha || hoyISO()) : hoyISO();
+  $('#desp-boleta').value = base ? (base.boleta || '') : '';
+  $('#desp-monto').value = base ? (base.monto || '') : '';
+  $('#desp-emision').value = base ? (base.emision || base.fecha || hoyISO()) : hoyISO();
   $('#desp-fecha').value = despacho ? (despacho.fecha || hoyISO()) : hoyISO();
   $('#desp-notas').value = despacho ? (despacho.notas || '') : '';
+  // Aviso de que viene de una nota, para que se vea de dónde salieron los datos
+  const aviso = $('#desp-de-nota');
+  if (aviso) {
+    const nota = desdeNota ? notas.find(n => n.id === desdeNota.notaId) : null;
+    aviso.hidden = !nota;
+    if (nota) aviso.innerHTML = `🧮 Sale de la nota de venta <strong>${escapeHtml(nota.numero)}</strong>`;
+  }
   renderRepartidoresCheck(despacho ? repartidoresDe(despacho) : []);
   mostrarVistaDespacho('form');
   $('#desp-cliente-buscar').focus();
@@ -5383,6 +5403,7 @@ async function guardarDespachoForm(ev) {
     clienteId,
     zona: clienteId ? zonaCli : ((existente && existente.zona) || ''),
     tipoComprobante: 'nota',
+    notaId: $('#desp-nota-id').value || (existente ? (existente.notaId || '') : ''),
     boleta: $('#desp-boleta').value.trim(),
     monto: Number($('#desp-monto').value) || 0,
     repartidores: reps,
@@ -5511,6 +5532,13 @@ async function vincularDespachoConCredito(despachoId, credito) {
     await guardarDespachoEnStore(actualizado);
     const idx = despachos.findIndex(x => x.id === d.id);
     if (idx >= 0) despachos[idx] = actualizado;
+    // El crédito se queda con la nota de la que salió todo: así el recorrido
+    // nota → despacho → crédito se puede recorrer desde cualquier punto.
+    if (d.notaId && !credito.notaId) {
+      await guardarEnStore({ ...credito, notaId: d.notaId });
+      const j = creditos.findIndex(c => c.id === credito.id);
+      if (j >= 0) creditos[j] = { ...creditos[j], notaId: d.notaId };
+    }
   } catch (e) {
     console.error('No se pudo enlazar el despacho con el crédito:', e);
   }
@@ -6202,7 +6230,7 @@ function renderKardex() {
       <td class="col-num kdx-salida">${c < 0 ? -c : ''}</td>
       <td class="col-num kdx-saldo">${m.saldo}</td>
       <td>${escapeHtml(mostrarComo(m.usuario) || '—')}</td>
-      <td class="col-acc">${mandaComoAdmin() && m.motivo !== 'venta'
+      <td class="col-acc">${mandaComoAdmin()
         ? `<button type="button" class="btn btn-danger btn-small" data-borrar-kardex="${escapeHtml(m.id)}" title="Anular movimiento (pide tu código)">🗑️</button>` : ''}</td>
     </tr>`;
   }).join('');
@@ -6675,9 +6703,17 @@ async function borrarMovimiento(id) {
   const p = productoPorId(m.productoId);
   const nombre = p ? p.nombre : 'producto';
   const c = cantidadConSigno(m);
+  // Las salidas por venta pertenecen a una nota. Se pueden anular, pero hay
+  // que decirlo: la nota se queda sin su descuento de almacén y las dos hojas
+  // dejan de cuadrar. Lo normal es borrar la nota entera.
+  const suNota = m.notaId ? notas.find(n => n.id === m.notaId) : null;
+  const aviso = suNota
+    ? `\n\n⚠️ Esta salida es de la nota ${suNota.numero}, que seguirá existiendo.\n` +
+      `Si lo que quieres es anular la venta, borra la nota: así se devuelve todo de una vez.`
+    : '';
   if (!confirm(`¿Anular este movimiento de "${nombre}"?\n\n` +
     `${c >= 0 ? 'Entrada' : 'Salida'} de ${Math.abs(c)} · ${formatoFecha(m.fecha)}\n` +
-    `El stock quedará en ${stockDe(m.productoId) - c}.`)) return;
+    `El stock quedará en ${stockDe(m.productoId) - c}.${aviso}`)) return;
 
   const autorizado = await pedirPin(
     `Vas a anular un movimiento de almacén de "${nombre}" (${c >= 0 ? '+' : ''}${c}).`);
@@ -6834,26 +6870,38 @@ let nvNumero = '';
 let nvCreadoEn = 0;        // hora en que se empezó la nota
 let nvComboIndice = -1;
 
-/* Cada serie lleva su propio correlativo, como en cualquier talonario: la
-   0002 va por su cuenta aunque la 0001 esté mucho más adelante. */
-function siguienteNumeroNota(serie) {
-  const s = SERIES.includes(serie) ? serie : SERIE_POR_DEFECTO;
-  let mayor = 0;
-  for (const n of notas) {
-    const m = /^(\d+)-(\d+)$/.exec(String(n.numero || ''));
-    if (m && m[1] === s) mayor = Math.max(mayor, Number(m[2]));
-  }
-  return `${s}-${String(mayor + 1).padStart(8, '0')}`;
+/* El número que lleva un comprobante, venga de una nota ("0001-00004181") o
+   de la boleta anotada a mano en un crédito ("4137"). */
+function numeroDeComprobante(texto) {
+  const m = /(\d+)\s*$/.exec(String(texto || '').trim());
+  return m ? Number(m[1]) : 0;
 }
 
-/* Pinta el número en la cabecera y lo deja guardado para cuando se grabe */
-function nvPonerNumero(serie) {
-  nvNumero = siguienteNumeroNota(serie);
-  const [s, correlativo] = nvNumero.split('-');
+/* El correlativo es UNO SOLO para todo el negocio: la serie dice de qué zona
+   salió la nota, pero el número nunca se repite entre series. Arranca donde
+   quedó el talonario de papel, así que se mira también el número de boleta de
+   los créditos ya registrados. */
+function siguienteCorrelativo() {
+  let mayor = 0;
+  for (const n of notas) mayor = Math.max(mayor, numeroDeComprobante(n.numero));
+  for (const c of creditos) mayor = Math.max(mayor, numeroDeComprobante(c.boleta));
+  return mayor + 1;
+}
+
+function armarNumeroNota(serie, correlativo) {
+  const s = SERIES.includes(serie) ? serie : SERIE_POR_DEFECTO;
+  return `${s}-${String(Math.max(1, Number(correlativo) || 1)).padStart(8, '0')}`;
+}
+
+/* Pinta serie y correlativo en la cabecera. El correlativo se puede escribir:
+   hace falta para dar de alta las notas que faltan de boletas ya emitidas. */
+function nvPonerNumero(serie, correlativo) {
   const sel = $('#nv-serie');
-  if (sel) sel.value = s;
+  if (sel) sel.value = SERIES.includes(serie) ? serie : SERIE_POR_DEFECTO;
   const cor = $('#nv-correlativo');
-  if (cor) cor.textContent = correlativo;
+  if (cor) cor.value = correlativo || siguienteCorrelativo();
+  nvNumero = armarNumeroNota(nvSerieElegida(), cor ? cor.value : correlativo);
+  nvAvisarNumero();
 }
 
 function nvSerieElegida() {
@@ -6861,8 +6909,77 @@ function nvSerieElegida() {
   return sel && SERIES.includes(sel.value) ? sel.value : SERIE_POR_DEFECTO;
 }
 
+function nvCorrelativoEscrito() {
+  const cor = $('#nv-correlativo');
+  return Math.max(1, Number(cor && cor.value) || 0);
+}
+
+/* Quién más está usando ese número: otra nota (no se puede) o un crédito ya
+   registrado (sí se puede, y es justo lo que se busca al dar de alta una nota
+   que faltaba: las dos quedan enlazadas). */
+function quienUsaElNumero(correlativo, exceptoNotaId) {
+  const n = Number(correlativo);
+  const nota = notas.find(x => x.id !== exceptoNotaId && numeroDeComprobante(x.numero) === n);
+  if (nota) return { tipo: 'nota', nota };
+  const credito = creditos.find(c => numeroDeComprobante(c.boleta) === n);
+  if (credito) return { tipo: 'credito', credito };
+  return null;
+}
+
+/* Aviso bajo el número, mientras se escribe */
+function nvAvisarNumero() {
+  const pista = $('#nv-num-aviso');
+  if (!pista) return;
+  const usa = quienUsaElNumero(nvCorrelativoEscrito(), null);
+  if (!usa) { pista.textContent = ''; pista.className = 'nv-num-aviso'; return; }
+  if (usa.tipo === 'nota') {
+    pista.textContent = `⚠️ Ese número ya es de la nota ${usa.nota.numero}`;
+    pista.className = 'nv-num-aviso nv-num-choca';
+  } else {
+    pista.textContent = `🔗 Es la boleta del crédito de ${usa.credito.cliente || 'un cliente'}: quedarán enlazados`;
+    pista.className = 'nv-num-aviso nv-num-enlaza';
+  }
+}
+
 function notasOrdenadas() {
   return notas.slice().sort((a, b) => (b.creado || 0) - (a.creado || 0));
+}
+
+/* ---- El recorrido de una nota: se vende, se despacha, se cobra ----
+   El enlace se guarda siempre en el papel que viene DESPUÉS (el despacho
+   apunta a su nota, el crédito a la suya), y el estado se deduce mirando
+   quién la apunta. Así no hay dos sitios que puedan quedar en desacuerdo. */
+function despachoDeNota(notaId) {
+  return despachos.find(d => esDespachoPedido(d) && d.notaId === notaId) || null;
+}
+
+function creditoDeNota(nota) {
+  if (!nota) return null;
+  const porId = creditos.find(c => c.notaId === nota.id);
+  if (porId) return porId;
+  // Un crédito creado desde el despacho de esta nota también cuenta
+  const d = despachoDeNota(nota.id);
+  if (d && d.creditoId) return creditos.find(c => c.id === d.creditoId) || null;
+  // Y el que la nota apunte directamente (nota dada de alta sobre una boleta vieja)
+  return (nota.creditoId && creditos.find(c => c.id === nota.creditoId)) || null;
+}
+
+const ESTADOS_NOTA = {
+  pendiente: { etiqueta: '🕐 Por despachar', clase: 'pedido-pendiente' },
+  reparto:   { etiqueta: '🚚 En reparto', clase: 'pedido-contado' },
+  credito:   { etiqueta: '📄 A crédito', clase: 'pedido-credito' },
+  pagado:    { etiqueta: '✅ Pagado', clase: 'pedido-pagado' },
+};
+
+function estadoDeNota(nota) {
+  const credito = creditoDeNota(nota);
+  if (credito) return estadoEfectivo(credito) === 'pagado' ? 'pagado' : 'credito';
+  return despachoDeNota(nota.id) ? 'reparto' : 'pendiente';
+}
+
+/* Las que todavía no salieron a reparto: es lo que se ofrece en Despachos */
+function notasPorDespachar() {
+  return notasOrdenadas().filter(n => estadoDeNota(n) === 'pendiente');
 }
 
 function abrirVentas() {
@@ -6921,19 +7038,24 @@ function renderVentas() {
 
   cuerpo.innerHTML = lista.map(n => {
     const cat = String(n.categoria || 'C').toUpperCase();
+    const est = ESTADOS_NOTA[estadoDeNota(n)] || ESTADOS_NOTA.pendiente;
+    const pendiente = estadoDeNota(n) === 'pendiente';
     return `<tr>
       <td class="nv-num"><strong>${escapeHtml(n.numero)}</strong></td>
       <td>${formatoFecha(n.fecha)}<small>${escapeHtml(n.hora || '')}</small></td>
       <td>${escapeHtml(n.clienteNombre || '—')}</td>
       <td class="col-um"><span class="cliente-cat cat-${cat}">${cat}</span></td>
       <td>${escapeHtml(n.zona || '—')}</td>
-      <td>${n.condicion === 'credito' ? 'CRÉDITO' : 'CONTADO'}</td>
+      <td><span class="ped-chip ${est.clase}">${est.etiqueta}</span></td>
       <td class="col-num">${(n.items || []).length}</td>
       <td class="col-num"><strong>${soles(n.total)}</strong></td>
       <td>${escapeHtml(mostrarComo(n.emitidaPor) || '—')}</td>
       <td class="col-acc">
+        ${pendiente && puede('despachos') ? `<button type="button" class="btn btn-secondary btn-small" data-despachar-nota="${escapeHtml(n.id)}" title="Mandarla a reparto">🚚</button>` : ''}
+        ${!pendiente ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
         <button type="button" class="btn btn-secondary btn-small" data-copiar-nota="${escapeHtml(n.id)}" title="Usar como base para una nota nueva">📋</button>
+        ${mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-borrar-nota="${escapeHtml(n.id)}" title="Borrar la nota (pide tu código)">🗑️</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -6948,7 +7070,7 @@ function abrirNuevaNota(base = null) {
   llenarSelectoresProducto();
   nvItems = base ? (base.items || []).map(it => ({ ...it })) : [];
   nvCreadoEn = Date.now();
-  nvPonerNumero(base ? serieDeZona(base.zona) : SERIE_POR_DEFECTO);
+  nvPonerNumero(base ? serieDeZona(base.zona) : SERIE_POR_DEFECTO, siguienteCorrelativo());
   $('#nv-fecha').value = hoyISO();
   $('#nv-hora').textContent = horaDeTimestamp(nvCreadoEn);
   $('#nv-vendedor').textContent = quienSoy();
@@ -7020,7 +7142,7 @@ function nvSeleccionarCliente(id) {
     $('#nv-fc-deuda').className = deuda > 0 ? 'nv-deuda' : '';
     // La serie va con la zona del cliente. Se cambia sola aquí; si el usuario
     // la toca después, manda lo que él eligió.
-    nvPonerNumero(serieDeZona(cli.zona));
+    nvPonerNumero(serieDeZona(cli.zona), nvCorrelativoEscrito());
     $('#nv-serie-pista').textContent = `Serie de ${cli.zona || 'la zona'}`;
   } else {
     $('#nv-serie-pista').textContent = 'La serie se elige sola según la zona';
@@ -7175,7 +7297,7 @@ function armarNota() {
   const { subtotal, bonificacion, descuento, total } = recalcularTotalesNota();
   return {
     id: nuevoId(),
-    numero: nvNumero,
+    numero: armarNumeroNota(nvSerieElegida(), nvCorrelativoEscrito()),
     serie: nvSerieElegida(),
     fecha: $('#nv-fecha').value || hoyISO(),
     hora: horaDeTimestamp(nvCreadoEn),
@@ -7212,10 +7334,20 @@ async function guardarNota(imprimir) {
   const nota = armarNota();
   if (!nota) return;
 
-  // El número se recalcula al grabar: entre que se abrió el formulario y ahora,
-  // otro usuario pudo emitir una nota desde su tablet.
-  const enUso = notas.some(n => n.numero === nota.numero);
-  if (enUso) nota.numero = siguienteNumeroNota(nota.serie);
+  // Dos notas no pueden llevar el mismo número. Se comprueba al grabar y no
+  // al escribir, porque entre medias otro pudo emitir una desde su tablet.
+  const correlativo = numeroDeComprobante(nota.numero);
+  const usa = quienUsaElNumero(correlativo, nota.id);
+  if (usa && usa.tipo === 'nota') {
+    const libre = siguienteCorrelativo();
+    if (!confirm(`El número ${correlativo} ya es de la nota ${usa.nota.numero}.\n\n` +
+      `¿Usar el ${libre}, que está libre?`)) { $('#nv-correlativo').focus(); return; }
+    nota.numero = armarNumeroNota(nota.serie, libre);
+  }
+  // Si el número es el de una boleta ya registrada como crédito, es que se
+  // está dando de alta la nota que faltaba: quedan enlazadas.
+  const creditoDelMismoNumero = usa && usa.tipo === 'credito' ? usa.credito : null;
+  if (creditoDelMismoNumero) nota.creditoId = creditoDelMismoNumero.id;
 
   const btnG = $('#btn-nv-guardar'), btnI = $('#btn-nv-guardar-imprimir');
   btnG.disabled = btnI.disabled = true;
@@ -7237,7 +7369,18 @@ async function guardarNota(imprimir) {
   }
   btnG.disabled = btnI.disabled = false;
 
-  toast(`✅ Nota de venta ${nota.numero} guardada`);
+  // El enlace se anota también en el crédito, para que se vea desde los dos lados
+  if (creditoDelMismoNumero) {
+    try {
+      await guardarEnStore({ ...creditoDelMismoNumero, notaId: nota.id });
+      const i = creditos.findIndex(c => c.id === creditoDelMismoNumero.id);
+      if (i >= 0) creditos[i] = { ...creditos[i], notaId: nota.id };
+    } catch (e) { console.error('No se pudo enlazar la nota con el crédito:', e); }
+  }
+
+  toast(creditoDelMismoNumero
+    ? `✅ Nota ${nota.numero} guardada y enlazada con su crédito`
+    : `✅ Nota de venta ${nota.numero} guardada`);
   if (imprimir) imprimirNota(nota);
   nvItems = [];
   nvClienteId = '';
@@ -7245,6 +7388,81 @@ async function guardarNota(imprimir) {
   renderVentas();
   renderProductos();
   renderKardex();
+  render();
+}
+
+/* ---- De la nota al reparto ----
+   Abre el formulario de despacho con lo que ya dice la nota: cliente, zona,
+   número y monto. Lo único que queda por poner es quién la lleva y cuándo. */
+function despacharNota(notaId) {
+  if (!puede('despachos')) { toast('🔒 No tienes permiso para armar despachos'); return; }
+  const n = notas.find(x => x.id === notaId);
+  if (!n) return;
+  if (despachoDeNota(notaId)) { toast('⚠️ Esa nota ya está en un despacho'); return; }
+  abrirDespachos();
+  abrirFormDespacho(null, {
+    notaId: n.id,
+    clienteId: n.clienteId || '',
+    cliente: n.clienteNombre || '',
+    zona: n.zona || '',
+    boleta: n.numero || '',
+    monto: Number(n.total) || 0,
+    emision: n.fecha || hoyISO(),
+  });
+}
+
+/* Lleva al papel siguiente: al crédito si ya lo tiene, si no al despacho */
+function seguirNota(notaId) {
+  const n = notas.find(x => x.id === notaId);
+  if (!n) return;
+  const c = creditoDeNota(n);
+  if (c) { abrirInfo(c); return; }
+  const d = despachoDeNota(notaId);
+  if (d) { abrirDespachos(); abrirDetalleDespacho(d.id); return; }
+  toast('Esa nota todavía no salió a reparto');
+}
+
+/* ---- Borrar una nota ----
+   Devuelve al almacén lo que había descontado, así que es cosa del
+   administrador y pide el código de seguridad, como anular un movimiento. */
+async function borrarNota(notaId) {
+  if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede borrar notas'); return; }
+  const n = notas.find(x => x.id === notaId);
+  if (!n) return;
+
+  const d = despachoDeNota(notaId);
+  const c = creditoDeNota(n);
+  if (c) {
+    alert(`No se puede borrar la nota ${n.numero} porque ya tiene un crédito ` +
+      `(boleta ${c.boleta}).\n\nBorra primero el crédito.`);
+    return;
+  }
+  const movimientos = kardex.filter(m => m.notaId === notaId);
+  const detalle = movimientos.length
+    ? `\n\nSe anularán sus ${movimientos.length} salida(s) de almacén y la mercadería volverá al stock.`
+    : '';
+  const enReparto = d ? `\n\nOjo: está en un despacho, que quedará sin su nota.` : '';
+  if (!confirm(`¿Borrar la nota de venta ${n.numero}?\n\n` +
+    `${n.clienteNombre || 'Sin cliente'} · ${soles(n.total)}${detalle}${enReparto}`)) return;
+
+  const autorizado = await pedirPin(`Vas a borrar la nota ${n.numero} y devolver su mercadería al almacén.`);
+  if (!autorizado) { toast('🔒 Borrado cancelado'); return; }
+
+  try {
+    await Promise.all(movimientos.map(m => eliminarKardexDeStore(m.id)));
+    await eliminarNotaDeStore(notaId);
+  } catch (e) {
+    console.error(e);
+    toast(avisoDeFallo(e, '❌ No se pudo borrar la nota. Revisa tu conexión.'));
+    return;
+  }
+  kardex = kardex.filter(m => m.notaId !== notaId);
+  notas = notas.filter(x => x.id !== notaId);
+  toast(`🗑️ Nota ${n.numero} borrada${movimientos.length ? ' y stock devuelto' : ''}`);
+  renderVentas();
+  renderProductos();
+  renderKardex();
+  renderListaDespachos();
 }
 
 /* ══════════ Impresión: media hoja A4 (A5 apaisado) ══════════ */
@@ -7789,6 +8007,12 @@ function inicializarEventos() {
   $('#nv-body').addEventListener('click', ev => {
     const imprimir = ev.target.closest('[data-imprimir-nota]');
     const copiar = ev.target.closest('[data-copiar-nota]');
+    const despachar = ev.target.closest('[data-despachar-nota]');
+    const seguir = ev.target.closest('[data-seguir-nota]');
+    const borrar = ev.target.closest('[data-borrar-nota]');
+    if (despachar) { despacharNota(despachar.dataset.despacharNota); return; }
+    if (seguir) { seguirNota(seguir.dataset.seguirNota); return; }
+    if (borrar) { borrarNota(borrar.dataset.borrarNota); return; }
     if (imprimir) {
       const n = notas.find(x => x.id === imprimir.dataset.imprimirNota);
       if (n) imprimirNota(n);
@@ -7905,8 +8129,12 @@ function inicializarEventos() {
   $('#nv-descuento').addEventListener('input', recalcularTotalesNota);
   // La serie se propone según la zona, pero manda lo que elija el usuario
   $('#nv-serie').addEventListener('change', () => {
-    nvPonerNumero(nvSerieElegida());
+    nvPonerNumero(nvSerieElegida(), nvCorrelativoEscrito());
     $('#nv-serie-pista').textContent = 'Serie elegida a mano';
+  });
+  $('#nv-correlativo').addEventListener('input', () => {
+    nvNumero = armarNumeroNota(nvSerieElegida(), nvCorrelativoEscrito());
+    nvAvisarNumero();
   });
   $('#nv-condicion').addEventListener('change', () => {
     // A crédito, la fecha de pago se propone según los días configurados

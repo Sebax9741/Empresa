@@ -2932,6 +2932,40 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .nv-serie:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .nv-serie option { color: var(--text); background: #fff; font-size: 1rem; }
 .nv-serie-pista { display: block; font-size: 0.68rem; color: var(--side-text); margin-top: 0.15rem; }
+/* El correlativo se escribe: hace falta para dar de alta una boleta que falta */
+.nv-correlativo {
+  font: inherit;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  width: 7ch;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 0 0.4rem;
+  -moz-appearance: textfield;
+}
+.nv-correlativo::-webkit-outer-spin-button,
+.nv-correlativo::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.nv-correlativo:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+/* Vacío no ocupa: si reservara su línea, le quitaría alto al cuadro de
+   productos en todas las notas para avisar solo en unas pocas. */
+.nv-num-aviso:empty { display: none; }
+.nv-num-aviso { display: block; font-size: 0.68rem; margin-top: 0.1rem; }
+.nv-num-choca { color: #ffc9c2; }
+.nv-num-enlaza { color: #b7e8dc; }
+
+/* Aviso de que el despacho sale de una nota de venta ya emitida */
+.desp-de-nota {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.7rem;
+  font-size: 0.85rem;
+  margin: 0 0 0.7rem;
+}
 
 .nv-cab-meta { display: flex; gap: 0.9rem; flex-wrap: wrap; align-items: flex-end; }
 .nv-cab-meta > * { display: flex; flex-direction: column; gap: 0.15rem; margin: 0; }

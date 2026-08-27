@@ -947,6 +947,8 @@
       </div>
       <form id="desp-form">
         <input type="hidden" id="desp-id">
+        <input type="hidden" id="desp-nota-id">
+        <p class="desp-de-nota" id="desp-de-nota" hidden></p>
         <div class="field">
           <span class="field-label">Cliente *</span>
           <div class="cliente-picker">
@@ -1378,7 +1380,7 @@
               <th>Cliente</th>
               <th class="col-um">Cat.</th>
               <th>Zona</th>
-              <th>Condición</th>
+              <th>Estado</th>
               <th class="col-num">Ítems</th>
               <th class="col-num">Total</th>
               <th>Vendedor</th>
@@ -1408,9 +1410,11 @@
               <option value="0003">0003</option>
             </select>
             <span class="nv-cab-guion">–</span>
-            <strong id="nv-correlativo">00000001</strong>
+            <input type="number" id="nv-correlativo" class="nv-correlativo" min="1" step="1"
+                   aria-label="Número de la nota" title="Se puede cambiar para dar de alta una boleta que falta">
           </div>
           <small class="nv-serie-pista" id="nv-serie-pista">La serie se elige sola según la zona</small>
+          <small class="nv-num-aviso" id="nv-num-aviso"></small>
         </div>
         <div class="nv-cab-meta">
           <label><span>Emisión</span><input type="date" id="nv-fecha" class="input"></label>
