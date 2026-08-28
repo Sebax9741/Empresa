@@ -2432,6 +2432,77 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .desp-intro { color: var(--muted); font-size: 0.86rem; margin: 0 0 0.9rem; }
 .desp-sub { font-size: 0.95rem; font-weight: 700; margin: 1.1rem 0 0.6rem; }
 
+/* ── El tablero: lo que espera salir | la flecha | lo que ya salió ──
+   En pantalla ancha van lado a lado; en el celular se apilan y la flecha se
+   vuelve un botón de ancho completo entre los dos. */
+.desp-tablero { display: grid; gap: 0.9rem; grid-template-columns: 1fr; }
+@media (min-width: 1100px) {
+  .desp-tablero {
+    /* La izquierda solo necesita número, cliente y monto; el sitio que sobra
+       es para la tabla de la derecha, que lleva siete columnas. */
+    grid-template-columns: minmax(13rem, 17rem) auto minmax(0, 1fr);
+    align-items: start;
+  }
+}
+.desp-lado {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--card); padding: 0.8rem;
+}
+.desp-lado-notas { background: var(--bg-tint); }
+.desp-lado-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.6rem; }
+.desp-lado-cab h3 { margin: 0; font-size: 0.95rem; }
+.desp-lado-cuenta { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+.desp-lado-vacio { color: var(--muted); font-size: 0.83rem; margin: 0.6rem 0; }
+
+/* Las notas marcables */
+.desp-notas-lista { display: flex; flex-direction: column; gap: 0.35rem; max-height: 26rem; overflow-y: auto; }
+.desp-nota {
+  display: flex; align-items: flex-start; gap: 0.55rem; cursor: pointer;
+  padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card); border-left: 3px solid var(--gray);
+}
+.desp-nota:hover { border-color: var(--primary); }
+.desp-nota.elegida { border-left-color: var(--ink); background: var(--warning-light); }
+.desp-nota input { margin: 0.15rem 0 0; flex: none; }
+.desp-nota-cuerpo { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1; }
+.desp-nota-linea { display: flex; align-items: baseline; gap: 0.45rem; min-width: 0; }
+.desp-nota-num { flex: none; }
+.desp-nota-cli { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.86rem; }
+.desp-nota-meta { font-size: 0.76rem; color: var(--muted); flex-wrap: wrap; }
+.desp-notas-viejas { font-size: 0.78rem; color: var(--warning); margin: 0.6rem 0 0; }
+/* Un botón que se lee como un enlace, para no gritar dentro de un aviso */
+.btn-enlace {
+  background: none; border: 0; padding: 0; font: inherit; color: var(--primary);
+  text-decoration: underline; cursor: pointer;
+}
+.btn-enlace:hover { color: var(--primary-dark); }
+
+/* La flecha del medio */
+.desp-flecha { display: flex; align-items: center; justify-content: center; }
+.desp-flecha-btn { display: flex; align-items: center; gap: 0.4rem; }
+.desp-flecha-ico { font-size: 1.05rem; line-height: 1; }
+@media (min-width: 1100px) {
+  .desp-flecha { align-self: center; }
+  .desp-flecha-btn { flex-direction: column; padding: 0.8rem 0.6rem; }
+  /* El .btn general va en nowrap; aquí el rótulo tiene que poder partirse en
+     dos líneas o se sale del botón cuando dice "Mandar 12 a reparto". */
+  .desp-flecha-txt { font-size: 0.75rem; width: 5rem; text-align: center; white-space: normal; line-height: 1.25; }
+}
+@media (max-width: 1099px) {
+  .desp-flecha-btn { width: 100%; justify-content: center; }
+}
+
+/* El resumen de las notas que salen juntas, dentro del formulario */
+.desp-lote-resumen {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-tint); padding: 0.7rem; margin-bottom: 0.8rem;
+}
+.desp-lote-tit { margin: 0 0 0.45rem; font-weight: 700; font-size: 0.9rem; }
+.desp-lote-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.desp-lote-lista li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.84rem; }
+.desp-lote-lista li span:not(.desp-lote-monto) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desp-lote-monto { flex: none; font-weight: 600; }
+
 /* Buscar despachos por día (mismo estilo que la hoja de cobranza) */
 .desp-filtro { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem 1rem; margin-bottom: 0.9rem; }
 .desp-filtro .cob-nav { margin-bottom: 0; }
@@ -2444,6 +2515,14 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 /* Tabla de despachos (escritorio), clasificada como los créditos */
 .desp-tabla-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+/* Dentro del tablero la tabla comparte el ancho con el panel de la izquierda:
+   se aprieta un poco la letra y el relleno para que quepan las siete columnas
+   sin tener que arrastrarla de lado. */
+@media (min-width: 1100px) {
+  .desp-lado-reparto .desp-tabla { font-size: 0.82rem; }
+  .desp-lado-reparto .desp-tabla th,
+  .desp-lado-reparto .desp-tabla td { padding: 0.45rem 0.5rem; }
+}
 .desp-fila { cursor: pointer; transition: background 0.12s; }
 .desp-fila:hover { background: var(--bg-tint); }
 /* Franja de color a la izquierda según el estado del despacho */

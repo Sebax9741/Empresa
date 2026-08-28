@@ -227,9 +227,6 @@ async function cargarEquipo() {
    Los despachos antiguos tipo "viaje" (con lista .pedidos) ya no se muestran. */
 const TIPOS_COMPROBANTE = { boleta: 'Boleta', factura: 'Factura', nota: 'Nota de venta' };
 const ESTADOS_DESPACHO = {
-  // "nota" no es un estado que se guarde en ningún despacho: es la venta que
-  // todavía es solo una nota y aún no salió a reparto.
-  nota:     { etiqueta: '📝 Nota de venta', clase: 'pedido-nota' },
   reparto:  { etiqueta: '🚚 En reparto', clase: 'pedido-pendiente' },
   credito:  { etiqueta: '📄 A crédito', clase: 'pedido-credito' },
   pagado:   { etiqueta: '✅ Pagado', clase: 'pedido-pagado' },
@@ -277,9 +274,9 @@ function despachosOrdenados() {
 
 /* Resumen de una lista de despachos: cuántos hay en cada estado y el monto total */
 function resumenDespachos(lista) {
-  const r = { total: lista.length, nota: 0, reparto: 0, credito: 0, pagado: 0, contado: 0, devuelto: 0, monto: 0 };
+  const r = { total: lista.length, reparto: 0, credito: 0, pagado: 0, contado: 0, devuelto: 0, monto: 0 };
   for (const d of lista) {
-    const e = d.estado && d.tipo ? d.estado : estadoDespachoEfectivo(d);
+    const e = estadoDespachoEfectivo(d);
     r[e] = (r[e] || 0) + 1;
     r.monto += Number(d.monto) || 0;
   }
@@ -5118,54 +5115,53 @@ function imprimirCobranza() {
 let despachoActivoId = null;   // despacho abierto en la vista de detalle
 let despachoOrigen = null;     // id del despacho que se está pasando a crédito
 let despachoFiltroFecha = null; // día seleccionado para filtrar (null = ver todos)
+const notasElegidas = new Set(); // notas marcadas para mandar a reparto
+let verNotasViejas = false;      // mostrar también las pendientes de hace tiempo
+
+/* Cuánto tiempo se considera que una nota es "reciente". Lo normal aquí es
+   emitir la nota y despacharla el mismo día o a la mañana siguiente, así que
+   una semana da margen de sobra para un fin de semana largo o un feriado sin
+   que el panel se convierta en un cementerio.
+
+   Lo que pase de ahí NO se esconde: se avisa aparte y se puede desplegar, que
+   una nota sin despachar de hace diez días es justo la que hay que ver. */
+const DIAS_NOTA_RECIENTE = 7;
+
+/* Las notas emitidas que todavía no salieron a reparto, de la más nueva a la
+   más vieja. `todas` incluye las que ya pasaron de la semana. */
+function notasSinDespachar(todas = false) {
+  const desde = sumarDias(hoyISO(), -DIAS_NOTA_RECIENTE);
+  return notasPorDespachar()
+    .filter(n => todas || (n.fecha || '') >= desde)
+    .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '')
+      || numeroDeComprobante(b.numero) - numeroDeComprobante(a.numero));
+}
+
+function notasSinDespacharViejas() {
+  const desde = sumarDias(hoyISO(), -DIAS_NOTA_RECIENTE);
+  return notasPorDespachar().filter(n => (n.fecha || '') < desde);
+}
 
 /* Días que tienen al menos un despacho, del más reciente al más antiguo,
    con la cantidad y el monto de ese día (para el navegador y el desplegable). */
-/* Todo lo que se ve en 📦 Despachos, en una sola lista: las notas de venta
-   que todavía no salieron a reparto y los despachos ya armados. Así una venta
-   se sigue sin cambiar de sección desde que se emite la nota hasta que la
-   boleta vuelve firmada.
-
-   Cada renglón lleva su `tipo` para saber qué abrir al tocarlo: una nota abre
-   el despacho ya prellenado; un despacho abre su detalle. */
-function itemsDespacho() {
-  const deNotas = notasPorDespachar().map(n => ({
-    tipo: 'nota', id: n.id, estado: 'nota',
-    numero: n.numero || '', cliente: n.clienteNombre || '',
-    monto: Number(n.total) || 0, fecha: n.fecha || '', zona: n.zona || '',
-    repartidores: [], orden: numeroDeComprobante(n.numero) || Infinity,
-  }));
-  const deDespachos = despachosOrdenados().map(d => ({
-    tipo: 'despacho', id: d.id, estado: estadoDespachoEfectivo(d),
-    numero: d.boleta || '', cliente: d.cliente || '',
-    monto: Number(d.monto) || 0, fecha: d.fecha || '', zona: d.zona || '',
-    // El mismo criterio que las notas: el número de atrás del comprobante. Con
-    // boletaNumero (que junta todos los dígitos) "0001-00000001" valdría cien
-    // millones y las notas y los despachos no se podrían ordenar entre sí.
-    repartidores: repartidoresDe(d), orden: numeroDeComprobante(d.boleta) || Infinity,
-  }));
-  return [...deNotas, ...deDespachos].sort((a, b) =>
-    a.orden - b.orden || a.fecha.localeCompare(b.fecha));
-}
-
 function diasConDespachos() {
   const mapa = new Map();
-  for (const it of itemsDespacho()) {
-    const f = it.fecha;
+  for (const d of despachos.filter(esDespachoPedido)) {
+    const f = d.fecha || '';
     if (!f) continue;
     const acc = mapa.get(f) || { fecha: f, cantidad: 0, monto: 0 };
     acc.cantidad += 1;
-    acc.monto += it.monto;
+    acc.monto += Number(d.monto) || 0;
     mapa.set(f, acc);
   }
   return [...mapa.values()].sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
-/* Lo que se muestra ahora mismo: todo, o solo lo del día elegido. */
+/* Los despachos que se muestran ahora mismo: todos, o los del día elegido. */
 function despachosDelDia() {
-  const lista = itemsDespacho();
+  const lista = despachosOrdenados();
   if (!despachoFiltroFecha) return lista;
-  return lista.filter(it => it.fecha === despachoFiltroFecha);
+  return lista.filter(d => (d.fecha || '') === despachoFiltroFecha);
 }
 
 const VISTAS_DESPACHO = ['lista', 'form', 'detalle', 'repartidores'];
@@ -5193,7 +5189,6 @@ function renderDespachos() {
 
 function chipDespachos(res) {
   const partes = [];
-  if (res.nota) partes.push(`<span class="ped-chip pedido-nota">${res.nota} sin despachar</span>`);
   if (res.reparto) partes.push(`<span class="ped-chip pedido-pendiente">${res.reparto} en reparto</span>`);
   if (res.credito) partes.push(`<span class="ped-chip pedido-credito">${res.credito} a crédito</span>`);
   if (res.pagado) partes.push(`<span class="ped-chip pedido-pagado">${res.pagado} pagado${res.pagado === 1 ? '' : 's'}</span>`);
@@ -5202,9 +5197,66 @@ function chipDespachos(res) {
   return partes.join(' ');
 }
 
+/* El lado izquierdo: las notas emitidas que todavía esperan salir. Se marcan
+   con su casilla y la flecha las pasa al otro lado. */
+function renderNotasPorDespachar() {
+  const lista = notasSinDespachar(verNotasViejas);
+  const viejas = notasSinDespacharViejas();
+  // Una nota marcada que mientras tanto ya se despachó deja de estar marcada
+  const vivas = new Set(lista.map(n => n.id));
+  for (const id of [...notasElegidas]) if (!vivas.has(id)) notasElegidas.delete(id);
+
+  $('#desp-notas-vacio').hidden = lista.length > 0;
+  $('#desp-notas-cuenta').textContent = lista.length
+    ? `${lista.length} nota${lista.length === 1 ? '' : 's'} · ${formatoMonto(lista.reduce((s, n) => s + (Number(n.total) || 0), 0))}`
+    : '';
+
+  $('#desp-notas-lista').innerHTML = lista.map(n => `
+    <label class="desp-nota${notasElegidas.has(n.id) ? ' elegida' : ''}">
+      <input type="checkbox" data-elegir-nota="${escapeHtml(n.id)}" ${notasElegidas.has(n.id) ? 'checked' : ''}>
+      <span class="desp-nota-cuerpo">
+        <span class="desp-nota-linea">
+          <strong class="desp-nota-num">${escapeHtml(numeroCorto(n.numero))}</strong>
+          <span class="desp-nota-cli">${escapeHtml(n.clienteNombre || '(sin cliente)')}</span>
+        </span>
+        <span class="desp-nota-linea desp-nota-meta">
+          <span>${formatoMonto(Number(n.total) || 0)}</span>
+          ${n.zona ? `<span>📍 ${escapeHtml(n.zona)}</span>` : ''}
+          <span>📅 ${formatoFecha(n.fecha)}</span>
+        </span>
+      </span>
+    </label>`).join('');
+
+  // Las que llevan más de una semana esperando no se esconden: se avisan
+  const aviso = $('#desp-notas-viejas');
+  aviso.hidden = !viejas.length;
+  if (viejas.length) {
+    aviso.innerHTML = verNotasViejas
+      ? `⚠️ ${viejas.length} de estas llevan más de ${DIAS_NOTA_RECIENTE} días sin salir.
+         <button type="button" class="btn-enlace" id="btn-desp-notas-viejas">Ver solo las recientes</button>`
+      : `⚠️ Hay ${viejas.length} nota${viejas.length === 1 ? '' : 's'} de hace más de ${DIAS_NOTA_RECIENTE} días sin despachar.
+         <button type="button" class="btn-enlace" id="btn-desp-notas-viejas">Mostrarlas</button>`;
+  }
+
+  actualizarBotonPasar();
+}
+
+/* La flecha: encendida solo si hay algo marcado, y diciendo cuánto va. Va
+   aparte porque marcar una casilla NO puede redibujar la lista entera: al
+   reemplazar el HTML se perderían las demás casillas a medio marcar (y el
+   sitio por el que ibas leyendo). */
+function actualizarBotonPasar() {
+  const boton = $('#btn-desp-pasar');
+  boton.disabled = notasElegidas.size === 0;
+  boton.querySelector('.desp-flecha-txt').textContent = notasElegidas.size
+    ? `Mandar ${notasElegidas.size} a reparto`
+    : 'Mandar a reparto';
+}
+
 function renderListaDespachos() {
+  renderNotasPorDespachar();
   const lista = despachosDelDia();
-  $('#desp-vacio').hidden = itemsDespacho().length > 0;
+  $('#desp-vacio').hidden = despachos.filter(esDespachoPedido).length > 0;
 
   // Navegador de días (fecha, ◀ ▶, desplegable, Hoy, Ver todos)
   renderNavDespachos();
@@ -5216,47 +5268,42 @@ function renderListaDespachos() {
     : 'Todos los despachos';
   $('#desp-resumen').innerHTML = lista.length
     ? `<div class="desp-chips">${chipDespachos(res)}</div>
-       <div class="desp-resumen-monto">${rotulo} · ${lista.length} venta${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
-    : `<div class="desp-resumen-monto">${rotulo} · sin movimiento</div>`;
-
-  // Al tocar el renglón: una nota abre el despacho prellenado; un despacho, su detalle
-  const gancho = it => it.tipo === 'nota'
-    ? `data-despachar-nota="${it.id}"` : `data-abrir-despacho="${it.id}"`;
-  const pista = it => it.tipo === 'nota'
-    ? 'Todavía es solo una nota — tócala para mandarla a reparto'
-    : 'Ver detalle del despacho';
+       <div class="desp-resumen-monto">${rotulo} · ${lista.length} despacho${lista.length === 1 ? '' : 's'} · ${formatoMonto(res.monto)}</div>`
+    : `<div class="desp-resumen-monto">${rotulo} · sin despachos</div>`;
 
   // Tabla (escritorio): N° comprobante, cliente, monto, fecha, zona, repartidores y estado
-  $('#desp-tabla-body').innerHTML = lista.map(it => {
-    const info = estadoDespachoInfo(it.estado);
+  $('#desp-tabla-body').innerHTML = lista.map(d => {
+    const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
+    const reps = repartidoresDe(d);
     return `
-      <tr class="desp-fila ${info.clase}" ${gancho(it)} title="${escapeHtml(pista(it))}">
-        <td><strong>${escapeHtml(it.numero ? numeroCorto(it.numero) : '—')}</strong></td>
-        <td>${escapeHtml(it.cliente || '(sin cliente)')}</td>
-        <td class="col-num">${formatoMonto(it.monto)}</td>
-        <td>${formatoFecha(it.fecha)}</td>
-        <td>${it.zona ? escapeHtml(it.zona) : '—'}</td>
-        <td>${it.repartidores.length ? it.repartidores.map(escapeHtml).join(', ') : '—'}</td>
+      <tr class="desp-fila ${info.clase}" data-abrir-despacho="${d.id}" title="${escapeHtml(info.etiqueta)} — ver detalle">
+        <td><strong>${escapeHtml(d.boleta ? numeroCorto(d.boleta) : '—')}</strong></td>
+        <td>${escapeHtml(d.cliente || '(sin cliente)')}</td>
+        <td class="col-num">${formatoMonto(Number(d.monto) || 0)}</td>
+        <td>${formatoFecha(d.fecha)}</td>
+        <td>${d.zona ? escapeHtml(d.zona) : '—'}</td>
+        <td>${reps.length ? reps.map(escapeHtml).join(', ') : '—'}</td>
         <td><span class="ped-chip ${info.clase}">${info.etiqueta}</span></td>
       </tr>`;
   }).join('');
 
   // Tarjetas (celular): misma información en formato compacto
-  $('#despachos-list').innerHTML = lista.map(it => {
-    const info = estadoDespachoInfo(it.estado);
+  $('#despachos-list').innerHTML = lista.map(d => {
+    const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
+    const reps = repartidoresDe(d);
     return `
-      <button type="button" class="despacho-card ${info.clase}" ${gancho(it)}>
+      <button type="button" class="despacho-card ${info.clase}" data-abrir-despacho="${d.id}">
         <div class="despacho-card-cab">
-          <strong>${escapeHtml(it.cliente || '(sin cliente)')}</strong>
+          <strong>${escapeHtml(d.cliente || '(sin cliente)')}</strong>
           <span class="ped-chip ${info.clase}">${info.etiqueta}</span>
         </div>
         <div class="despacho-card-datos">
-          <span>🧾 N° ${escapeHtml(it.numero ? numeroCorto(it.numero) : '—')}</span>
-          <span>💵 ${formatoMonto(it.monto)}</span>
-          <span>📅 ${formatoFecha(it.fecha)}</span>
-          ${it.zona ? `<span>📍 ${escapeHtml(it.zona)}</span>` : ''}
+          <span>🧾 N° ${escapeHtml(d.boleta ? numeroCorto(d.boleta) : '—')}</span>
+          <span>💵 ${formatoMonto(Number(d.monto) || 0)}</span>
+          <span>📅 ${formatoFecha(d.fecha)}</span>
+          ${d.zona ? `<span>📍 ${escapeHtml(d.zona)}</span>` : ''}
         </div>
-        ${it.repartidores.length ? `<div class="despacho-card-rep">🧍 ${it.repartidores.map(escapeHtml).join(', ')}</div>` : ''}
+        ${reps.length ? `<div class="despacho-card-rep">🧍 ${reps.map(escapeHtml).join(', ')}</div>` : ''}
       </button>`;
   }).join('');
 }
@@ -5265,12 +5312,12 @@ function renderListaDespachos() {
 function renderNavDespachos() {
   const dias = diasConDespachos();
   const sel = $('#desp-dias');
-  const opcTodos = `<option value="">Ver todos — ${dias.reduce((s, d) => s + d.cantidad, 0)} venta(s)</option>`;
+  const opcTodos = `<option value="">Ver todos — ${dias.reduce((s, d) => s + d.cantidad, 0)} despacho(s)</option>`;
   const opciones = dias.map(d =>
-    `<option value="${d.fecha}">${formatoFecha(d.fecha)} — ${d.cantidad} venta(s) · ${formatoMonto(d.monto)}</option>`).join('');
-  // Si el día elegido no tiene nada (p. ej. hoy sin ventas), igual lo mostramos
+    `<option value="${d.fecha}">${formatoFecha(d.fecha)} — ${d.cantidad} despacho(s) · ${formatoMonto(d.monto)}</option>`).join('');
+  // Si el día elegido no tiene despachos (p. ej. hoy sin nada), igual lo mostramos
   const hayFecha = !despachoFiltroFecha || dias.some(d => d.fecha === despachoFiltroFecha);
-  const extra = hayFecha ? '' : `<option value="${despachoFiltroFecha}">${formatoFecha(despachoFiltroFecha)} — sin movimiento</option>`;
+  const extra = hayFecha ? '' : `<option value="${despachoFiltroFecha}">${formatoFecha(despachoFiltroFecha)} — sin despachos</option>`;
   sel.innerHTML = opcTodos + extra + opciones;
   sel.value = despachoFiltroFecha || '';
   $('#desp-fecha-filtro').value = despachoFiltroFecha || '';
@@ -5279,32 +5326,32 @@ function renderNavDespachos() {
 /* Salta al día anterior/siguiente que tenga despachos */
 function saltarDiaDespacho(direccion) {
   const dias = diasConDespachos().map(d => d.fecha);   // del más nuevo al más viejo
-  if (!dias.length) { toast('Todavía no hay ventas registradas'); return; }
+  if (!dias.length) { toast('Todavía no hay despachos registrados'); return; }
   const desde = despachoFiltroFecha || hoyISO();
   const anteriores = dias.filter(d => d < desde);
   const siguientes = dias.filter(d => d > desde);
   const destino = direccion < 0 ? anteriores[0] : siguientes[siguientes.length - 1];
-  if (!destino) { toast(direccion < 0 ? 'No hay días anteriores con movimiento' : 'No hay días siguientes con movimiento'); return; }
+  if (!destino) { toast(direccion < 0 ? 'No hay días anteriores con despachos' : 'No hay días siguientes con despachos'); return; }
   despachoFiltroFecha = destino;
   renderListaDespachos();
 }
 
-/* Genera la hoja de despachos del día (o de todos) lista para imprimir.
-   Es la hoja que se llevan los repartidores, así que solo entra lo que sale
-   de verdad: las notas que todavía no se asignaron a nadie no van. */
+/* Genera la hoja de despachos del día (o de todos) lista para imprimir. Es la
+   hoja que se llevan los repartidores: solo lleva lo que salió de verdad. */
 function imprimirDespachos() {
-  const lista = despachosDelDia().filter(it => it.tipo === 'despacho');
+  const lista = despachosDelDia();
   const res = resumenDespachos(lista);
   const titulo = despachoFiltroFecha ? `del ${formatoFecha(despachoFiltroFecha)}` : '(todos)';
-  const filasHtml = lista.map(it => {
-    const info = estadoDespachoInfo(it.estado);
+  const filasHtml = lista.map(d => {
+    const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
+    const reps = repartidoresDe(d);
     return `<tr>
-      <td>${escapeHtml(it.cliente || '—')}</td>
-      <td>${escapeHtml(it.numero || '—')}</td>
-      <td style="text-align:right">${formatoMonto(it.monto)}</td>
-      <td>${formatoFecha(it.fecha)}</td>
-      <td>${escapeHtml(it.zona || '—')}</td>
-      <td>${it.repartidores.length ? escapeHtml(it.repartidores.join(', ')) : '—'}</td>
+      <td>${escapeHtml(d.cliente || '—')}</td>
+      <td>${escapeHtml(d.boleta || '—')}</td>
+      <td style="text-align:right">${formatoMonto(Number(d.monto) || 0)}</td>
+      <td>${formatoFecha(d.fecha)}</td>
+      <td>${escapeHtml(d.zona || '—')}</td>
+      <td>${reps.length ? escapeHtml(reps.join(', ')) : '—'}</td>
       <td>${escapeHtml(info.etiqueta)}</td></tr>`;
   }).join('');
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Despachos ${titulo}</title>
@@ -5431,14 +5478,50 @@ function repartidoresSeleccionados() {
     .map(c => c.value);
 }
 
+/* Enseña u oculta los campos que en un despacho de varias notas los pone cada
+   nota. `lote` es la lista de ids, o null para el despacho de siempre. */
+function ponerModoLote(lote) {
+  const enLote = !!lote;
+  ['desp-campo-cliente', 'desp-campo-numeros', 'desp-campo-emision']
+    .forEach(id => { $('#' + id).hidden = enLote; });
+  // Un campo oculto que siga siendo obligatorio impide guardar sin decir por qué
+  $('#desp-monto').required = !enLote;
+  $('#desp-emision').required = !enLote;
+  const caja = $('#desp-lote-resumen');
+  caja.hidden = !enLote;
+  if (!enLote) return;
+  const suyas = lote.map(id => notas.find(n => n.id === id)).filter(Boolean);
+  const total = suyas.reduce((s, n) => s + (Number(n.total) || 0), 0);
+  caja.innerHTML = `
+    <p class="desp-lote-tit">Salen ${suyas.length} notas · ${formatoMonto(total)}</p>
+    <ul class="desp-lote-lista">${suyas.map(n => `
+      <li><strong>${escapeHtml(numeroCorto(n.numero))}</strong>
+        <span>${escapeHtml(n.clienteNombre || '(sin cliente)')}</span>
+        <span class="desp-lote-monto">${formatoMonto(Number(n.total) || 0)}</span></li>`).join('')}</ul>`;
+}
+
 /* `desdeNota` llega cuando el despacho nace de una nota de venta ya emitida:
    trae el cliente, la zona, el número y el monto ya puestos. */
 function abrirFormDespacho(despacho = null, desdeNota = null) {
   const base = despacho || desdeNota;
+  const lote = (desdeNota && Array.isArray(desdeNota.lote)) ? desdeNota.lote : null;
   $('#desp-form').reset();
   $('#desp-id').value = despacho ? despacho.id : '';
   $('#desp-nota-id').value = (base && base.notaId) || '';
-  $('#desp-form-title').textContent = despacho ? 'Editar despacho' : 'Nuevo despacho';
+  $('#desp-lote').value = lote ? lote.join(',') : '';
+  $('#desp-form-title').textContent = lote
+    ? `Mandar ${lote.length} notas a reparto`
+    : (despacho ? 'Editar despacho' : 'Nuevo despacho');
+  // En lote, el cliente, el número y el monto los pone cada nota: se ocultan
+  // esos campos (y se les quita el "required", que si no bloquean el guardado
+  // por pedir algo que ni se ve) y se enseña la lista de lo que va a salir.
+  ponerModoLote(lote);
+  if (lote) {
+    $('#desp-fecha').value = hoyISO();
+    renderRepartidoresCheck([]);
+    mostrarVistaDespacho('form');
+    return;
+  }
   // Cliente: si el despacho ya tiene uno registrado, lo dejamos elegido;
   // si era texto libre, lo mostramos como "libre:".
   let valorCli = '';
@@ -5465,9 +5548,66 @@ function abrirFormDespacho(despacho = null, desdeNota = null) {
   $('#desp-cliente-buscar').focus();
 }
 
+/* Varias notas de una vez: mismo repartidor y misma fecha, pero cada nota se
+   queda con su propio despacho, porque cada una tiene su cliente y su boleta
+   y después vuelve por su cuenta (una a crédito, otra al contado…). */
+async function guardarLoteDeDespachos(ids) {
+  const reps = repartidoresSeleccionados();
+  if (!reps.length) { toast('⚠️ Elige al menos un repartidor'); return; }
+  const fecha = $('#desp-fecha').value || hoyISO();
+  const nota = $('#desp-notas').value.trim();
+  const suyas = ids.map(id => notas.find(n => n.id === id))
+    .filter(n => n && !despachoDeNota(n.id));
+  if (!suyas.length) { toast('⚠️ Esas notas ya están en un despacho'); return; }
+
+  const nuevos = suyas.map(n => ({
+    id: nuevoId(),
+    fecha,
+    emision: n.fecha || hoyISO(),
+    cliente: n.clienteNombre || '',
+    clienteId: n.clienteId || '',
+    zona: n.zona || '',
+    tipoComprobante: 'nota',
+    notaId: n.id,
+    boleta: n.numero || '',
+    monto: Number(n.total) || 0,
+    repartidores: reps,
+    notas: nota,
+    estado: 'reparto',
+    creditoId: '',
+    creado: Date.now(),
+    creadoPor: quienSoy(),
+    registrado: Date.now(),
+  }));
+  // Se guardan de uno en uno: si falla a la mitad, los que ya salieron quedan
+  // bien guardados y se avisa de cuántos faltaron, en vez de perderlo todo.
+  const hechos = [];
+  for (const d of nuevos) {
+    try {
+      await guardarDespachoEnStore(d);
+      despachos.push(d);
+      hechos.push(d);
+    } catch (e) {
+      console.error('No se pudo guardar el despacho de la nota', d.boleta, e);
+    }
+  }
+  hechos.forEach(d => notasElegidas.delete(d.notaId));
+  if (!hechos.length) { toast('❌ No se pudo guardar. Revisa tu conexión.'); return; }
+  toast(hechos.length === nuevos.length
+    ? `🚚 ${hechos.length} notas mandadas a reparto`
+    : `⚠️ Salieron ${hechos.length} de ${nuevos.length}. Revisa tu conexión e inténtalo con el resto.`);
+  // El día del despacho es el que hay que estar mirando para verlas llegar
+  despachoFiltroFecha = fecha;
+  mostrarVistaDespacho('lista');
+  renderListaDespachos();
+  renderVentas();
+}
+
 async function guardarDespachoForm(ev) {
   ev.preventDefault();
   if (!puede('despachos')) return;
+  const lote = $('#desp-lote').value ? $('#desp-lote').value.split(',').filter(Boolean) : null;
+  if (lote) { await guardarLoteDeDespachos(lote); return; }
   // Cliente: del combo (id oculto); si escribió sin elegir, se resuelve por
   // nombre exacto y, si no existe, se guarda como texto libre.
   let clienteNombre = '', clienteId = '', zonaCli = '';
@@ -7526,6 +7666,19 @@ function despacharNota(notaId) {
   });
 }
 
+/* La flecha del tablero. Con una sola nota se abre el despacho de siempre, ya
+   prellenado. Con varias se abre en modo lote: se pregunta una sola vez quién
+   las lleva y qué día, y al guardar sale un despacho por cada nota —que es
+   como va de verdad, un camión con seis boletas distintas. */
+function mandarNotasAReparto(ids) {
+  if (!puede('despachos')) { toast('🔒 No tienes permiso para armar despachos'); return; }
+  const pendientes = ids.filter(id => !despachoDeNota(id));
+  if (!pendientes.length) { toast('⚠️ Esas notas ya están en un despacho'); return; }
+  if (pendientes.length === 1) { despacharNota(pendientes[0]); return; }
+  if ($('#view-despachos').hidden) abrirDespachos();
+  abrirFormDespacho(null, { lote: pendientes });
+}
+
 /* Lleva al papel siguiente: al crédito si ya lo tiene, si no al despacho */
 function seguirNota(notaId) {
   const n = notas.find(x => x.id === notaId);
@@ -8340,14 +8493,26 @@ function inicializarEventos() {
     }
   });
 
-  // Lista de despachos: abrir uno (funciona en la tabla y en las tarjetas).
-  // Una nota que todavía no salió a reparto abre el despacho ya prellenado.
+  // Lista de despachos: abrir uno (funciona en la tabla y en las tarjetas)
   $('#desp-vista-lista').addEventListener('click', ev => {
-    const fila = ev.target.closest('[data-abrir-despacho], [data-despachar-nota]');
-    if (!fila) return;
-    if (fila.dataset.despacharNota) despacharNota(fila.dataset.despacharNota);
-    else abrirDetalleDespacho(fila.dataset.abrirDespacho);
+    const fila = ev.target.closest('[data-abrir-despacho]');
+    if (fila) { abrirDetalleDespacho(fila.dataset.abrirDespacho); return; }
+    // Panel de la izquierda: marcar notas y desplegar las viejas
+    if (ev.target.closest('#btn-desp-notas-viejas')) {
+      verNotasViejas = !verNotasViejas;
+      renderNotasPorDespachar();
+    }
   });
+  $('#desp-notas-lista').addEventListener('change', ev => {
+    const casilla = ev.target.closest('[data-elegir-nota]');
+    if (!casilla) return;
+    if (casilla.checked) notasElegidas.add(casilla.dataset.elegirNota);
+    else notasElegidas.delete(casilla.dataset.elegirNota);
+    const fila = casilla.closest('.desp-nota');
+    if (fila) fila.classList.toggle('elegida', casilla.checked);
+    actualizarBotonPasar();
+  });
+  $('#btn-desp-pasar').addEventListener('click', () => mandarNotasAReparto([...notasElegidas]));
 
   // Buscar despachos por día
   $('#desp-fecha-filtro').addEventListener('change', ev => {
