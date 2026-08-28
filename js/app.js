@@ -162,6 +162,7 @@ const MOTIVOS_KARDEX = {
   compra: 'Compra a proveedor',
   devolucion_cliente: 'Devolución de cliente',
   venta: 'Venta (nota de venta)',
+  anulacion: 'Anulación de nota de venta',
   merma: 'Merma o producto malogrado',
   traslado: 'Traslado a otro almacén',
   inventario: 'Conteo físico (inventario)',
@@ -2192,9 +2193,14 @@ function listaFaltantes() {
   return faltantes;
 }
 
-/* Anulaciones: una nota de venta que no llegó a ser crédito porque se anuló */
+/* Anulaciones: una nota de venta anulada.
+   Se compara por el NÚMERO, no por el texto: la anulación puede estar guardada
+   con el número entero de la nota ("0001-00004182") y la fila de al lado
+   enseñarlo pelado ("4182"). Comparando textos no se reconocerían. */
 function anuladoDe(boleta) {
-  return anulados.find(a => String(a.boleta) === String(boleta)) || null;
+  const n = numeroDeComprobante(boleta);
+  return anulados.find(a => String(a.boleta) === String(boleta)
+    || (n && numeroDeComprobante(a.boleta) === n)) || null;
 }
 
 /* Marca una nota de venta como anulada, con el motivo escrito por el usuario */
@@ -2231,6 +2237,15 @@ async function anularBoleta(boleta) {
 /* Deshace la anulación (la nota vuelve a figurar como pendiente de crear) */
 async function quitarAnulacion(boleta) {
   if (!puede('crear') && !puede('editar')) { toast('🔒 No tienes permiso'); return; }
+  // Si la anulación vino de anular una nota de venta, esto no se puede
+  // deshacer desde aquí: la mercadería ya volvió al almacén y el crédito ya
+  // no existe. Quitar solo la marca dejaría las tres cosas en desacuerdo.
+  const registro = anuladoDe(boleta);
+  if (registro && registro.notaId) {
+    alert(`La boleta Nº ${numeroCorto(boleta)} se anuló desde su nota de venta: la mercadería ya volvió `
+      + 'al almacén y el crédito ya no existe.\n\nSi la venta se hizo de verdad, emite una nota nueva.');
+    return;
+  }
   if (!confirm(`¿Quitar la anulación de la nota Nº ${boleta}?\n\nVolverá a aparecer como pendiente de crear.`)) return;
   try {
     await eliminarAnuladoDeStore(String(boleta));
@@ -2245,7 +2260,13 @@ async function quitarAnulacion(boleta) {
 }
 
 /* Mezcla las filas "hueco" con la lista de créditos, ordenadas por N° de boleta,
-   para que se vea la correlatividad de las notas de venta. */
+   para que se vea la correlatividad de las notas de venta.
+
+   Van dos clases de fila añadida: los NÚMEROS SALTEADOS (notas que faltan por
+   crear) y las notas que se ANULARON. Estas últimas no son un hueco —el
+   documento existió y se anuló—, así que se muestran aunque su número no caiga
+   entre dos boletas registradas: si no, anular la última nota la haría
+   desaparecer de Créditos sin dejar rastro. */
 function inyectarFaltantes(lista, dir) {
   const faltantes = listaFaltantes().map(n => ({ __faltante: true, boleta: String(n) }));
   if (!faltantes.length) return lista;
@@ -2255,6 +2276,19 @@ function inyectarFaltantes(lista, dir) {
     if (na == null || nb == null) return 0;
     return (na - nb) * mult;
   });
+}
+
+/* Las notas ANULADAS de las que ya no queda crédito. Se añaden siempre, se
+   esté ordenando como se esté ordenando: no son un hueco de la numeración
+   —el documento existió y se anuló— y si dependieran del orden por boleta,
+   anular una nota la haría desaparecer de Créditos sin dejar rastro. */
+function inyectarNotasAnuladas(lista) {
+  const yaEstan = new Set(lista.map(c => boletaEntera(c)).filter(n => n != null));
+  const filas = anulados
+    .filter(a => a.notaId && numeroDeComprobante(a.boleta) && !yaEstan.has(numeroDeComprobante(a.boleta)))
+    .sort((a, b) => numeroDeComprobante(b.boleta) - numeroDeComprobante(a.boleta))
+    .map(a => ({ __faltante: true, boleta: String(numeroDeComprobante(a.boleta)) }));
+  return filas.length ? [...filas, ...lista] : lista;
 }
 
 /* Aviso siempre visible: cuántas notas de venta faltan crear (en cualquier
@@ -2339,6 +2373,7 @@ function creditosVisibles() {
   // salteados) como filas vacías, para no perder la correlatividad.
   const sinFiltros = !busqueda && !estados.length && !zonas.length && !meses.length && !desde && !hasta;
   if (campo === 'boleta' && sinFiltros) lista = inyectarFaltantes(lista, dir);
+  if (sinFiltros) lista = inyectarNotasAnuladas(lista);
 
   return lista;
 }
@@ -5067,14 +5102,19 @@ function imprimirCobranza() {
       <td>${f.firma ? `<img src="${f.firma}" style="height:34px">` : '—'}</td></tr>`).join('');
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Cobranza ${formatoFecha(fecha)}</title>
     <style>
-      body{font-family:system-ui,sans-serif;padding:20px;color:#111}
-      h1{font-size:18px;margin:0 0 4px} .sub{color:#555;margin:0 0 16px}
-      table{width:100%;border-collapse:collapse;font-size:13px}
-      th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}
+      /* Hoja entera, de pie. El margen lo pone la impresora, así que el
+         cuerpo no lleva relleno: si no, se sumarían los dos y la tabla se
+         quedaría sin ancho y se iría a una segunda hoja. */
+      @page { size: A4 portrait; margin: 10mm; }
+      body{font-family:system-ui,sans-serif;margin:0;padding:0;color:#111}
+      h1{font-size:16px;margin:0 0 3px} .sub{color:#555;margin:0 0 10px;font-size:12px}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th,td{border:1px solid #ccc;padding:3px 5px;text-align:left}
       th{background:#f0f0f0}
-      .tot{margin-top:16px;font-size:14px} .tot div{margin:2px 0}
+      tr{break-inside:avoid}
+      .tot{margin-top:12px;font-size:13px} .tot div{margin:2px 0}
       .tot strong{display:inline-block;min-width:110px}
-      .tit2{font-size:15px;margin:18px 0 6px}
+      .tit2{font-size:14px;margin:12px 0 5px}
       .usuarios{width:auto;min-width:60%} .usuarios tfoot td{background:#f0f0f0}
     </style></head><body>
     <h1>🧾 Hoja de cobranza</h1>
@@ -5356,12 +5396,14 @@ function imprimirDespachos() {
   }).join('');
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Despachos ${titulo}</title>
     <style>
-      body{font-family:system-ui,sans-serif;padding:20px;color:#111}
-      h1{font-size:18px;margin:0 0 4px} .sub{color:#555;margin:0 0 16px}
-      table{width:100%;border-collapse:collapse;font-size:13px}
-      th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}
+      @page { size: A4 portrait; margin: 10mm; }
+      body{font-family:system-ui,sans-serif;margin:0;padding:0;color:#111}
+      h1{font-size:16px;margin:0 0 3px} .sub{color:#555;margin:0 0 10px;font-size:12px}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th,td{border:1px solid #ccc;padding:3px 5px;text-align:left}
       th{background:#f0f0f0}
-      .tot{margin-top:16px;font-size:14px} .tot div{margin:2px 0}
+      tr{break-inside:avoid}
+      .tot{margin-top:12px;font-size:13px} .tot div{margin:2px 0}
       .tot strong{display:inline-block;min-width:150px}
     </style></head><body>
     <h1>🚚 Hoja de despachos</h1>
@@ -5700,7 +5742,6 @@ function renderDetalleDespacho() {
   } else {
     acciones = `
       <button type="button" class="btn btn-primary btn-block" id="btn-desp-a-credito">📄 Volvió firmada → crear crédito</button>
-      <button type="button" class="btn btn-secondary btn-block" data-desp-estado="contado">💵 Se pagó al contado</button>
       <button type="button" class="btn btn-secondary btn-block" data-desp-estado="devuelto">↩️ Devuelto</button>`;
   }
   $('#desp-det-acciones').innerHTML = acciones;
@@ -7018,10 +7059,12 @@ function imprimirKardex() {
       <td>${escapeHtml(mostrarComo(m.usuario) || '')}</td></tr>`;
   }).join('');
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Kardex</title>
-    <style>body{font-family:system-ui,sans-serif;padding:18px;color:#111}
-      h1{font-size:17px;margin:0 0 4px}.sub{color:#555;margin:0 0 14px;font-size:13px}
-      table{width:100%;border-collapse:collapse;font-size:12px}
-      th,td{border:1px solid #bbb;padding:4px 6px;text-align:left}th{background:#eee}
+    <style>@page { size: A4 portrait; margin: 10mm; }
+      body{font-family:system-ui,sans-serif;margin:0;padding:0;color:#111}
+      h1{font-size:16px;margin:0 0 3px}.sub{color:#555;margin:0 0 10px;font-size:12px}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th,td{border:1px solid #bbb;padding:3px 5px;text-align:left}th{background:#eee}
+      tr{break-inside:avoid}
     </style></head><body>
     <h1>📒 Kardex de almacén</h1>
     <p class="sub">${p ? escapeHtml(p.nombre) : 'Todos los productos'} ${escapeHtml(rango)} — ${lista.length} movimiento(s)
@@ -7106,6 +7149,7 @@ let nvItems = [];          // líneas de la nota que se está armando
 let nvClienteId = '';
 let nvNumero = '';
 let nvCreadoEn = 0;        // hora en que se empezó la nota
+let nvEditandoId = '';     // id de la nota que se está modificando ('' = nueva)
 let nvComboIndice = -1;
 
 /* El número que lleva un comprobante, venga de una nota ("0001-00004181") o
@@ -7213,6 +7257,7 @@ function creditoDeNota(nota) {
 }
 
 const ESTADOS_NOTA = {
+  anulada:   { etiqueta: '🚫 Anulada', clase: 'pedido-devuelto' },
   pendiente: { etiqueta: '🕐 Por despachar', clase: 'pedido-pendiente' },
   reparto:   { etiqueta: '🚚 En reparto', clase: 'pedido-contado' },
   credito:   { etiqueta: '📄 A crédito', clase: 'pedido-credito' },
@@ -7220,6 +7265,8 @@ const ESTADOS_NOTA = {
 };
 
 function estadoDeNota(nota) {
+  // Una nota anulada ya no sigue el recorrido: se queda ahí, de constancia
+  if (nota && nota.anulada) return 'anulada';
   const credito = creditoDeNota(nota);
   if (credito) return estadoEfectivo(credito) === 'pagado' ? 'pagado' : 'credito';
   return despachoDeNota(nota.id) ? 'reparto' : 'pendiente';
@@ -7266,13 +7313,17 @@ function renderVentas() {
         || normalizarNombre(n.clienteNombre).includes(buscado))
     : todas;
 
+  // Lo anulado no es venta: no cuenta en el total del día ni en el de notas
   const hoy = hoyISO();
-  const deHoy = todas.filter(n => n.fecha === hoy);
+  const vivas = todas.filter(n => !n.anulada);
+  const anuladasHoy = todas.filter(n => n.anulada && n.fecha === hoy).length;
+  const deHoy = vivas.filter(n => n.fecha === hoy);
   const totalHoy = deHoy.reduce((s, n) => s + (Number(n.total) || 0), 0);
   $('#nv-chips').innerHTML = [
-    `<span class="chip">🧮 ${todas.length} nota${todas.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip">🧮 ${vivas.length} nota${vivas.length === 1 ? '' : 's'}</span>`,
     `<span class="chip chip-entrada">📅 Hoy: ${deHoy.length} · S/ ${soles(totalHoy)}</span>`,
-  ].join('');
+    anuladasHoy ? `<span class="chip chip-salida">🚫 ${anuladasHoy} anulada${anuladasHoy === 1 ? '' : 's'} hoy</span>` : '',
+  ].filter(Boolean).join('');
 
   $('#nv-vacio').hidden = !!lista.length;
   $('.nv-tabla-wrap').hidden = !lista.length;
@@ -7286,24 +7337,28 @@ function renderVentas() {
 
   cuerpo.innerHTML = lista.map(n => {
     const cat = String(n.categoria || 'C').toUpperCase();
-    const est = ESTADOS_NOTA[estadoDeNota(n)] || ESTADOS_NOTA.pendiente;
-    const pendiente = estadoDeNota(n) === 'pendiente';
-    return `<tr>
+    const estado = estadoDeNota(n);
+    const est = ESTADOS_NOTA[estado] || ESTADOS_NOTA.pendiente;
+    const anulada = estado === 'anulada';
+    const pendiente = estado === 'pendiente';
+    const motivo = anulada && n.anulada.motivo
+      ? `<small class="nv-anul-motivo">📝 ${escapeHtml(n.anulada.motivo)}</small>` : '';
+    return `<tr class="${anulada ? 'nv-fila-anulada' : ''}">
       <td class="nv-num"><strong>${escapeHtml(numeroCorto(n.numero))}</strong></td>
       <td>${formatoFecha(n.fecha)}<small>${escapeHtml(n.hora || '')}</small></td>
-      <td>${escapeHtml(n.clienteNombre || '—')}</td>
+      <td>${escapeHtml(n.clienteNombre || '—')}${motivo}</td>
       <td class="col-um"><span class="cliente-cat cat-${cat}">${cat}</span></td>
       <td>${escapeHtml(n.zona || '—')}</td>
       <td><span class="ped-chip ${est.clase}">${est.etiqueta}</span></td>
       <td class="col-num">${(n.items || []).length}</td>
       <td class="col-num"><strong>${soles(n.total)}</strong></td>
-      <td>${escapeHtml(mostrarComo(n.emitidaPor) || '—')}</td>
+      <td>${escapeHtml(mostrarComo(anulada ? n.anulada.por : n.emitidaPor) || '—')}</td>
       <td class="col-acc">
-        ${pendiente && puede('despachos') ? `<button type="button" class="btn btn-secondary btn-small" data-despachar-nota="${escapeHtml(n.id)}" title="Mandarla a reparto">🚚</button>` : ''}
-        ${!pendiente ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
+        ${!anulada && puede('ventas') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
+        ${!anulada && pendiente && puede('despachos') ? `<button type="button" class="btn btn-secondary btn-small" data-despachar-nota="${escapeHtml(n.id)}" title="Mandarla a reparto">🚚</button>` : ''}
+        ${!anulada && !pendiente ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
-        <button type="button" class="btn btn-secondary btn-small" data-copiar-nota="${escapeHtml(n.id)}" title="Usar como base para una nota nueva">📋</button>
-        ${mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-borrar-nota="${escapeHtml(n.id)}" title="Borrar la nota (pide tu código)">🗑️</button>` : ''}
+        ${!anulada && mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-anular-nota="${escapeHtml(n.id)}" title="Anular la nota (pide tu código)">🚫</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -7316,25 +7371,45 @@ function nvProponerFechaPago() {
   $('#nv-fpago').value = sumarDias($('#nv-fecha').value || hoyISO(), dias);
 }
 
-function abrirNuevaNota(base = null) {
+/* Abre una nota ya emitida para modificarla. La nota conserva su id, su
+   número y su hora: es la MISMA nota, corregida, no una copia. */
+function abrirNotaParaEditar(notaId) {
+  if (!puede('ventas')) { toast('🔒 No tienes permiso para modificar notas de venta'); return; }
+  const n = notas.find(x => x.id === notaId);
+  if (!n) return;
+  if (n.anulada) { toast('🚫 Esa nota está anulada: ya no se puede modificar'); return; }
+  // Si ya se cobró algo, el importe no puede moverse por debajo del cobro
+  const c = creditoDeNota(n);
+  if (c && abonosDe(c).length) {
+    alert(`No se puede modificar la nota ${numeroCorto(n.numero)}: su crédito ya tiene cobros registrados.\n\n`
+      + 'Corrige primero el crédito.');
+    return;
+  }
+  abrirNuevaNota(n, n.id);
+}
+
+function abrirNuevaNota(base = null, editandoId = '') {
   if (!puede('ventas')) { toast('🔒 No tienes permiso para emitir notas de venta'); return; }
   if (!productosActivos().length) {
     toast('⚠️ Primero crea productos en la sección 🛒 Productos');
     return;
   }
   llenarSelectoresProducto();
+  nvEditandoId = editandoId;
   nvItems = base ? (base.items || []).map(it => ({ ...it })) : [];
-  nvCreadoEn = Date.now();
-  nvPonerNumero(base ? serieDeZona(base.zona) : SERIE_POR_DEFECTO, siguienteCorrelativo());
-  $('#nv-fecha').value = hoyISO();
-  $('#nv-hora').textContent = horaDeTimestamp(nvCreadoEn);
+  nvCreadoEn = editandoId && base.creado ? base.creado : Date.now();
+  if (editandoId) nvPonerNumero(base.serie || serieDeZona(base.zona), numeroDeComprobante(base.numero));
+  else nvPonerNumero(base ? serieDeZona(base.zona) : SERIE_POR_DEFECTO, siguienteCorrelativo());
+  $('#nv-form-titulo').textContent = editandoId ? 'Modificando nota' : 'Nota de venta';
+  $('#nv-fecha').value = editandoId ? (base.fecha || hoyISO()) : hoyISO();
+  $('#nv-hora').textContent = editandoId ? (base.hora || '') : horaDeTimestamp(nvCreadoEn);
   $('#nv-vendedor').textContent = quienSoy();
   // Casi todo sale a crédito, así que esa es la opción que viene puesta
   $('#nv-condicion').value = base ? (base.condicion || 'credito') : 'credito';
   nvProponerFechaPago();
   $('#nv-descuento').value = 0;
   $('#nv-permitir-precios').checked = false;
-  $('#nv-cantidad').value = 1;
+  $('#nv-cantidad').value = 0;
   limpiarBuscadorNota();
   nvSeleccionarCliente(base ? (base.clienteId || '') : '');
   mostrarVistaVenta('form');
@@ -7448,8 +7523,16 @@ function agregarItemNota() {
     $('#nv-buscar-producto').focus();
     return;
   }
+  // Aquí se venden sacos, cajas y baldes: nada se parte por la mitad, así que
+  // la cantidad es siempre un número entero.
   const cantidad = Number($('#nv-cantidad').value);
-  if (!Number.isFinite(cantidad) || cantidad <= 0) { toast('⚠️ Escribe una cantidad válida'); return; }
+  if (!Number.isInteger(cantidad) || cantidad <= 0) {
+    toast(Number.isFinite(cantidad) && cantidad > 0
+      ? '⚠️ La cantidad tiene que ser un número entero'
+      : '⚠️ Escribe cuántos van');
+    $('#nv-cantidad').focus();
+    return;
+  }
   const p = productoPorId(id);
   if (!p) return;
 
@@ -7469,7 +7552,7 @@ function agregarItemNota() {
     });
   }
   limpiarBuscadorNota();
-  $('#nv-cantidad').value = 1;
+  $('#nv-cantidad').value = 0;
   $('#nv-buscar-producto').focus();   // el siguiente producto se escribe seguido
   renderNotaItems();
 }
@@ -7503,7 +7586,7 @@ function renderNotaItems() {
         ${falta ? `<small class="nv-sin-stock">⚠️ solo hay ${stock} en almacén</small>` : ''}
         ${it.precioEditado ? '<small class="nv-precio-tocado">precio modificado a mano</small>' : ''}</td>
       <td class="col-num">
-        <input type="number" class="input input-mini" data-nv-cant="${i}" min="0.01" step="1" value="${it.cantidad}">
+        <input type="number" class="input input-mini" data-nv-cant="${i}" min="1" step="1" inputmode="numeric" value="${it.cantidad}">
       </td>
       <td class="col-um">${escapeHtml(it.um || '')}</td>
       <td class="col-num">
@@ -7550,8 +7633,9 @@ function armarNota() {
   if (!cli) { toast('⚠️ Elige el cliente de la nota'); $('#nv-cliente-buscar').focus(); return null; }
   if (!nvItems.length) { toast('⚠️ Agrega al menos un producto'); return null; }
   const { subtotal, bonificacion, descuento, total } = recalcularTotalesNota();
+  const previa = nvEditandoId ? notas.find(x => x.id === nvEditandoId) : null;
   return {
-    id: nuevoId(),
+    id: nvEditandoId || nuevoId(),
     numero: armarNumeroNota(nvSerieElegida(), nvCorrelativoEscrito()),
     serie: nvSerieElegida(),
     fecha: $('#nv-fecha').value || hoyISO(),
@@ -7578,7 +7662,12 @@ function armarNota() {
     }),
     subtotal, bonificacion, descuento, total,
     enLetras: montoEnLetras(total),
-    emitidaPor: quienSoy(),
+    // Al modificar, la nota sigue siendo de quien la emitió: se anota aparte
+    // quién la tocó y cuándo, para que no se pierda de vista.
+    emitidaPor: previa ? (previa.emitidaPor || quienSoy()) : quienSoy(),
+    creditoId: previa ? (previa.creditoId || '') : '',
+    modificadaPor: previa ? quienSoy() : '',
+    modificadaEn: previa ? marcaDeTiempo() : null,
     creado: nvCreadoEn || Date.now(),
   };
 }
@@ -7587,6 +7676,7 @@ async function guardarNota(imprimir) {
   if (!puede('ventas')) { toast('🔒 No tienes permiso para emitir notas de venta'); return; }
   const nota = armarNota();
   if (!nota) return;
+  const editando = !!nvEditandoId;
 
   // Dos notas no pueden llevar el mismo número. Se comprueba al grabar y no
   // al escribir, porque entre medias otro pudo emitir una desde su tablet.
@@ -7607,7 +7697,18 @@ async function guardarNota(imprimir) {
   btnG.disabled = btnI.disabled = true;
   try {
     await guardarNotaEnStore(nota);
-    if (!modoNube) notas.push(nota);
+    if (!modoNube) {
+      const i = notas.findIndex(x => x.id === nota.id);
+      if (i >= 0) notas[i] = nota; else notas.push(nota);
+    }
+    // Al modificar se retiran del kardex las salidas viejas y se anotan las
+    // nuevas: es más simple y más seguro que ir línea por línea calculando
+    // diferencias, y el stock queda exactamente en lo que dice la nota.
+    if (editando) {
+      const viejas = kardex.filter(m => m.notaId === nota.id && m.motivo === 'venta');
+      await Promise.all(viejas.map(m => eliminarKardexDeStore(m.id)));
+      kardex = kardex.filter(m => !(m.notaId === nota.id && m.motivo === 'venta'));
+    }
     // Cada producto vendido sale del almacén, con la nota como documento.
     // Van a la vez: si fueran de una en una, con la nube cada línea esperaría
     // su confirmación y una nota de ocho productos tardaría una eternidad.
@@ -7632,10 +7733,17 @@ async function guardarNota(imprimir) {
     } catch (e) { console.error('No se pudo enlazar la nota con el crédito:', e); }
   }
 
-  toast(creditoDelMismoNumero
-    ? `✅ Nota ${numeroCorto(nota.numero)} guardada y enlazada con su crédito`
-    : `✅ Nota de venta ${numeroCorto(nota.numero)} guardada`);
+  // Si la nota ya tenía despacho o crédito, se les pasa el importe nuevo: si
+  // no, quedarían diciendo lo que la nota decía antes de corregirla.
+  if (editando) await ponerAlDiaLoQueCuelgaDeLaNota(nota);
+
+  toast(editando
+    ? `✏️ Nota ${numeroCorto(nota.numero)} modificada`
+    : (creditoDelMismoNumero
+      ? `✅ Nota ${numeroCorto(nota.numero)} guardada y enlazada con su crédito`
+      : `✅ Nota de venta ${numeroCorto(nota.numero)} guardada`));
   if (imprimir) imprimirNota(nota);
+  nvEditandoId = '';
   nvItems = [];
   nvClienteId = '';
   mostrarVistaVenta('lista');
@@ -7643,6 +7751,34 @@ async function guardarNota(imprimir) {
   renderProductos();
   renderKardex();
   render();
+}
+
+/* Después de corregir una nota, su despacho y su crédito tienen que decir lo
+   mismo que ella: el cliente, el número y el importe. */
+async function ponerAlDiaLoQueCuelgaDeLaNota(nota) {
+  const d = despachoDeNota(nota.id);
+  if (d) {
+    const actualizado = { ...d, cliente: nota.clienteNombre || '', clienteId: nota.clienteId || '',
+      zona: nota.zona || '', boleta: nota.numero || '', monto: Number(nota.total) || 0,
+      emision: nota.fecha || d.emision };
+    try {
+      await guardarDespachoEnStore(actualizado);
+      const i = despachos.findIndex(x => x.id === d.id);
+      if (i >= 0) despachos[i] = actualizado;
+    } catch (e) { console.error('No se pudo poner al día el despacho:', e); }
+  }
+  const c = creditoDeNota(nota);
+  // Un crédito con cobros no se toca: ahí ya no manda la nota (y modificar
+  // una nota así ni siquiera se permite).
+  if (c && !abonosDe(c).length) {
+    const actualizado = { ...c, boleta: nota.numero || c.boleta, cliente: nota.clienteNombre || c.cliente,
+      zona: nota.zona || c.zona, monto: Number(nota.total) || 0 };
+    try {
+      await guardarEnStore(actualizado);
+      const i = creditos.findIndex(x => x.id === c.id);
+      if (i >= 0) creditos[i] = actualizado;
+    } catch (e) { console.error('No se pudo poner al día el crédito:', e); }
+  }
 }
 
 /* ---- De la nota al reparto ----
@@ -7690,47 +7826,94 @@ function seguirNota(notaId) {
   toast('Esa nota todavía no salió a reparto');
 }
 
-/* ---- Borrar una nota ----
-   Devuelve al almacén lo que había descontado, así que es cosa del
-   administrador y pide el código de seguridad, como anular un movimiento. */
-async function borrarNota(notaId) {
-  if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede borrar notas'); return; }
+/* ---- Anular una nota ----
+   Una nota emitida NO se borra: el papel existe y el número está usado, así
+   que se queda de constancia marcada como anulada. Lo que sí se deshace es
+   todo lo que colgaba de ella: la mercadería vuelve al almacén con su propio
+   apunte en el kardex, su despacho desaparece del reparto y su crédito deja
+   de existir, quedando la boleta registrada como anulada en Créditos.
+
+   Es cosa del administrador y pide el código de seguridad, porque mueve
+   stock y hace desaparecer un crédito. */
+async function anularNota(notaId) {
+  if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede anular notas'); return; }
   const n = notas.find(x => x.id === notaId);
   if (!n) return;
+  if (n.anulada) { toast('🚫 Esa nota ya está anulada'); return; }
 
   const d = despachoDeNota(notaId);
   const c = creditoDeNota(n);
-  if (c) {
-    alert(`No se puede borrar la nota ${numeroCorto(n.numero)} porque ya tiene un crédito ` +
-      `(boleta ${c.boleta}).\n\nBorra primero el crédito.`);
+  // El dinero ya cobrado está en la hoja de cobranza de su día: hacerlo
+  // desaparecer desde aquí descuadraría esa hoja sin que nadie se entere.
+  if (c && abonosDe(c).length) {
+    alert(`No se puede anular la nota ${numeroCorto(n.numero)}: su crédito (boleta ${numeroCorto(c.boleta)}) `
+      + `ya tiene ${abonosDe(c).length} cobro(s) registrado(s).\n\n`
+      + 'Quita primero esos cobros, o corrige el crédito a mano.');
     return;
   }
-  const movimientos = kardex.filter(m => m.notaId === notaId);
-  const detalle = movimientos.length
-    ? `\n\nSe anularán sus ${movimientos.length} salida(s) de almacén y la mercadería volverá al stock.`
-    : '';
-  const enReparto = d ? `\n\nOjo: está en un despacho, que quedará sin su nota.` : '';
-  if (!confirm(`¿Borrar la nota de venta ${numeroCorto(n.numero)}?\n\n` +
-    `${n.clienteNombre || 'Sin cliente'} · ${soles(n.total)}${detalle}${enReparto}`)) return;
 
-  const autorizado = await pedirPin(`Vas a borrar la nota ${numeroCorto(n.numero)} y devolver su mercadería al almacén.`);
-  if (!autorizado) { toast('🔒 Borrado cancelado'); return; }
+  const motivo = prompt(`Anular la nota de venta ${numeroCorto(n.numero)}\n\n`
+    + `${n.clienteNombre || 'Sin cliente'} · ${soles(n.total)}\n\n`
+    + '¿Por qué se anula? (queda registrado)', '');
+  if (motivo === null) return;
+  const texto = motivo.trim();
+  if (!texto) { toast('⚠️ Escribe el motivo de la anulación'); return; }
 
+  const salidas = kardex.filter(m => m.notaId === notaId && m.motivo === 'venta');
+  const detalle = salidas.length
+    ? `\n\nVolverán al almacén ${salidas.length} producto(s), con su apunte en el kardex.` : '';
+  const conDespacho = d ? '\nSe quitará de la zona de despachos.' : '';
+  const conCredito = c ? `\nSe borrará su crédito (boleta ${numeroCorto(c.boleta)}) y quedará como anulado.` : '';
+  if (!confirm(`¿Anular la nota ${numeroCorto(n.numero)}?${detalle}${conDespacho}${conCredito}\n\n`
+    + 'La nota se queda registrada como anulada; no se borra.')) return;
+
+  const autorizado = await pedirPin(`Vas a anular la nota ${numeroCorto(n.numero)} y devolver su mercadería al almacén.`);
+  if (!autorizado) { toast('🔒 Anulación cancelada'); return; }
+
+  const marca = { motivo: texto, por: quienSoy(), en: marcaDeTiempo() };
+  const anulada = { ...n, anulada: marca };
   try {
-    await Promise.all(movimientos.map(m => eliminarKardexDeStore(m.id)));
-    await eliminarNotaDeStore(notaId);
+    // 1) La nota queda marcada, sin perderse
+    await guardarNotaEnStore(anulada);
+    // 2) La mercadería vuelve, y se ve por qué volvió
+    await Promise.all(salidas.map(m => registrarMovimiento({
+      productoId: m.productoId, fecha: hoyISO(), tipo: 'entrada', cantidad: Math.abs(m.cantidad),
+      motivo: 'anulacion', documento: `Anulación nota ${numeroCorto(n.numero)}`, notaId: n.id,
+      nota: texto,
+    })));
+    // 3) Deja de estar en reparto
+    if (d) await eliminarDespachoDeStore(d.id);
+    // 4) Su crédito desaparece, pero la boleta queda anotada como anulada
+    if (c) await eliminarDeStore(c.id);
+    await guardarAnuladoEnStore({
+      id: String(n.numero),
+      boleta: String(n.numero),
+      motivo: texto,
+      notaId: n.id,
+      anuladoPor: quienSoy(),
+      anuladoEn: marca.en,
+    });
   } catch (e) {
     console.error(e);
-    toast(avisoDeFallo(e, '❌ No se pudo borrar la nota. Revisa tu conexión.'));
+    toast(avisoDeFallo(e, '❌ No se pudo anular la nota. Revisa tu conexión.'));
     return;
   }
-  kardex = kardex.filter(m => m.notaId !== notaId);
-  notas = notas.filter(x => x.id !== notaId);
-  toast(`🗑️ Nota ${numeroCorto(n.numero)} borrada${movimientos.length ? ' y stock devuelto' : ''}`);
+
+  const i = notas.findIndex(x => x.id === n.id);
+  if (i >= 0) notas[i] = anulada;
+  if (d) despachos = despachos.filter(x => x.id !== d.id);
+  if (c) creditos = creditos.filter(x => x.id !== c.id);
+  if (!anulados.some(a => String(a.boleta) === String(n.numero))) {
+    anulados.push({ id: String(n.numero), boleta: String(n.numero), motivo: texto,
+      notaId: n.id, anuladoPor: quienSoy(), anuladoEn: marca.en });
+  }
+
+  toast(`🚫 Nota ${numeroCorto(n.numero)} anulada${salidas.length ? ' y stock devuelto' : ''}`);
   renderVentas();
   renderProductos();
   renderKardex();
   renderListaDespachos();
+  render();
 }
 
 /* ══════════ Impresión: media hoja A4 (A5 apaisado) ══════════ */
@@ -7748,6 +7931,11 @@ function imprimirNota(nota) {
       ${hayBonif ? `<td class="c-bon">${it.dsctoBonif ? '-' + soles(it.dsctoBonif) : ''}</td>` : ''}
       <td class="c-imp">${soles(it.bonificacion ? 0 : it.importe)}</td>
     </tr>`).join('');
+
+  // Salen SIEMPRE dos copias iguales: una se queda en el negocio y la otra
+  // se la lleva el cliente. Se arma el bloque una vez y se repite, para que
+  // no puedan acabar diciendo cosas distintas.
+  const copia = bloqueDeNota(nota, emp, hayBonif, filas);
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
   <title>Nota de venta ${escapeHtml(nota.numero)}</title>
@@ -7805,7 +7993,23 @@ function imprimirNota(nota) {
     .tot-fila { display: flex; border: 1px solid #000; border-top: none; }
     .tot-fila .et { flex: 1; text-align: center; border-right: 1px solid #000; padding: .7mm; background: #eee; }
     .tot-fila .va { width: 20mm; text-align: right; padding: .7mm 1.2mm; font-weight: bold; }
-  </style></head><body>
+    /* Salen dos copias iguales, una para el negocio y otra para el cliente.
+       El salto va después de la PRIMERA, no después de cada una: si no, la
+       segunda arrastraría una media hoja en blanco detrás. */
+    .copia:first-child { break-after: page; page-break-after: always; }
+  </style></head><body>${copia}${copia}
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  w.document.write(html);
+  w.document.close();
+}
+/* Una copia de la nota: es lo que va en cada media hoja. */
+function bloqueDeNota(nota, emp, hayBonif, filas) {
+  return `
+    <div class="copia">
     <div class="cab">
       <div class="cab-emp">
         <div class="lin">${escapeHtml(emp.empresaDireccion || '')}</div>
@@ -7851,13 +8055,7 @@ function imprimirNota(nota) {
         <div class="tot-fila"><span class="et">Total a Pagar</span><span class="va">${soles(nota.total)}</span></div>
       </div>
     </div>
-    <script>window.onload=function(){window.print();}<\/script>
-  </body></html>`;
-
-  const w = window.open('', '_blank');
-  if (!w) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
-  w.document.write(html);
-  w.document.close();
+    </div>`;
 }
 
 /* Llena el selector de zona del formulario y las casillas de zonas/meses del filtro. */
@@ -8261,24 +8459,22 @@ function inicializarEventos() {
   $('#btn-nv-volver').addEventListener('click', () => { mostrarVistaVenta('lista'); renderVentas(); });
   $('#btn-nv-cancelar').addEventListener('click', () => {
     if (nvItems.length && !confirm('¿Descartar esta nota de venta?')) return;
-    nvItems = []; nvClienteId = '';
+    nvEditandoId = ''; nvItems = []; nvClienteId = '';
     mostrarVistaVenta('lista'); renderVentas();
   });
   $('#nv-body').addEventListener('click', ev => {
+    const editar = ev.target.closest('[data-editar-nota]');
     const imprimir = ev.target.closest('[data-imprimir-nota]');
-    const copiar = ev.target.closest('[data-copiar-nota]');
     const despachar = ev.target.closest('[data-despachar-nota]');
     const seguir = ev.target.closest('[data-seguir-nota]');
-    const borrar = ev.target.closest('[data-borrar-nota]');
+    const anular = ev.target.closest('[data-anular-nota]');
+    if (editar) { abrirNotaParaEditar(editar.dataset.editarNota); return; }
     if (despachar) { despacharNota(despachar.dataset.despacharNota); return; }
     if (seguir) { seguirNota(seguir.dataset.seguirNota); return; }
-    if (borrar) { borrarNota(borrar.dataset.borrarNota); return; }
+    if (anular) { anularNota(anular.dataset.anularNota); return; }
     if (imprimir) {
       const n = notas.find(x => x.id === imprimir.dataset.imprimirNota);
       if (n) imprimirNota(n);
-    } else if (copiar) {
-      const n = notas.find(x => x.id === copiar.dataset.copiarNota);
-      if (n) { abrirNuevaNota(n); toast('📋 Nota copiada: revisa cantidades y precios'); }
     }
   });
 
@@ -8348,7 +8544,9 @@ function inicializarEventos() {
     const precio = ev.target.closest('[data-nv-precio]');
     if (cant) {
       const it = nvItems[Number(cant.dataset.nvCant)];
-      if (it) { it.cantidad = Number(cant.value) || 0; renderNotaItems(); }
+      // Sin decimales: no se vende medio saco. Se recorta al entero de abajo
+      // en vez de rechazarlo, para no pelearse con quien está escribiendo.
+      if (it) { it.cantidad = Math.max(0, Math.floor(Number(cant.value) || 0)); renderNotaItems(); }
     } else if (precio) {
       const it = nvItems[Number(precio.dataset.nvPrecio)];
       if (!it) return;

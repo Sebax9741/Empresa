@@ -1448,7 +1448,7 @@
            y ese renglón se llevaba 46px de los que hacen falta abajo. -->
       <div class="nv-cab">
         <div class="nv-cab-doc">
-          <span class="nv-cab-etq">Nota de venta</span>
+          <span class="nv-cab-etq" id="nv-form-titulo">Nota de venta</span>
           <div class="nv-cab-num">
             <select id="nv-serie" class="nv-serie" aria-label="Serie del comprobante">
               <option value="0001">0001</option>
@@ -1518,7 +1518,7 @@
             <input type="hidden" id="nv-producto">
           </div>
           <label class="field nv-ag-cant"><span>Cantidad</span>
-            <input type="number" id="nv-cantidad" class="input" min="0.01" step="1" value="1"></label>
+            <input type="number" id="nv-cantidad" class="input" min="0" step="1" value="0" inputmode="numeric"></label>
           <button type="button" id="btn-nv-agregar" class="btn btn-primary btn-small">➕ Agregar</button>
           <label class="nv-permiso">
             <input type="checkbox" id="nv-permitir-precios">

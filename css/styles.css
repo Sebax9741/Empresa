@@ -3166,6 +3166,12 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .nv-items .nv-dscto { color: var(--muted); }
 .nv-items .nv-neto strong { font-variant-numeric: tabular-nums; }
 /* Una línea regalada: se ve de un vistazo que no se cobra */
+/* Una nota anulada se queda en la lista, apagada, para que se vea que existió */
+.nv-fila-anulada td { background: var(--danger-light); color: var(--muted); }
+.nv-fila-anulada .nv-num strong,
+.nv-fila-anulada td strong { text-decoration: line-through; }
+.nv-anul-motivo { display: block; font-size: 0.75rem; color: var(--danger); }
+
 .nv-fila-bonif td { background: var(--success-light, #e2f2ef); }
 .nv-fila-bonif .nv-dscto { color: var(--danger); font-weight: 600; }
 .nv-fila-bonif .nv-neto strong { color: var(--muted); }
