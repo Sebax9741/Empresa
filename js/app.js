@@ -2606,7 +2606,7 @@ function renderTabla(lista) {
           : '';
         return `
         <tr class="credito-anulado" title="Nota de venta anulada">
-          <td><strong>${escapeHtml(c.boleta)}</strong></td>
+          <td><strong>${escapeHtml(numeroCorto(c.boleta))}</strong></td>
           <td colspan="11">
             <div class="fila-especial">
               <span class="badge badge-anulado">🚫 Anulado</span>
@@ -2622,7 +2622,7 @@ function renderTabla(lista) {
       }
       return `
       <tr class="credito-faltante" title="Falta crear esta nota de venta">
-        <td><strong>${escapeHtml(c.boleta)}</strong></td>
+        <td><strong>${escapeHtml(numeroCorto(c.boleta))}</strong></td>
         <td colspan="11">
           <div class="fila-especial">
             <span class="badge badge-faltante">⛳ Falta</span>
@@ -2638,7 +2638,7 @@ function renderTabla(lista) {
     const saldo = saldoDe(c);
     return `
     <tr>
-      <td><strong>${escapeHtml(c.boleta)}</strong></td>
+      <td><strong>${escapeHtml(numeroCorto(c.boleta))}</strong></td>
       <td>${escapeHtml(c.cliente)}</td>
       <td>${c.zona ? escapeHtml(c.zona) : '—'}</td>
       <td class="col-num">${formatoMonto(c.monto)}</td>
@@ -2693,7 +2693,7 @@ function renderTarjetas(lista) {
         return `
         <article class="card card-anulado">
           <div class="card-main">
-            <p class="card-title">Boleta Nº ${escapeHtml(c.boleta)}</p>
+            <p class="card-title">Boleta Nº ${escapeHtml(numeroCorto(c.boleta))}</p>
             <p class="card-sub anulado-motivo">📝 ${escapeHtml(anul.motivo || '')}</p>
             ${quien ? `<p class="card-sub anulado-quien">🖊️ ${quien}</p>` : ''}
           </div>
@@ -2707,7 +2707,7 @@ function renderTarjetas(lista) {
       return `
       <article class="card card-faltante">
         <div class="card-main">
-          <p class="card-title">Boleta Nº ${escapeHtml(c.boleta)}</p>
+          <p class="card-title">Boleta Nº ${escapeHtml(numeroCorto(c.boleta))}</p>
           <p class="card-sub faltante-msg">— nota de venta sin crear —</p>
         </div>
         <div class="card-side"><span class="badge badge-faltante">⛳ Falta</span></div>
@@ -2727,7 +2727,7 @@ function renderTarjetas(lista) {
     <article class="card">
       <div class="card-main">
         <p class="card-title">${escapeHtml(c.cliente)}</p>
-        <p class="card-sub">Boleta Nº ${escapeHtml(c.boleta)} · Emisión ${formatoFecha(c.fecha)}${c.fechaDespacho ? ` · Despacho ${formatoFecha(c.fechaDespacho)}` : ''}</p>
+        <p class="card-sub">Boleta Nº ${escapeHtml(numeroCorto(c.boleta))} · Emisión ${formatoFecha(c.fecha)}${c.fechaDespacho ? ` · Despacho ${formatoFecha(c.fechaDespacho)}` : ''}</p>
         ${c.zona ? `<span class="card-zona">📍 ${escapeHtml(c.zona)}</span>` : ''}
         <p class="card-monto">${formatoMonto(c.monto)}</p>
         ${lineas}
@@ -3663,7 +3663,7 @@ function renderInfo() {
   const cli = c.clienteId ? clientePorId(c.clienteId) : null;
 
   $('#info-cliente').textContent = c.cliente;
-  $('#info-sub').textContent = `Boleta Nº ${c.boleta} · Emitido el ${formatoFecha(c.fecha)}`;
+  $('#info-sub').textContent = `Boleta Nº ${numeroCorto(c.boleta)} · Emitido el ${formatoFecha(c.fecha)}`;
   $('#info-estado').innerHTML = badgeEstado(c);
   $('#info-total').textContent = formatoMonto(c.monto);
   $('#info-debe').textContent = formatoMonto(debe);
@@ -3936,7 +3936,7 @@ function abrirFormulario(credito = null, prefill = null) {
   aplicarClienteSeleccionado();
 
   if (credito) {
-    $('#form-title').textContent = `Editar crédito — Boleta ${credito.boleta}`;
+    $('#form-title').textContent = `Editar crédito — Boleta ${numeroCorto(credito.boleta)}`;
     $('#f-id').value = credito.id;
     $('#f-boleta').value = credito.boleta;
     $('#f-monto').value = credito.monto;
@@ -4775,7 +4775,7 @@ function renderDashboard() {
         <span class="dash-fila-ico">${a.tipo === 'compromiso' ? '🤝' : a.tipo === 'hoy' ? '🔔' : '⚠️'}</span>
         <span class="dash-fila-txt">
           <span class="dash-fila-nom">${escapeHtml(a.c.cliente)}</span>
-          <span class="dash-fila-meta">Nº ${escapeHtml(a.c.boleta)} · ${escapeHtml(a.texto)}</span>
+          <span class="dash-fila-meta">Nº ${escapeHtml(numeroCorto(a.c.boleta))} · ${escapeHtml(a.texto)}</span>
         </span>
         <span class="dash-fila-monto" style="color:var(--danger)">${formatoMonto(saldoDe(a.c))}</span>
       </button>`).join('')
@@ -4903,7 +4903,7 @@ function renderCobranza() {
       <td><span class="cob-codigo">${f.codigo ? escapeHtml(f.codigo) : '—'}</span></td>
       <td>${escapeHtml(f.cliente)}</td>
       <td>${f.zona ? escapeHtml(f.zona) : '—'}</td>
-      <td><strong>${escapeHtml(f.boleta)}</strong></td>
+      <td><strong>${escapeHtml(numeroCorto(f.boleta))}</strong></td>
       <td class="col-num"><strong>${formatoMonto(f.monto)}</strong></td>
       <td class="col-num ${f.saldo > 0 ? 'saldo-pend' : 'saldo-ok'}">${f.saldo > 0 ? formatoMonto(f.saldo) : '✓ saldado'}</td>
       <td><span class="pago-tag pago-${f.metodo}">${metodoLabel(f.metodo)}</span></td>
@@ -5231,7 +5231,7 @@ function renderListaDespachos() {
     const info = estadoDespachoInfo(it.estado);
     return `
       <tr class="desp-fila ${info.clase}" ${gancho(it)} title="${escapeHtml(pista(it))}">
-        <td><strong>${escapeHtml(it.numero || '—')}</strong></td>
+        <td><strong>${escapeHtml(it.numero ? numeroCorto(it.numero) : '—')}</strong></td>
         <td>${escapeHtml(it.cliente || '(sin cliente)')}</td>
         <td class="col-num">${formatoMonto(it.monto)}</td>
         <td>${formatoFecha(it.fecha)}</td>
@@ -5251,7 +5251,7 @@ function renderListaDespachos() {
           <span class="ped-chip ${info.clase}">${info.etiqueta}</span>
         </div>
         <div class="despacho-card-datos">
-          <span>🧾 N° ${escapeHtml(it.numero || '—')}</span>
+          <span>🧾 N° ${escapeHtml(it.numero ? numeroCorto(it.numero) : '—')}</span>
           <span>💵 ${formatoMonto(it.monto)}</span>
           <span>📅 ${formatoFecha(it.fecha)}</span>
           ${it.zona ? `<span>📍 ${escapeHtml(it.zona)}</span>` : ''}
@@ -5458,7 +5458,7 @@ function abrirFormDespacho(despacho = null, desdeNota = null) {
   if (aviso) {
     const nota = desdeNota ? notas.find(n => n.id === desdeNota.notaId) : null;
     aviso.hidden = !nota;
-    if (nota) aviso.innerHTML = `🧮 Sale de la nota de venta <strong>${escapeHtml(nota.numero)}</strong>`;
+    if (nota) aviso.innerHTML = `🧮 Sale de la nota de venta <strong>${escapeHtml(numeroCorto(nota.numero))}</strong>`;
   }
   renderRepartidoresCheck(despacho ? repartidoresDe(despacho) : []);
   mostrarVistaDespacho('form');
@@ -5532,7 +5532,7 @@ function renderDetalleDespacho() {
   const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
   const reps = repartidoresDe(d);
   const comprobante = d.boleta
-    ? `${tipoComprobanteLabel(d.tipoComprobante)} N° ${escapeHtml(d.boleta)}`
+    ? `${tipoComprobanteLabel(d.tipoComprobante)} N° ${escapeHtml(numeroCorto(d.boleta))}`
     : tipoComprobanteLabel(d.tipoComprobante);
   $('#desp-det-title').textContent = d.cliente || 'Despacho';
   $('#desp-det-info').innerHTML = `
@@ -5587,7 +5587,7 @@ async function cambiarEstadoDespacho(estado) {
 async function borrarDespachoActual() {
   const d = despachoPorId(despachoActivoId);
   if (!d) return;
-  if (!confirm(`¿Borrar el despacho de ${d.cliente || 'este cliente'} (boleta ${d.boleta || '—'})?`)) return;
+  if (!confirm(`¿Borrar el despacho de ${d.cliente || 'este cliente'} (boleta ${d.boleta ? numeroCorto(d.boleta) : '—'})?`)) return;
   try {
     await eliminarDespachoDeStore(d.id);
   } catch (e) {
@@ -5765,14 +5765,14 @@ async function vincularDespachoACreditoExistente(credito) {
   const d = despachoPorId(origen);
   if (d && d.cliente && credito.cliente
       && d.cliente.trim().toLowerCase() !== credito.cliente.trim().toLowerCase()) {
-    if (!confirm(`El despacho es de "${d.cliente}" y el crédito Nº ${credito.boleta} es de "${credito.cliente}".\n\n¿Enlazarlos de todos modos?`)) return;
+    if (!confirm(`El despacho es de "${d.cliente}" y el crédito Nº ${numeroCorto(credito.boleta)} es de "${credito.cliente}".\n\n¿Enlazarlos de todos modos?`)) return;
   }
   await vincularDespachoConCredito(origen, credito);
   despachoOrigen = null;
   limpiarErrorFormulario();
   modalForm.close();
   render();   // ya refresca la vista de despachos si está abierta
-  toast(`🔗 Despacho enlazado con el crédito Nº ${credito.boleta}`);
+  toast(`🔗 Despacho enlazado con el crédito Nº ${numeroCorto(credito.boleta)}`);
 }
 
 async function guardarCredito(ev) {
@@ -5897,8 +5897,8 @@ async function borrarCredito(id) {
   const c = creditos.find(x => x.id === id);
   if (!c) return;
   if (!puede('borrar')) { toast('🔒 No tienes permiso para borrar créditos'); return; }
-  if (!confirm(`¿Borrar el crédito de la boleta Nº ${c.boleta} (${c.cliente})?\nEsta acción no se puede deshacer.`)) return;
-  const autorizado = await pedirPin(`Vas a borrar el crédito de la boleta Nº ${c.boleta} (${c.cliente}).`);
+  if (!confirm(`¿Borrar el crédito de la boleta Nº ${numeroCorto(c.boleta)} (${c.cliente})?\nEsta acción no se puede deshacer.`)) return;
+  const autorizado = await pedirPin(`Vas a borrar el crédito de la boleta Nº ${numeroCorto(c.boleta)} (${c.cliente}).`);
   if (!autorizado) { toast('🔒 Borrado cancelado'); return; }
   try {
     await eliminarDeStore(id);
@@ -6806,7 +6806,7 @@ async function borrarMovimiento(id) {
   // dejan de cuadrar. Lo normal es borrar la nota entera.
   const suNota = m.notaId ? notas.find(n => n.id === m.notaId) : null;
   const aviso = suNota
-    ? `\n\n⚠️ Esta salida es de la nota ${suNota.numero}, que seguirá existiendo.\n` +
+    ? `\n\n⚠️ Esta salida es de la nota ${numeroCorto(suNota.numero)}, que seguirá existiendo.\n` +
       `Si lo que quieres es anular la venta, borra la nota: así se devuelve todo de una vez.`
     : '';
   if (!confirm(`¿Anular este movimiento de "${nombre}"?\n\n` +
@@ -6975,6 +6975,16 @@ function numeroDeComprobante(texto) {
   return m ? Number(m[1]) : 0;
 }
 
+/* Cómo se ENSEÑA ese número en la pantalla: pelado, sin la serie ni los ceros
+   de relleno ("0001-00004182" → "4182"), que es como se habla de él en el
+   negocio. Lo guardado y lo que sale impreso conservan el número entero, que
+   es el que vale como documento. Si el texto no acaba en dígitos (una boleta
+   escrita a mano rara) se deja tal cual, para no esconder lo que hay. */
+function numeroCorto(texto) {
+  const n = numeroDeComprobante(texto);
+  return n ? String(n) : String(texto || '');
+}
+
 /* El correlativo es UNO SOLO para todo el negocio: la serie dice de qué zona
    salió la nota, pero el número nunca se repite entre series. Arranca donde
    quedó el talonario de papel, así que se mira también el número de boleta de
@@ -7031,7 +7041,7 @@ function nvAvisarNumero() {
   const usa = quienUsaElNumero(nvCorrelativoEscrito(), null);
   if (!usa) { pista.textContent = ''; pista.className = 'nv-num-aviso'; return; }
   if (usa.tipo === 'nota') {
-    pista.textContent = `⚠️ Ese número ya es de la nota ${usa.nota.numero}`;
+    pista.textContent = `⚠️ Ese número ya es de la nota ${numeroCorto(usa.nota.numero)}`;
     pista.className = 'nv-num-aviso nv-num-choca';
   } else {
     pista.textContent = `🔗 Es la boleta del crédito de ${usa.credito.cliente || 'un cliente'}: quedarán enlazados`;
@@ -7139,7 +7149,7 @@ function renderVentas() {
     const est = ESTADOS_NOTA[estadoDeNota(n)] || ESTADOS_NOTA.pendiente;
     const pendiente = estadoDeNota(n) === 'pendiente';
     return `<tr>
-      <td class="nv-num"><strong>${escapeHtml(n.numero)}</strong></td>
+      <td class="nv-num"><strong>${escapeHtml(numeroCorto(n.numero))}</strong></td>
       <td>${formatoFecha(n.fecha)}<small>${escapeHtml(n.hora || '')}</small></td>
       <td>${escapeHtml(n.clienteNombre || '—')}</td>
       <td class="col-um"><span class="cliente-cat cat-${cat}">${cat}</span></td>
@@ -7444,7 +7454,7 @@ async function guardarNota(imprimir) {
   const usa = quienUsaElNumero(correlativo, nota.id);
   if (usa && usa.tipo === 'nota') {
     const libre = siguienteCorrelativo();
-    if (!confirm(`El número ${correlativo} ya es de la nota ${usa.nota.numero}.\n\n` +
+    if (!confirm(`El número ${correlativo} ya es de la nota ${numeroCorto(usa.nota.numero)}.\n\n` +
       `¿Usar el ${libre}, que está libre?`)) { $('#nv-correlativo').focus(); return; }
     nota.numero = armarNumeroNota(nota.serie, libre);
   }
@@ -7483,8 +7493,8 @@ async function guardarNota(imprimir) {
   }
 
   toast(creditoDelMismoNumero
-    ? `✅ Nota ${nota.numero} guardada y enlazada con su crédito`
-    : `✅ Nota de venta ${nota.numero} guardada`);
+    ? `✅ Nota ${numeroCorto(nota.numero)} guardada y enlazada con su crédito`
+    : `✅ Nota de venta ${numeroCorto(nota.numero)} guardada`);
   if (imprimir) imprimirNota(nota);
   nvItems = [];
   nvClienteId = '';
@@ -7538,7 +7548,7 @@ async function borrarNota(notaId) {
   const d = despachoDeNota(notaId);
   const c = creditoDeNota(n);
   if (c) {
-    alert(`No se puede borrar la nota ${n.numero} porque ya tiene un crédito ` +
+    alert(`No se puede borrar la nota ${numeroCorto(n.numero)} porque ya tiene un crédito ` +
       `(boleta ${c.boleta}).\n\nBorra primero el crédito.`);
     return;
   }
@@ -7547,10 +7557,10 @@ async function borrarNota(notaId) {
     ? `\n\nSe anularán sus ${movimientos.length} salida(s) de almacén y la mercadería volverá al stock.`
     : '';
   const enReparto = d ? `\n\nOjo: está en un despacho, que quedará sin su nota.` : '';
-  if (!confirm(`¿Borrar la nota de venta ${n.numero}?\n\n` +
+  if (!confirm(`¿Borrar la nota de venta ${numeroCorto(n.numero)}?\n\n` +
     `${n.clienteNombre || 'Sin cliente'} · ${soles(n.total)}${detalle}${enReparto}`)) return;
 
-  const autorizado = await pedirPin(`Vas a borrar la nota ${n.numero} y devolver su mercadería al almacén.`);
+  const autorizado = await pedirPin(`Vas a borrar la nota ${numeroCorto(n.numero)} y devolver su mercadería al almacén.`);
   if (!autorizado) { toast('🔒 Borrado cancelado'); return; }
 
   try {
@@ -7563,7 +7573,7 @@ async function borrarNota(notaId) {
   }
   kardex = kardex.filter(m => m.notaId !== notaId);
   notas = notas.filter(x => x.id !== notaId);
-  toast(`🗑️ Nota ${n.numero} borrada${movimientos.length ? ' y stock devuelto' : ''}`);
+  toast(`🗑️ Nota ${numeroCorto(n.numero)} borrada${movimientos.length ? ' y stock devuelto' : ''}`);
   renderVentas();
   renderProductos();
   renderKardex();
