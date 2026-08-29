@@ -7960,9 +7960,12 @@ function estadoDeNota(nota) {
    entregó al cliente. */
 async function crearCreditoDeLaNota(nota) {
   if (!nota) return null;
-  // Una venta al contado se cobra en el acto: no hay nada que ir a cobrar
-  if (nota.condicion === 'contado') return null;
   if (creditoDeNota(nota)) return null;          // ya lo tiene (o se enlazó)
+  // Una venta al contado se cobró en el acto: su crédito nace ya pagado, sin
+  // ningún "a cuenta" inventado. No hace falta: un crédito sin abonos pero
+  // marcado como pagado ya vale cero (ver saldoDe). Y así ese dinero no se
+  // cuela en la hoja de cobranza del día, que es para lo que se sale a cobrar.
+  const alContado = nota.condicion === 'contado';
   const cli = nota.clienteId ? clientePorId(nota.clienteId) : null;
   const credito = {
     id: nuevoId(),
@@ -7984,7 +7987,7 @@ async function crearCreditoDeLaNota(nota) {
     compromisoPor: null,
     compromisoEn: null,
   };
-  credito.estado = estadoCalculado(credito);
+  credito.estado = alContado ? 'pagado' : estadoCalculado(credito);
   try {
     await guardarEnStore(credito);
     if (!creditos.some(c => c.id === credito.id)) creditos.push(credito);
@@ -7995,9 +7998,12 @@ async function crearCreditoDeLaNota(nota) {
   }
 }
 
-/* Las que todavía no salieron a reparto: es lo que se ofrece en Despachos */
+/* Lo que espera en el tablero es lo que TODAVÍA NO HA SALIDO, y eso no
+   depende de si está cobrada: una venta al contado ya está pagada y aun así
+   hay que llevársela al cliente. Por eso se mira el despacho y no la etiqueta
+   —que responde a otra pregunta: en qué punto va la venta—. */
 function notasPorDespachar() {
-  return notasOrdenadas().filter(n => estadoDeNota(n) === 'pendiente');
+  return notasOrdenadas().filter(n => !n.anulada && !despachoDeNota(n.id));
 }
 
 function abrirVentas() {
@@ -8525,6 +8531,10 @@ async function ponerAlDiaLoQueCuelgaDeLaNota(nota) {
   if (c && !abonosDe(c).length) {
     const actualizado = { ...c, boleta: nota.numero || c.boleta, cliente: nota.clienteNombre || c.cliente,
       zona: nota.zona || c.zona, monto: Number(nota.total) || 0 };
+    // Si se corrigió la condición, el crédito la sigue: lo que era al contado
+    // pasa a estar por cobrar, y al revés. Solo mientras no tenga cobros; con
+    // dinero de por medio manda lo cobrado, no lo que diga la nota.
+    actualizado.estado = nota.condicion === 'contado' ? 'pagado' : estadoCalculado({ ...actualizado, estado: '' });
     try {
       await guardarEnStore(actualizado);
       const i = creditos.findIndex(x => x.id === c.id);
