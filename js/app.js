@@ -317,8 +317,8 @@ function estadoDespachoEfectivo(d) {
 /* N° de boleta como número, para ordenar de menor a mayor. Los que no tienen
    número (vacío o texto) van al final. */
 function boletaNumero(d) {
-  const n = parseInt(String((d && d.boleta) || '').replace(/\D/g, ''), 10);
-  return isNaN(n) ? Infinity : n;
+  // Igual que boletaEntera: el último grupo de dígitos, no todos juntos
+  return numeroDeComprobante((d && d.boleta) || '') || Infinity;
 }
 
 /* Ordena los despachos-pedido por N° de boleta de menor a mayor
@@ -2306,9 +2306,14 @@ function marcados(clase) {
 }
 
 /* N° de boleta como entero (ignora ceros/letras), o null si no es numérico. */
+/* El número de la boleta, como número. Ojo: NO vale juntar todos los dígitos.
+   Un comprobante entero es "0001-00004225", y juntándolos sale 100004225, que
+   no es ninguna boleta: es la serie pegada al número. Hay que quedarse con el
+   último grupo de dígitos, que es lo que hace numeroDeComprobante, y así da
+   igual que la boleta esté guardada pelada ("4225") o entera. */
 function boletaEntera(c) {
-  const n = parseInt(String((c && c.boleta) || '').replace(/\D/g, ''), 10);
-  return isNaN(n) ? null : n;
+  const n = numeroDeComprobante((c && c.boleta) || '');
+  return n || null;
 }
 
 /* Números de boleta salteados (las notas de venta que faltan crear).
@@ -7926,8 +7931,15 @@ function creditoDeNota(nota) {
   // Un crédito creado desde el despacho de esta nota también cuenta
   const d = despachoDeNota(nota.id);
   if (d && d.creditoId) return creditos.find(c => c.id === d.creditoId) || null;
-  // Y el que la nota apunte directamente (nota dada de alta sobre una boleta vieja)
-  return (nota.creditoId && creditos.find(c => c.id === nota.creditoId)) || null;
+  // El que la nota apunte directamente (nota dada de alta sobre una boleta vieja)
+  const porApunte = nota.creditoId && creditos.find(c => c.id === nota.creditoId);
+  if (porApunte) return porApunte;
+  // Y, en último término, por el NÚMERO: una nota y su crédito llevan el mismo
+  // número de boleta aunque nadie los haya enlazado todavía. Sin esto, una
+  // nota emitida sobre una boleta que ya estaba registrada no reconocería su
+  // crédito y se le crearía otro: dos créditos por una sola venta.
+  const n = numeroDeComprobante(nota.numero);
+  return (n && creditos.find(c => numeroDeComprobante(c.boleta) === n)) || null;
 }
 
 const ESTADOS_NOTA = {
