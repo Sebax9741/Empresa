@@ -38,15 +38,6 @@ service cloud.firestore {
         allow delete: if permiso('borrar');
       }
 
-      // Hubo una versión que guardaba aquí la foto de la boleta, fuera del
-      // crédito. Se dio marcha atrás y la app las devuelve a su crédito, pero
-      // para poder hacerlo tiene que seguir pudiendo leerlas y borrarlas.
-      // Cuando no quede ninguna, este bloque se puede quitar.
-      match /fotos/{docId} {
-        allow read: if esMiembro();
-        allow write: if permiso('crear') || permiso('editar');
-      }
-
       // Clientes del negocio (nombre + zona). Todos los miembros los pueden ver
       // para elegirlos al crear un crédito; solo quien tenga el permiso los edita.
       // Borrar un cliente es distinto de registrarlo o corregirlo: se lleva por
