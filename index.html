@@ -859,6 +859,7 @@
       <span class="cob-estado-badge" id="cob-estado-badge"></span>
       <button type="button" id="btn-hoja-crear" class="btn btn-primary btn-small" hidden>➕ Crear hoja de este día</button>
       <button type="button" id="btn-hoja-cerrar" class="btn btn-danger btn-small" hidden>🔒 Cerrar hoja del día</button>
+      <button type="button" id="btn-hoja-reabrir" class="btn btn-secondary btn-small" hidden>🔓 Reabrir hoja</button>
     </div>
     <div class="cob-estado-detalle" id="cob-estado-detalle" hidden></div>
 
@@ -1204,11 +1205,27 @@
           <option value="salida">📤 Salidas</option>
           <option value="ajuste">⚖️ Ajustes</option>
         </select></label>
+      <label class="field"><span>Motivo</span>
+        <select id="kdx-fil-motivo" class="input"><option value="">Todos</option></select></label>
+      <label class="field"><span>Registró</span>
+        <select id="kdx-fil-usuario" class="input"><option value="">Todos</option></select></label>
       <label class="field"><span>Desde</span>
         <input type="date" id="kdx-fil-desde" class="input"></label>
       <label class="field"><span>Hasta</span>
         <input type="date" id="kdx-fil-hasta" class="input"></label>
-      <button type="button" id="btn-kdx-limpiar" class="btn btn-secondary btn-small">Limpiar</button>
+      <label class="field kdx-fil-texto"><span>Buscar</span>
+        <input type="search" id="kdx-fil-texto" class="input" placeholder="Documento, producto o nota…"></label>
+      <div class="kdx-fil-botones">
+        <button type="button" id="btn-kdx-mes" class="btn btn-secondary btn-small" title="Del día 1 de este mes a hoy">Este mes</button>
+        <button type="button" id="btn-kdx-limpiar" class="btn btn-secondary btn-small">Limpiar</button>
+      </div>
+    </div>
+
+    <!-- Dos formas de mirar lo mismo: movimiento a movimiento, o el cierre
+         de cada día con el stock en que quedó el producto. -->
+    <div class="kdx-vistas" role="tablist">
+      <button type="button" id="btn-kdx-vista-mov" class="kdx-vista activo" role="tab" aria-selected="true">📄 Movimientos</button>
+      <button type="button" id="btn-kdx-vista-dias" class="kdx-vista" role="tab" aria-selected="false">📅 Stock por día</button>
     </div>
 
     <div class="sec-chips" id="kdx-chips"></div>
@@ -1234,6 +1251,21 @@
         <tbody id="kdx-body"></tbody>
       </table>
     </div>
+    <div class="table-wrap kdx-dias-wrap" hidden>
+      <table class="kdx-tabla" id="kdx-dias-tabla">
+        <thead>
+          <tr>
+            <th>Día</th>
+            <th class="col-num">Entró</th>
+            <th class="col-num">Salió</th>
+            <th class="col-num">Movimientos</th>
+            <th class="col-num">Stock al cerrar el día</th>
+          </tr>
+        </thead>
+        <tbody id="kdx-dias-body"></tbody>
+      </table>
+    </div>
+    <p class="sec-vacio" id="kdx-dias-aviso" hidden>Elige un producto arriba para ver en cuánto quedó su stock cada día.</p>
     <p class="sec-vacio" id="kdx-vacio" hidden>Todavía no hay movimientos de almacén.</p>
   </section>
 
@@ -1518,7 +1550,7 @@
             <input type="hidden" id="nv-producto">
           </div>
           <label class="field nv-ag-cant"><span>Cantidad</span>
-            <input type="number" id="nv-cantidad" class="input" min="0" step="1" value="0" inputmode="numeric"></label>
+            <input type="number" id="nv-cantidad" class="input" min="1" step="1" inputmode="numeric" placeholder="—"></label>
           <button type="button" id="btn-nv-agregar" class="btn btn-primary btn-small">➕ Agregar</button>
           <label class="nv-permiso">
             <input type="checkbox" id="nv-permitir-precios">
@@ -1719,7 +1751,7 @@
       <!-- ▸ Seguridad (solo administrador) -->
       <section class="settings-grupo settings-seguridad" id="settings-seguridad" hidden>
         <h3 class="settings-titulo">🔒 Seguridad</h3>
-        <small class="settings-grupo-desc">Código de 4 dígitos que se pedirá para <strong>borrar un crédito</strong>, <strong>borrar una “a cuenta”</strong> o <strong>anular un movimiento de almacén</strong> (un ingreso o una línea del kardex).</small>
+        <small class="settings-grupo-desc">Código de 4 dígitos que se pedirá para <strong>borrar un crédito</strong>, <strong>borrar una “a cuenta”</strong>, <strong>anular un movimiento de almacén</strong>, <strong>editar o borrar un producto</strong>, <strong>eliminar una nota de venta</strong> y <strong>reabrir una hoja de cobranza cerrada</strong>.</small>
         <p class="pin-estado" id="pin-estado"></p>
         <div class="pin-config">
           <input type="password" id="s-pin-actual" class="input pin-corto" inputmode="numeric" maxlength="4"

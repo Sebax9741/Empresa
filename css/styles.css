@@ -1545,9 +1545,22 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   color: var(--muted);
   font-weight: 800;
 }
-/* Los permisos en dos columnas: nueve en fila vertical obligaban a bajar */
-.usr-perms, .usuario-perms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.15rem 1rem; }
-.u-perm { display: flex; align-items: flex-start; gap: 0.45rem; font-size: 0.86rem; padding: 0.2rem 0; cursor: pointer; }
+/* Los permisos van por sección, en columnas: en una sola fila vertical
+   obligaban a bajar media pantalla para dar de alta a alguien. */
+.usr-perms, .usuario-perms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1rem; }
+@media (min-width: 1300px) {
+  .usr-perms, .usuario-perms { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.u-seccion {
+  border: 1px solid var(--border); border-radius: 8px;
+  margin: 0; padding: 0.4rem 0.6rem 0.5rem; min-width: 0;
+  break-inside: avoid;
+}
+.u-seccion legend {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); font-weight: 800; padding: 0 0.3rem;
+}
+.u-perm { display: flex; align-items: flex-start; gap: 0.45rem; font-size: 0.84rem; padding: 0.15rem 0; cursor: pointer; }
 .u-perm input { width: 16px; height: 16px; flex: none; margin-top: 0.15rem; }
 
 /* La cuenta con la que se dio de alta el negocio */
@@ -2837,6 +2850,19 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .kdx-filtros .field { margin: 0; min-width: 9rem; }
 .kdx-filtros .field:first-child { min-width: 15rem; flex: 1; }
+.kdx-filtros .kdx-fil-texto { min-width: 13rem; flex: 1; }
+.kdx-fil-botones { display: flex; gap: 0.4rem; align-items: flex-end; }
+
+/* Las dos formas de mirar el kardex: movimiento a movimiento o día a día */
+.kdx-vistas { display: flex; gap: 0.3rem; margin-bottom: 0.8rem; }
+.kdx-vista {
+  border: 1px solid var(--border); background: var(--card); color: var(--muted);
+  border-radius: 999px; padding: 0.35rem 0.9rem; font: inherit; font-size: 0.85rem;
+  font-weight: 700; cursor: pointer;
+}
+.kdx-vista:hover { border-color: var(--primary); color: var(--primary-dark); }
+.kdx-vista.activo { background: var(--primary); border-color: var(--primary); color: #fff; }
+.kdx-dias-wrap .kdx-saldo strong { font-size: 1rem; }
 .kdx-alerta {
   background: var(--warning-light);
   border: 1px solid var(--amber);

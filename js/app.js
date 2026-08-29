@@ -58,23 +58,55 @@ function usuarioAEmail(entrada) {
 }
 
 /* Permisos del usuario actual */
-const PERMISOS_TODOS = { borrar: true, editar: true, crear: true, pagos: true, cobranza: true, clientes: true, hojaCrear: true, vencimiento: true, productos: true, ventas: true };
+/* Un administrador no pasa por puede() —lo tiene todo— pero su ficha se guarda
+   con todos los permisos marcados igual, para que se lea bien. Se arma sola a
+   partir de la lista, así no vuelve a quedarse corta al aparecer uno nuevo. */
+let PERMISOS_TODOS = {};
 function esAdmin() { return modoNube && !!(yo && yo.rol === 'admin'); }
 /* En modo local hay un solo dueño y manda igual que un administrador (es el
    mismo criterio que ya se usa para quitar una "a cuenta"). */
 function mandaComoAdmin() { return !modoNube || esAdmin(); }
+/* De qué permiso VIEJO hereda cada permiso nuevo cuando la ficha del usuario
+   todavía no lo tiene marcado. Sin esto, al partir los permisos en pedazos más
+   finos, todo el equipo se habría quedado sin poder hacer lo que ya hacía. */
+const PERMISO_HEREDA_DE = {
+  clientes: 'crear',
+  clientesBorrar: 'clientes',
+  ventas: 'crear',
+  ventasEditar: 'ventas',
+  ventasAnular: 'ventas',
+  cobranzaExportar: 'cobranza',
+  despachosCerrar: 'despachos',
+  productosEditar: 'productos',
+  ingresos: 'productos',
+  ajustes: 'productos',
+  kardex: 'productos',
+};
+
+/* Si ese miembro tiene ese permiso, mirando también de qué hereda. Es lo mismo
+   que hace puede(), pero para OTRO usuario: en la pantalla de Usuarios hay que
+   enseñar marcado lo que esa persona puede hacer de verdad, no solo lo que
+   alguien marcó a mano alguna vez. */
+function tienePermiso(miembro, nombre) {
+  const permisos = (miembro && miembro.permisos) || {};
+  const valor = permisos[nombre];
+  if (valor !== undefined) return !!valor;
+  const padre = PERMISO_HEREDA_DE[nombre];
+  return padre ? tienePermiso(miembro, padre) : false;
+}
+
 function puede(nombre) {
   if (!modoNube) return true;         // modo local: un solo dueño, todo permitido
   if (yo && yo.rol === 'admin') return true;
   if (!yo || !yo.permisos) return false;
   const valor = yo.permisos[nombre];
-  // Usuarios creados antes de que existiera el permiso "clientes": se rigen por "crear"
-  if (valor === undefined && nombre === 'clientes') return !!yo.permisos.crear;
-  // Lo mismo con los permisos nuevos de almacén y notas de venta: quien ya podía
-  // crear créditos puede vender, pero tocar el catálogo se concede a propósito.
-  if (valor === undefined && nombre === 'ventas') return !!yo.permisos.crear;
-  if (valor === undefined && nombre === 'productos') return false;
-  return !!valor;
+  if (valor !== undefined) return !!valor;
+  // Sin marcar: se mira de qué permiso viejo hereda (encadenado, porque
+  // "ventasEditar" hereda de "ventas" y "ventas" a su vez de "crear").
+  const padre = PERMISO_HEREDA_DE[nombre];
+  if (padre) return puede(padre);
+  // Los permisos que no heredan de nada se conceden a propósito
+  return false;
 }
 
 const EMULADOR = new URLSearchParams(location.search).has('emulador');
@@ -292,8 +324,10 @@ function nuevoId() { return Date.now().toString(36) + Math.random().toString(36)
    tocarla: solo el administrador, y usando su código de seguridad. */
 function puedeQuitarAbono(a) {
   if (!modoNube) return true;              // modo local: un solo dueño
-  if (esAdmin()) return true;
+  // Una hoja cerrada no se toca por ningún lado: sacar un cobro también la
+  // descuadra. Para corregir algo hay que reabrirla primero.
   if (a && a.fecha && hojaCerrada(a.fecha)) return false;
+  if (esAdmin()) return true;
   if (!a || !a.registradoFecha) return false;   // "a cuenta" antigua: solo el admin
   return a.registradoFecha === hoyISO() && esMio(a.registradoPor);
 }
@@ -602,7 +636,8 @@ async function cerrarHojaCobranza(fechaISO) {
   const h = hojaDe(fechaISO);
   if (!h) { toast('Esta hoja todavía no se ha creado'); return; }
   if (h.cerrada) { toast('Esta hoja ya está cerrada'); return; }
-  if (!confirm(`¿Cerrar la hoja de cobranza del ${formatoFecha(fechaISO)}?\nYa no se podrá agregar ni quitar cobros de ese día sin tu código de seguridad.`)) return;
+  if (!confirm(`¿Cerrar la hoja de cobranza del ${formatoFecha(fechaISO)}?\n\n`
+    + 'Ya no entrará ni saldrá ningún cobro de ese día. Si hiciera falta, podrás reabrirla con tu código.')) return;
   try {
     await actualizarHojaEnStore(fechaISO, {
       cerrada: true,
@@ -617,6 +652,33 @@ async function cerrarHojaCobranza(fechaISO) {
   } catch (e) {
     console.error(e);
     toast('❌ No se pudo cerrar la hoja de cobranza');
+  }
+}
+
+/* Vuelve a abrir una hoja ya cerrada. Como estando cerrada no entra nada, esta
+   es la única puerta: la abre el administrador con su código y queda anotado
+   quién la reabrió, para que no sea un agujero silencioso. */
+async function reabrirHojaCobranza(fechaISO) {
+  if (!esAdmin()) { toast('🔒 Solo el administrador puede reabrir la hoja'); return; }
+  const h = hojaDe(fechaISO);
+  if (!h || !h.cerrada) { toast('Esa hoja no está cerrada'); return; }
+  if (!confirm(`¿Reabrir la hoja de cobranza del ${formatoFecha(fechaISO)}?\n\n`
+    + 'Volverán a poder registrarse cobros de ese día. Acuérdate de cerrarla otra vez.')) return;
+  const autorizado = await pedirPin(`Vas a reabrir la hoja de cobranza del ${formatoFecha(fechaISO)}.`);
+  if (!autorizado) { toast('🔒 Cancelado'); return; }
+  try {
+    await actualizarHojaEnStore(fechaISO, {
+      cerrada: false,
+      reabiertaPor: quienSoy(),
+      reabiertaEn: marcaDeTiempo(),
+    });
+    const i = hojas.findIndex(x => x.fecha === fechaISO);
+    if (i >= 0) hojas[i] = { ...h, cerrada: false, reabiertaPor: quienSoy(), reabiertaEn: null };
+    renderCobranza();
+    toast(`🔓 Hoja del ${formatoFecha(fechaISO)} reabierta`);
+  } catch (e) {
+    console.error(e);
+    toast('❌ No se pudo reabrir la hoja de cobranza');
   }
 }
 
@@ -953,7 +1015,12 @@ function aplicarAjustesNube(datos) {
 
 /* El Dashboard lo ve siempre el administrador (o el dueño en modo local, sin
    equipo); a los empleados se lo muestra solo si el admin activó el ajuste. */
-function puedeVerDashboard() { return !modoNube || esAdmin() || !!settings.dashboardEmpleados; }
+function puedeVerDashboard() {
+  if (!modoNube || esAdmin()) return true;
+  // El administrador decide si el equipo ve el Dashboard, y además cada
+  // usuario tiene que tener el permiso: las dos cosas, no una u otra.
+  return !!settings.dashboardEmpleados && puede('dashboard');
+}
 
 /* Apartado con el que abre la app. En computadora arranca en el Dashboard
    (resumen general); en celular arranca directo en los créditos, que es lo que
@@ -1649,8 +1716,8 @@ function aplicarPermisos() {
   $('#btn-despachos').hidden = !puede('despachos');
   $('#btn-ventas').hidden = !puede('ventas');
   $('#btn-productos').hidden = !puede('productos');
-  $('#btn-ingresos').hidden = !puede('productos');
-  $('#btn-kardex').hidden = !puede('productos');
+  $('#btn-ingresos').hidden = !(puede('ingresos') || puede('ajustes'));
+  $('#btn-kardex').hidden = !puede('kardex');
   $('#btn-usuarios').hidden = !esAdmin();
   $('#btn-cliente-nuevo').hidden = !puede('clientes');
   $('#usuario-chip').hidden = !modoNube;
@@ -1733,8 +1800,8 @@ function sincronizarNavLateral() {
     'nav-dashboard': puedeVerDashboard(),
     'nav-ventas': puede('ventas'),
     'nav-productos': puede('productos'),
-    'nav-ingresos': puede('productos'),
-    'nav-kardex': puede('productos'),
+    'nav-ingresos': puede('ingresos') || puede('ajustes'),
+    'nav-kardex': puede('kardex'),
     'nav-despachos': puede('despachos'),
     'nav-clientes': true,
     'nav-cobranza': puede('cobranza'),
@@ -1847,34 +1914,88 @@ async function enviarAuth(ev) {
 }
 
 /* ====== Administración de usuarios (solo admin) ====== */
-const PERMISOS_LISTA = [
-  ['crear', 'Crear créditos'],
-  ['editar', 'Editar créditos'],
-  ['pagos', 'Registrar pagos'],
-  ['borrar', 'Borrar créditos'],
-  ['cobranza', 'Ver/exportar cobranza'],
-  ['clientes', 'Registrar/editar clientes'],
-  ['hojaCrear', 'Crear la hoja de cobranza del día'],
-  ['despachos', 'Armar despachos de reparto'],
-  ['ventas', 'Emitir notas de venta'],
-  ['productos', 'Gestionar productos y almacén (kardex)'],
+/* ══════════ Permisos, agrupados por sección ══════════
+   Un permiso suelto no dice gran cosa; lo que se pregunta al dar de alta a
+   alguien es "¿qué puede hacer en Notas de venta?". Así que van por sección,
+   en el mismo orden en que están en el menú.
+
+   Los que ya existían conservan su clave (crear, editar, pagos…): cambiarlas
+   habría dejado sin permisos a todo el equipo. Los nuevos, más finos, heredan
+   del viejo que los cubría (ver PERMISO_HEREDA_DE). */
+const PERMISOS_SECCIONES = [
+  ['📊 Dashboard', [
+    ['dashboard', 'Ver el Dashboard'],
+  ]],
+  ['💳 Créditos', [
+    ['crear', 'Crear créditos'],
+    ['editar', 'Editar créditos'],
+    ['pagos', 'Registrar cobros'],
+    ['borrar', 'Borrar créditos'],
+  ]],
+  ['🧾 Hoja de cobranza', [
+    ['cobranza', 'Ver la hoja de cobranza'],
+    ['hojaCrear', 'Crear la hoja del día'],
+    ['cobranzaExportar', 'Imprimir y exportar a Excel'],
+  ]],
+  ['🧑‍🤝‍🧑 Clientes', [
+    ['clientes', 'Registrar y editar clientes'],
+    ['clientesBorrar', 'Borrar clientes'],
+  ]],
+  ['🧮 Notas de venta', [
+    ['ventas', 'Emitir notas de venta'],
+    ['ventasEditar', 'Modificar notas ya emitidas'],
+    ['ventasAnular', 'Anular notas de venta'],
+  ]],
+  ['📦 Despachos', [
+    ['despachos', 'Armar despachos de reparto'],
+    ['despachosCerrar', 'Cerrar el reparto (crédito o devuelto)'],
+  ]],
+  ['🛒 Productos', [
+    ['productos', 'Ver el catálogo'],
+    ['productosEditar', 'Crear y editar productos'],
+  ]],
+  ['📥 Ingreso de productos', [
+    ['ingresos', 'Registrar mercadería que llega'],
+    ['ajustes', 'Corregir stock, mermas y traslados'],
+  ]],
+  ['📒 Kardex', [
+    ['kardex', 'Ver e imprimir el kardex'],
+  ]],
 ];
+
+/* La misma lista, en plano. Es lo que usan el alta y el guardado. */
+const PERMISOS_LISTA = PERMISOS_SECCIONES.flatMap(([, permisos]) => permisos);
+PERMISOS_TODOS = Object.fromEntries(PERMISOS_LISTA.map(([k]) => [k, true]));
+
 // Nota: el permiso 'vencimiento' ya no se ofrece. Cambiar la fecha de
 // vencimiento es solo del administrador; los empleados anotan la fecha de
 // compromiso de pago, que no altera el vencimiento real del crédito.
+// Borrar productos, anular movimientos del kardex y eliminar notas de venta
+// tampoco se ofrecen: son del administrador y piden su código de seguridad.
 
 /* Los permisos que se marcan al dar de alta salen de PERMISOS_LISTA, no de una
    copia escrita a mano en el HTML: así no vuelve a pasar que la lista del alta
    se quede corta cuando aparece un permiso nuevo. */
-const PERMISOS_POR_DEFECTO = ['crear', 'editar', 'pagos', 'cobranza', 'clientes', 'ventas'];
+/* Lo que trae marcado un empleado nuevo: su trabajo del día a día. Lo que
+   toca el almacén, borra cosas o cierra el reparto se concede a propósito.
+   Cuando un permiso viejo venía marcado, los más finos que salieron de él
+   vienen marcados también: si no, dar de alta a alguien le quitaría cosas que
+   antes podía hacer. */
+const PERMISOS_POR_DEFECTO = ['dashboard', 'crear', 'editar', 'pagos',
+  'cobranza', 'cobranzaExportar', 'clientes', 'ventas', 'ventasEditar'];
 
+/* Las casillas del alta, agrupadas por sección igual que en cada ficha */
 function pintarPermisosDelAlta() {
   const caja = $('#u-perms-nuevo');
   if (!caja || caja.childElementCount) return;
-  caja.innerHTML = PERMISOS_LISTA.map(([k, etiqueta]) => `
-    <label class="u-perm"><input type="checkbox" id="u-perm-${k}"
-      ${PERMISOS_POR_DEFECTO.includes(k) ? 'checked' : ''}>
-      <span>${escapeHtml(etiqueta)}</span></label>`).join('');
+  caja.innerHTML = PERMISOS_SECCIONES.map(([seccion, permisos]) => `
+    <fieldset class="u-seccion">
+      <legend>${escapeHtml(seccion)}</legend>
+      ${permisos.map(([k, etiqueta]) => `
+        <label class="u-perm"><input type="checkbox" id="u-perm-${k}"
+          ${PERMISOS_POR_DEFECTO.includes(k) ? 'checked' : ''}>
+          <span>${escapeHtml(etiqueta)}</span></label>`).join('')}
+    </fieldset>`).join('');
 }
 
 /* Un administrador los tiene todos, así que las casillas sueltas sobran.
@@ -1926,9 +2047,13 @@ async function renderUsuarios() {
     // y las casillas hacían creer que alguno le faltaba.
     const permisosHtml = esJefe
       ? '<p class="usuario-todos">Todos los permisos</p>'
-      : `<div class="usuario-perms">${PERMISOS_LISTA.map(([k, etiqueta]) => `
-        <label class="u-perm"><input type="checkbox" data-perm="${k}" data-uid="${m.uid}"
-          ${m.permisos && m.permisos[k] ? 'checked' : ''}><span>${escapeHtml(etiqueta)}</span></label>`).join('')}</div>`;
+      : `<div class="usuario-perms">${PERMISOS_SECCIONES.map(([seccion, permisos]) => `
+        <fieldset class="u-seccion">
+          <legend>${escapeHtml(seccion)}</legend>
+          ${permisos.map(([k, etiqueta]) => `
+            <label class="u-perm"><input type="checkbox" data-perm="${k}" data-uid="${m.uid}"
+              ${tienePermiso(m, k) ? 'checked' : ''}><span>${escapeHtml(etiqueta)}</span></label>`).join('')}
+        </fieldset>`).join('')}</div>`;
     return `
       <article class="usuario-item${esJefe ? ' usuario-item-admin' : ''}">
         <div class="usuario-cab">
@@ -3757,9 +3882,11 @@ function renderInfo() {
     const hoy = hoyISO();
     const bloqueo = $('#info-cobro-bloqueo');
     let bloqueado = false;
-    if (hojaExiste(hoy) && hojaCerrada(hoy) && !esAdmin()) {
+    if (hojaExiste(hoy) && hojaCerrada(hoy)) {
       bloqueado = true;
-      bloqueo.textContent = '🔒 La hoja de cobranza de hoy ya está cerrada.';
+      bloqueo.textContent = esAdmin()
+        ? '🔒 La hoja de cobranza de hoy está cerrada. Para registrar un cobro hay que reabrirla desde 🧾 Hoja de cobranza.'
+        : '🔒 La hoja de cobranza de hoy ya está cerrada. Pídele al administrador que la reabra.';
     }
     bloqueo.hidden = !bloqueado;
     $('#info-cobro-form').hidden = bloqueado;
@@ -3791,7 +3918,9 @@ function problemaParaCobrar(c) {
   if (!puede('pagos')) return '🔒 No tienes permiso para registrar pagos';
   const dia = fechaDelCobro();
   // Si la hoja de ese día todavía no existe, no bloquea: se abre sola al cobrar.
-  if (hojaCerrada(dia) && !esAdmin()) return '🔒 La hoja de cobranza de hoy ya está cerrada';
+  // Cerrada es cerrada: no entra nada, ni siquiera con el código. Si de verdad
+  // falta un cobro de ese día, el administrador reabre la hoja y queda anotado.
+  if (hojaCerrada(dia)) return '🔒 La hoja de cobranza de ese día está cerrada';
   const monto = Number($('#cobro-monto').value);
   const debe = saldoDe(c);
   if (!monto || monto <= 0) return '⚠️ Escribe el monto cobrado';
@@ -3839,9 +3968,10 @@ async function registrarCobro() {
     if (!abierta) { toast(`❌ No se pudo abrir la hoja de cobranza del ${formatoFecha(dia)}. Intenta de nuevo.`); return; }
   }
   if (hojaCerrada(dia)) {
-    if (!esAdmin()) { toast('🔒 La hoja de cobranza de hoy ya está cerrada'); return; }
-    const autorizado = await pedirPin(`La hoja de cobranza del ${formatoFecha(dia)} ya está cerrada. Escribe tu código para registrar este cobro de todos modos.`);
-    if (!autorizado) { toast('🔒 Cobro cancelado'); return; }
+    alert(`La hoja de cobranza del ${formatoFecha(dia)} está cerrada.\n\n`
+      + 'No entra ningún cobro más en ese día. Si de verdad falta uno, el administrador '
+      + 'puede reabrir la hoja desde 🧾 Hoja de cobranza y volver a cerrarla después.');
+    return;
   }
 
   const monto = Number($('#cobro-monto').value);
@@ -4211,9 +4341,10 @@ async function confirmarNuevoAbono() {
     if (!abierta) { toast(`❌ No se pudo abrir la hoja de cobranza del ${formatoFecha(fecha)}. Intenta de nuevo.`); return; }
   }
   if (hojaCerrada(fecha)) {
-    if (!esAdmin()) { toast('🔒 Esa hoja de cobranza ya está cerrada'); return; }
-    const autorizado = await pedirPin(`La hoja de cobranza del ${formatoFecha(fecha)} ya está cerrada. Escribe tu código para agregar este pago de todos modos.`);
-    if (!autorizado) { toast('🔒 Cancelado'); return; }
+    alert(`La hoja de cobranza del ${formatoFecha(fecha)} está cerrada.\n\n`
+      + 'No entra ningún pago más en ese día. Si de verdad falta uno, el administrador '
+      + 'puede reabrir la hoja desde 🧾 Hoja de cobranza y volver a cerrarla después.');
+    return;
   }
 
   abonosActuales.push({
@@ -4850,8 +4981,10 @@ function renderEstadoHoja(fecha, filas = []) {
   const badge = $('#cob-estado-badge');
   const btnCrear = $('#btn-hoja-crear');
   const btnCerrar = $('#btn-hoja-cerrar');
+  const btnReabrir = $('#btn-hoja-reabrir');
   btnCrear.hidden = true;
   btnCerrar.hidden = true;
+  if (btnReabrir) btnReabrir.hidden = true;
 
   const detalle = $('#cob-estado-detalle');
   const h = hojaDe(fecha);
@@ -4867,6 +5000,7 @@ function renderEstadoHoja(fecha, filas = []) {
   if (h.cerrada) {
     badge.textContent = '🔒 Cerrada';
     badge.className = 'cob-estado-badge cob-estado-cerrada';
+    if (btnReabrir) btnReabrir.hidden = !esAdmin();
   } else {
     badge.textContent = '🟢 Abierta';
     badge.className = 'cob-estado-badge cob-estado-abierta';
@@ -4883,6 +5017,12 @@ function renderEstadoHoja(fecha, filas = []) {
   const cerrada = fechaHoraDeTimestamp(h.cerradaEn);
   if (h.cerrada) {
     lineas.push(`🔒 Cerrada por ${mostrarComo(h.cerradaPor) || '—'} ${cerrada ? 'el ' + cerrada : '(hora pendiente de confirmar)'}`);
+    lineas.push('🚫 Cerrada: no entra ni sale ningún cobro de este día');
+  }
+  // Si alguna vez se reabrió, queda dicho: es la única puerta que tiene
+  if (h.reabiertaPor) {
+    const reab = fechaHoraDeTimestamp(h.reabiertaEn);
+    lineas.push(`🔓 Reabierta por ${mostrarComo(h.reabiertaPor)} ${reab ? 'el ' + reab : ''}`);
   }
   detalle.innerHTML = lineas.map(t => `<span>${escapeHtml(t)}</span>`).join('');
   detalle.hidden = false;
@@ -5749,6 +5889,7 @@ function renderDetalleDespacho() {
 
 /* Cambia el estado del despacho abierto (al contado / devuelto / en reparto) */
 async function cambiarEstadoDespacho(estado) {
+  if (!puede('despachosCerrar')) { toast('🔒 No tienes permiso para cerrar repartos'); return; }
   const d = despachoPorId(despachoActivoId);
   if (!d) return;
   const actualizado = { ...d, estado };
@@ -6264,7 +6405,7 @@ function kardexConSaldo() {
 
 function abrirProductos() {
   $('#prod-buscar').value = '';
-  $('#btn-prod-nuevo').hidden = !puede('productos');
+  $('#btn-prod-nuevo').hidden = !puede('productosEditar');
   renderProductos();
   mostrarSeccion('productos');
 }
@@ -6295,7 +6436,8 @@ function renderProductos() {
     return;
   }
 
-  const permitido = puede('productos');
+  // El catálogo se ve con "productos"; tocarlo pide "productosEditar"
+  const permitido = puede('productosEditar');
   cuerpo.innerHTML = lista.map(p => {
     const stock = stockDe(p.id);
     const min = Number(p.stockMin) || 0;
@@ -6309,15 +6451,26 @@ function renderProductos() {
       <td class="col-num">${soles(p.precioC)}</td>
       <td class="col-num ${bajo ? 'prod-stock-bajo' : ''}" title="${bajo ? `Stock mínimo: ${min}` : ''}">${stock}${bajo ? ' ⚠️' : ''}</td>
       <td class="col-acc">${permitido ? `
-        <button type="button" class="btn btn-secondary btn-small" data-ingreso-producto="${escapeHtml(p.id)}" title="Registrar ingreso de este producto">📥</button>
-        <button type="button" class="btn btn-secondary btn-small" data-editar-producto="${escapeHtml(p.id)}" title="Editar">✏️</button>
-        <button type="button" class="btn btn-danger btn-small" data-borrar-producto="${escapeHtml(p.id)}" title="Borrar">🗑️</button>` : ''}</td>
+        <button type="button" class="btn btn-secondary btn-small" data-editar-producto="${escapeHtml(p.id)}" title="Editar (pide tu código)">✏️</button>
+        <button type="button" class="btn btn-danger btn-small" data-borrar-producto="${escapeHtml(p.id)}" title="Borrar (pide tu código)">🗑️</button>` : ''}</td>
     </tr>`;
   }).join('');
 }
 
+/* Cambiar un producto que ya existe mueve precios y unidades de todo lo que
+   se venda a partir de ahora, así que pide el código de seguridad. Crear uno
+   nuevo no: todavía no afecta a nada. */
+async function editarProductoConClave(id) {
+  const p = productoPorId(id);
+  if (!p) return;
+  if (!puede('productosEditar')) { toast('🔒 No tienes permiso para editar productos'); return; }
+  const autorizado = await pedirPin(`Vas a modificar el producto "${p.nombre}".`);
+  if (!autorizado) { toast('🔒 Modificación cancelada'); return; }
+  abrirFormProducto(p);
+}
+
 function abrirFormProducto(producto = null) {
-  if (!puede('productos')) { toast('🔒 No tienes permiso para gestionar productos'); return; }
+  if (!puede('productosEditar')) { toast('🔒 No tienes permiso para gestionar productos'); return; }
   $('#prod-form').reset();
   $('#prod-id').value = producto ? producto.id : '';
   $('#prod-codigo').value = producto ? (producto.codigo || '') : siguienteCodigoProducto();
@@ -6386,7 +6539,7 @@ async function guardarProductoForm(ev) {
 }
 
 async function borrarProducto(id) {
-  if (!puede('productos')) return;
+  if (!puede('productosEditar')) { toast('🔒 No tienes permiso para borrar productos'); return; }
   const p = productoPorId(id);
   if (!p) return;
   const movimientos = kardex.filter(m => m.productoId === id).length;
@@ -6398,6 +6551,8 @@ async function borrarProducto(id) {
     return;
   }
   if (!confirm(`¿Borrar el producto "${p.nombre}"?`)) return;
+  const autorizado = await pedirPin(`Vas a borrar el producto "${p.nombre}".`);
+  if (!autorizado) { toast('🔒 Borrado cancelado'); return; }
   try {
     await eliminarProductoDeStore(id);
   } catch (e) {
@@ -6412,12 +6567,37 @@ async function borrarProducto(id) {
 
 /* ══════════════════════ Kardex de almacén ══════════════════════ */
 
-let kdxFiltros = { producto: '', tipo: '', desde: '', hasta: '' };
+let kdxFiltros = { producto: '', tipo: '', motivo: '', usuario: '', texto: '', desde: '', hasta: '' };
+let kdxVista = 'movimientos';    // 'movimientos' | 'dias'
 
 function abrirKardex() {
   llenarSelectoresProducto();
+  llenarFiltrosKardex();
   renderKardex();
   mostrarSeccion('kardex');
+}
+
+/* Los desplegables de motivo y de usuario se arman con lo que hay de verdad en
+   el kardex: ofrecer motivos que nadie usó solo estorba. */
+function llenarFiltrosKardex() {
+  const selMotivo = $('#kdx-fil-motivo');
+  if (selMotivo) {
+    const usados = [...new Set(kardex.map(m => m.motivo).filter(Boolean))]
+      .sort((a, b) => (MOTIVOS_KARDEX[a] || a).localeCompare(MOTIVOS_KARDEX[b] || b, 'es'));
+    const antes = selMotivo.value;
+    selMotivo.innerHTML = '<option value="">Todos los motivos</option>'
+      + usados.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(MOTIVOS_KARDEX[k] || k)}</option>`).join('');
+    selMotivo.value = antes;
+  }
+  const selUsuario = $('#kdx-fil-usuario');
+  if (selUsuario) {
+    const gente = [...new Set(kardex.map(m => mostrarComo(m.usuario)).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es'));
+    const antes = selUsuario.value;
+    selUsuario.innerHTML = '<option value="">Todos</option>'
+      + gente.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
+    selUsuario.value = antes;
+  }
 }
 
 function llenarSelectoresProducto() {
@@ -6450,18 +6630,53 @@ function llenarMotivos(tipo) {
 }
 
 function movimientosFiltrados() {
+  const buscado = normalizarNombre(kdxFiltros.texto || '');
   return kardexConSaldo().filter(m => {
     if (kdxFiltros.producto && m.productoId !== kdxFiltros.producto) return false;
     if (kdxFiltros.tipo && m.tipo !== kdxFiltros.tipo) return false;
+    if (kdxFiltros.motivo && m.motivo !== kdxFiltros.motivo) return false;
+    if (kdxFiltros.usuario && mostrarComo(m.usuario) !== kdxFiltros.usuario) return false;
     if (kdxFiltros.desde && (m.fecha || '') < kdxFiltros.desde) return false;
     if (kdxFiltros.hasta && (m.fecha || '') > kdxFiltros.hasta) return false;
+    if (buscado) {
+      const p = productoPorId(m.productoId);
+      const donde = [m.documento, m.nota, m.proveedor, p && p.nombre, p && p.codigo]
+        .filter(Boolean).map(normalizarNombre).join(' ');
+      if (!donde.includes(buscado)) return false;
+    }
     return true;
   }).reverse();   // lo más reciente arriba
+}
+
+/* En cuánto quedó el stock de un producto al cerrar cada día.
+   El saldo NO se recalcula sobre lo filtrado: se toma el que arrastra el
+   kardex completo. Si no, mirar "solo agosto" daría un stock que empieza en
+   cero y ningún número cuadraría con el almacén de verdad. */
+function stockPorDia(productoId) {
+  if (!productoId) return [];
+  const dias = new Map();
+  for (const m of kardexConSaldo()) {
+    if (m.productoId !== productoId) continue;
+    const f = m.fecha || '';
+    if (!f) continue;
+    const c = cantidadConSigno(m);
+    const d = dias.get(f) || { fecha: f, entradas: 0, salidas: 0, movimientos: 0, saldo: 0 };
+    if (c >= 0) d.entradas += c; else d.salidas += -c;
+    d.movimientos += 1;
+    d.saldo = m.saldo;          // el último del día manda: así cierra el día
+    dias.set(f, d);
+  }
+  let lista = [...dias.values()];
+  // El rango de fechas sí recorta lo que se enseña, pero después de calcular
+  if (kdxFiltros.desde) lista = lista.filter(d => d.fecha >= kdxFiltros.desde);
+  if (kdxFiltros.hasta) lista = lista.filter(d => d.fecha <= kdxFiltros.hasta);
+  return lista.sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
 function renderKardex() {
   const cuerpo = $('#kdx-body');
   if (!cuerpo) return;
+  llenarFiltrosKardex();
   const lista = movimientosFiltrados();
 
   let entradas = 0, salidas = 0;
@@ -6489,11 +6704,29 @@ function renderKardex() {
       (bajos.length > 8 ? ` y ${bajos.length - 8} más` : '');
   }
 
-  $('#kdx-vacio').hidden = !!lista.length;
-  $('.kdx-tabla-wrap').hidden = !lista.length;
+  // La vista por día solo tiene sentido con un producto elegido: el "stock al
+  // cerrar el día" de todo el almacén junto no significa nada.
+  const porDia = kdxVista === 'dias';
+  const dias = porDia ? stockPorDia(kdxFiltros.producto) : [];
+  $('.kdx-dias-wrap').hidden = !(porDia && dias.length);
+  $('#kdx-dias-aviso').hidden = !(porDia && !kdxFiltros.producto);
+  $('.kdx-tabla-wrap').hidden = porDia || !lista.length;
+  $('#kdx-vacio').hidden = porDia
+    ? !(kdxFiltros.producto && !dias.length)
+    : !!lista.length;
+  if (porDia) {
+    $('#kdx-dias-body').innerHTML = dias.map(d => `<tr>
+      <td class="kdx-fecha">${formatoFecha(d.fecha)}</td>
+      <td class="col-num kdx-entrada">${d.entradas || ''}</td>
+      <td class="col-num kdx-salida">${d.salidas || ''}</td>
+      <td class="col-num">${d.movimientos}</td>
+      <td class="col-num kdx-saldo"><strong>${d.saldo}</strong></td>
+    </tr>`).join('');
+    return;
+  }
   if (!lista.length) { cuerpo.innerHTML = ''; return; }
 
-  const permitido = puede('productos');
+  const permitido = puede('kardex');
   cuerpo.innerHTML = lista.map(m => {
     const p = productoPorId(m.productoId);
     const c = cantidadConSigno(m);
@@ -7354,11 +7587,12 @@ function renderVentas() {
       <td class="col-num"><strong>${soles(n.total)}</strong></td>
       <td>${escapeHtml(mostrarComo(anulada ? n.anulada.por : n.emitidaPor) || '—')}</td>
       <td class="col-acc">
-        ${!anulada && puede('ventas') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
+        ${!anulada && puede('ventasEditar') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
         ${!anulada && pendiente && puede('despachos') ? `<button type="button" class="btn btn-secondary btn-small" data-despachar-nota="${escapeHtml(n.id)}" title="Mandarla a reparto">🚚</button>` : ''}
         ${!anulada && !pendiente ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
-        ${!anulada && mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-anular-nota="${escapeHtml(n.id)}" title="Anular la nota (pide tu código)">🚫</button>` : ''}
+        ${!anulada && puede('ventasAnular') ? `<button type="button" class="btn btn-danger btn-small" data-anular-nota="${escapeHtml(n.id)}" title="Anular: la nota se queda de constancia">🚫</button>` : ''}
+        ${mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-eliminar-nota="${escapeHtml(n.id)}" title="Eliminar del todo (pide tu código)">🗑️</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -7374,7 +7608,7 @@ function nvProponerFechaPago() {
 /* Abre una nota ya emitida para modificarla. La nota conserva su id, su
    número y su hora: es la MISMA nota, corregida, no una copia. */
 function abrirNotaParaEditar(notaId) {
-  if (!puede('ventas')) { toast('🔒 No tienes permiso para modificar notas de venta'); return; }
+  if (!puede('ventasEditar')) { toast('🔒 No tienes permiso para modificar notas de venta'); return; }
   const n = notas.find(x => x.id === notaId);
   if (!n) return;
   if (n.anulada) { toast('🚫 Esa nota está anulada: ya no se puede modificar'); return; }
@@ -7409,7 +7643,7 @@ function abrirNuevaNota(base = null, editandoId = '') {
   nvProponerFechaPago();
   $('#nv-descuento').value = 0;
   $('#nv-permitir-precios').checked = false;
-  $('#nv-cantidad').value = 0;
+  $('#nv-cantidad').value = '';
   limpiarBuscadorNota();
   nvSeleccionarCliente(base ? (base.clienteId || '') : '');
   mostrarVistaVenta('form');
@@ -7525,7 +7759,8 @@ function agregarItemNota() {
   }
   // Aquí se venden sacos, cajas y baldes: nada se parte por la mitad, así que
   // la cantidad es siempre un número entero.
-  const cantidad = Number($('#nv-cantidad').value);
+  const escrito = $('#nv-cantidad').value.trim();
+  const cantidad = escrito === '' ? NaN : Number(escrito);
   if (!Number.isInteger(cantidad) || cantidad <= 0) {
     toast(Number.isFinite(cantidad) && cantidad > 0
       ? '⚠️ La cantidad tiene que ser un número entero'
@@ -7552,7 +7787,7 @@ function agregarItemNota() {
     });
   }
   limpiarBuscadorNota();
-  $('#nv-cantidad').value = 0;
+  $('#nv-cantidad').value = '';
   $('#nv-buscar-producto').focus();   // el siguiente producto se escribe seguido
   renderNotaItems();
 }
@@ -7833,10 +8068,12 @@ function seguirNota(notaId) {
    apunte en el kardex, su despacho desaparece del reparto y su crédito deja
    de existir, quedando la boleta registrada como anulada en Créditos.
 
-   Es cosa del administrador y pide el código de seguridad, porque mueve
-   stock y hace desaparecer un crédito. */
+   No pide el código: anular deja rastro de todo —la nota se queda, el kardex
+   anota la devolución y la boleta figura anulada en Créditos—, así que un
+   error se ve y se arregla emitiendo otra nota. Lo que sí pide código es
+   ELIMINAR, que es lo que no deja rastro. */
 async function anularNota(notaId) {
-  if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede anular notas'); return; }
+  if (!puede('ventasAnular')) { toast('🔒 No tienes permiso para anular notas de venta'); return; }
   const n = notas.find(x => x.id === notaId);
   if (!n) return;
   if (n.anulada) { toast('🚫 Esa nota ya está anulada'); return; }
@@ -7866,9 +8103,6 @@ async function anularNota(notaId) {
   const conCredito = c ? `\nSe borrará su crédito (boleta ${numeroCorto(c.boleta)}) y quedará como anulado.` : '';
   if (!confirm(`¿Anular la nota ${numeroCorto(n.numero)}?${detalle}${conDespacho}${conCredito}\n\n`
     + 'La nota se queda registrada como anulada; no se borra.')) return;
-
-  const autorizado = await pedirPin(`Vas a anular la nota ${numeroCorto(n.numero)} y devolver su mercadería al almacén.`);
-  if (!autorizado) { toast('🔒 Anulación cancelada'); return; }
 
   const marca = { motivo: texto, por: quienSoy(), en: marcaDeTiempo() };
   const anulada = { ...n, anulada: marca };
@@ -7909,6 +8143,62 @@ async function anularNota(notaId) {
   }
 
   toast(`🚫 Nota ${numeroCorto(n.numero)} anulada${salidas.length ? ' y stock devuelto' : ''}`);
+  renderVentas();
+  renderProductos();
+  renderKardex();
+  renderListaDespachos();
+  render();
+}
+
+/* ---- Eliminar una nota ----
+   Esto sí borra: la nota desaparece y no queda rastro de que existió, así que
+   es solo del administrador y pide el código de seguridad. Deshace lo mismo
+   que anular —el stock vuelve, el despacho se va, el crédito desaparece— pero
+   sin dejar constancia. Para lo de todos los días está ANULAR. */
+async function eliminarNota(notaId) {
+  if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede eliminar notas'); return; }
+  const n = notas.find(x => x.id === notaId);
+  if (!n) return;
+
+  const d = despachoDeNota(notaId);
+  const c = creditoDeNota(n);
+  if (c && abonosDe(c).length) {
+    alert(`No se puede eliminar la nota ${numeroCorto(n.numero)}: su crédito (boleta ${numeroCorto(c.boleta)}) `
+      + `ya tiene ${abonosDe(c).length} cobro(s) registrado(s).\n\nQuita primero esos cobros.`);
+    return;
+  }
+
+  const salidas = kardex.filter(m => m.notaId === notaId);
+  const detalle = salidas.length
+    ? `\n\nSe borrarán sus ${salidas.length} apunte(s) de almacén y el stock volverá como estaba.` : '';
+  const conDespacho = d ? '\nSe quitará de la zona de despachos.' : '';
+  const conCredito = c ? `\nSe borrará su crédito (boleta ${numeroCorto(c.boleta)}).` : '';
+  if (!confirm(`¿ELIMINAR del todo la nota ${numeroCorto(n.numero)}?${detalle}${conDespacho}${conCredito}\n\n`
+    + 'No quedará constancia de que existió. Si lo que quieres es dejar registro, usa 🚫 Anular.')) return;
+
+  const autorizado = await pedirPin(`Vas a ELIMINAR la nota ${numeroCorto(n.numero)}. No quedará rastro.`);
+  if (!autorizado) { toast('🔒 Eliminación cancelada'); return; }
+
+  try {
+    await Promise.all(salidas.map(m => eliminarKardexDeStore(m.id)));
+    if (d) await eliminarDespachoDeStore(d.id);
+    if (c) await eliminarDeStore(c.id);
+    // Si estaba anulada, su marca en Créditos también se va con ella
+    if (anuladoDe(n.numero)) await eliminarAnuladoDeStore(String(n.numero));
+    await eliminarNotaDeStore(notaId);
+  } catch (e) {
+    console.error(e);
+    toast(avisoDeFallo(e, '❌ No se pudo eliminar la nota. Revisa tu conexión.'));
+    return;
+  }
+
+  kardex = kardex.filter(m => m.notaId !== notaId);
+  notas = notas.filter(x => x.id !== notaId);
+  if (d) despachos = despachos.filter(x => x.id !== d.id);
+  if (c) creditos = creditos.filter(x => x.id !== c.id);
+  anulados = anulados.filter(a => numeroDeComprobante(a.boleta) !== numeroDeComprobante(n.numero));
+
+  toast(`🗑️ Nota ${numeroCorto(n.numero)} eliminada`);
   renderVentas();
   renderProductos();
   renderKardex();
@@ -8341,10 +8631,8 @@ function inicializarEventos() {
   $('#prod-buscar').addEventListener('input', renderProductos);
   $('#prod-body').addEventListener('click', ev => {
     const editar = ev.target.closest('[data-editar-producto]');
-    const ingreso = ev.target.closest('[data-ingreso-producto]');
     const borrar = ev.target.closest('[data-borrar-producto]');
-    if (editar) abrirFormProducto(productoPorId(editar.dataset.editarProducto));
-    else if (ingreso) abrirIngresos(ingreso.dataset.ingresoProducto);
+    if (editar) editarProductoConClave(editar.dataset.editarProducto);
     else if (borrar) borrarProducto(borrar.dataset.borrarProducto);
   });
 
@@ -8436,16 +8724,39 @@ function inicializarEventos() {
   $('#btn-kardex').addEventListener('click', abrirKardex);
   $('#nav-kardex').addEventListener('click', abrirKardex);
   $('#btn-kardex-imprimir').addEventListener('click', imprimirKardex);
-  for (const [id, campo] of [['#kdx-fil-producto', 'producto'], ['#kdx-fil-tipo', 'tipo'],
-    ['#kdx-fil-desde', 'desde'], ['#kdx-fil-hasta', 'hasta']]) {
-    $(id).addEventListener('change', () => { kdxFiltros[campo] = $(id).value; renderKardex(); });
+  const CAMPOS_KDX = [['#kdx-fil-producto', 'producto'], ['#kdx-fil-tipo', 'tipo'],
+    ['#kdx-fil-motivo', 'motivo'], ['#kdx-fil-usuario', 'usuario'],
+    ['#kdx-fil-desde', 'desde'], ['#kdx-fil-hasta', 'hasta'], ['#kdx-fil-texto', 'texto']];
+  for (const [id, campo] of CAMPOS_KDX) {
+    // El buscador de texto responde mientras se escribe; los demás, al cambiar
+    const evento = id === '#kdx-fil-texto' ? 'input' : 'change';
+    $(id).addEventListener(evento, () => { kdxFiltros[campo] = $(id).value; renderKardex(); });
   }
   $('#btn-kdx-limpiar').addEventListener('click', () => {
-    kdxFiltros = { producto: '', tipo: '', desde: '', hasta: '' };
-    $('#kdx-fil-producto').value = ''; $('#kdx-fil-tipo').value = '';
-    $('#kdx-fil-desde').value = ''; $('#kdx-fil-hasta').value = '';
+    kdxFiltros = { producto: '', tipo: '', motivo: '', usuario: '', texto: '', desde: '', hasta: '' };
+    CAMPOS_KDX.forEach(([id]) => { $(id).value = ''; });
     renderKardex();
   });
+  // Atajo: del día 1 de este mes hasta hoy, que es el corte que más se mira
+  $('#btn-kdx-mes').addEventListener('click', () => {
+    const hoy = hoyISO();
+    kdxFiltros.desde = hoy.slice(0, 8) + '01';
+    kdxFiltros.hasta = hoy;
+    $('#kdx-fil-desde').value = kdxFiltros.desde;
+    $('#kdx-fil-hasta').value = kdxFiltros.hasta;
+    renderKardex();
+  });
+  // Las dos formas de mirar el kardex
+  for (const [id, vista] of [['#btn-kdx-vista-mov', 'movimientos'], ['#btn-kdx-vista-dias', 'dias']]) {
+    $(id).addEventListener('click', () => {
+      kdxVista = vista;
+      $('#btn-kdx-vista-mov').classList.toggle('activo', vista === 'movimientos');
+      $('#btn-kdx-vista-dias').classList.toggle('activo', vista === 'dias');
+      $('#btn-kdx-vista-mov').setAttribute('aria-selected', String(vista === 'movimientos'));
+      $('#btn-kdx-vista-dias').setAttribute('aria-selected', String(vista === 'dias'));
+      renderKardex();
+    });
+  }
   $('#kdx-body').addEventListener('click', ev => {
     const borrar = ev.target.closest('[data-borrar-kardex]');
     if (borrar) borrarMovimiento(borrar.dataset.borrarKardex);
@@ -8468,10 +8779,12 @@ function inicializarEventos() {
     const despachar = ev.target.closest('[data-despachar-nota]');
     const seguir = ev.target.closest('[data-seguir-nota]');
     const anular = ev.target.closest('[data-anular-nota]');
+    const eliminar = ev.target.closest('[data-eliminar-nota]');
     if (editar) { abrirNotaParaEditar(editar.dataset.editarNota); return; }
     if (despachar) { despacharNota(despachar.dataset.despacharNota); return; }
     if (seguir) { seguirNota(seguir.dataset.seguirNota); return; }
     if (anular) { anularNota(anular.dataset.anularNota); return; }
+    if (eliminar) { eliminarNota(eliminar.dataset.eliminarNota); return; }
     if (imprimir) {
       const n = notas.find(x => x.id === imprimir.dataset.imprimirNota);
       if (n) imprimirNota(n);
@@ -8614,6 +8927,7 @@ function inicializarEventos() {
   $('#btn-cob-imprimir').addEventListener('click', imprimirCobranza);
   $('#btn-hoja-crear').addEventListener('click', () => crearHojaCobranza($('#cob-fecha').value || hoyISO()));
   $('#btn-hoja-cerrar').addEventListener('click', () => cerrarHojaCobranza($('#cob-fecha').value || hoyISO()));
+  $('#btn-hoja-reabrir').addEventListener('click', () => reabrirHojaCobranza($('#cob-fecha').value || hoyISO()));
 
   // ====== Despachos ======
   $('#btn-despachos').addEventListener('click', abrirDespachos);
