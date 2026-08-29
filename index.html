@@ -683,9 +683,22 @@
     </div>
 
     <div class="info-col info-col-foto">
-    <div id="info-foto-wrap" hidden>
+    <div id="info-foto-caja">
       <h3 class="info-titulo">📷 Boleta física</h3>
-      <img id="info-foto" class="info-foto" alt="Boleta" data-ver-foto-info>
+      <div id="info-foto-wrap" hidden>
+        <img id="info-foto" class="info-foto" alt="Boleta" data-ver-foto-info>
+      </div>
+      <p class="info-sin-foto" id="info-sin-foto" hidden>Todavía no tiene la foto de la boleta firmada.</p>
+      <!-- La foto se puede poner (o cambiar) sin salir de la ficha: la boleta
+           firmada suele llegar después, al cobrar, no al crear el crédito. -->
+      <div class="photo-actions" id="info-foto-acciones" hidden>
+        <label class="btn btn-secondary btn-small photo-btn">📷 Tomar foto
+          <input type="file" id="info-foto-camara" accept="image/*" capture="environment" hidden>
+        </label>
+        <label class="btn btn-secondary btn-small photo-btn">🖼️ Elegir imagen
+          <input type="file" id="info-foto-archivo" accept="image/*" hidden>
+        </label>
+      </div>
     </div>
     </div>
 
@@ -1185,12 +1198,6 @@
         <button type="button" id="btn-kardex-imprimir" class="btn btn-secondary btn-small">🖨️ Imprimir</button>
       </div>
     </div>
-
-    <p class="kdx-explica">
-      Esta hoja <strong>se llena sola</strong>: cada nota de venta descuenta lo vendido y cada
-      ingreso que registras queda anotado aquí. Si te llegó mercadería o quieres cuadrar con el
-      conteo físico, hazlo desde <strong>📥 Ingreso de productos</strong>.
-    </p>
 
     <div class="kdx-filtros">
       <label class="field"><span>Producto</span>

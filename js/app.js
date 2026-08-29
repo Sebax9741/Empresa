@@ -3874,6 +3874,10 @@ function renderInfo() {
 
   $('#info-foto-wrap').hidden = !c.foto;
   if (c.foto) $('#info-foto').src = c.foto;
+  // La boleta firmada casi siempre llega después, al cobrar: se puede poner
+  // desde aquí sin tener que abrir el crédito para editarlo.
+  $('#info-sin-foto').hidden = !!c.foto;
+  $('#info-foto-acciones').hidden = !puede('editar');
 
   // El apartado de cobro solo para quien tenga permiso de registrar pagos
   const puedeCobrar = puede('pagos') && debe > 0 && abonos.length < MAX_ABONOS;
@@ -4143,8 +4147,17 @@ function abrirFormulario(credito = null, prefill = null) {
       modificadoEn: a.modificadoEn || 0,
       firma: a.firma || '',
     }));
-    $('#field-pago-inicial').hidden = true;
-    $('#abonos-box').hidden = false;
+    /* Al volver el reparto se abre el crédito que la nota ya había creado.
+       Si todavía no tiene ningún cobro, lo que toca ahora es anotar la primera
+       entrega, así que se enseña "pago inicial" en vez de la lista de cobros
+       vacía. Es el mismo hueco de siempre, solo que el crédito ya existía. */
+    const desdeReparto = !!despachoOrigen && !abonosActuales.length;
+    $('#field-pago-inicial').hidden = !desdeReparto;
+    $('#abonos-box').hidden = desdeReparto;
+    if (desdeReparto) {
+      $('#f-pago-inicial').value = '';
+      $('#f-pago-metodo').value = 'efectivo';
+    }
     renderAbonos();
     // Si solo puede registrar pagos (no editar), bloquea los demás campos
     const soloEditarCampos = puede('editar');
@@ -4161,6 +4174,15 @@ function abrirFormulario(credito = null, prefill = null) {
     $('#foto-acciones-wrap').style.display = soloEditarCampos ? '' : 'none';
     // Vuelve a bloquear la zona si el cliente elegido ya la define
     if (soloEditarCampos) aplicarClienteSeleccionado();
+    // Abierto desde el reparto: lo de arriba viene de la nota y no se toca
+    if (despachoOrigen) {
+      $('#form-title').textContent = `Crédito de la boleta ${numeroCorto(credito.boleta)} (desde despacho)`;
+      ['f-boleta', 'f-cliente-buscar', 'f-zona', 'f-monto', 'f-fecha', 'f-fecha-despacho', 'f-vencimiento']
+        .forEach(id => { $('#' + id).disabled = true; });
+      $('#btn-cliente-nuevo').disabled = true;
+      $('#btn-atajo-1').disabled = true;
+      $('#btn-atajo-2').disabled = true;
+    }
   } else {
     $('#form-title').textContent = (prefill && prefill.desdeDespacho) ? 'Nuevo crédito (desde despacho)' : 'Nuevo crédito';
     $('#f-id').value = '';
@@ -4626,6 +4648,43 @@ function procesarImagen(file) {
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')); };
     img.src = url;
   });
+}
+
+/* Poner o cambiar la foto de la boleta desde la ficha del crédito, sin pasar
+   por el formulario de edición: es donde se está cuando llega la boleta
+   firmada, al cobrar. */
+async function manejarFotoDesdeFicha(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const c = creditos.find(x => x.id === infoCreditoId);
+  if (!c) return;
+  if (!puede('editar')) { toast('🔒 No tienes permiso para editar créditos'); return; }
+  let foto;
+  try {
+    foto = await procesarImagen(file);
+  } catch (e) {
+    toast('❌ No se pudo procesar la imagen');
+    return;
+  }
+  const mini = await hacerMiniatura(foto);
+  const actualizado = { ...c, foto, fotoMini: mini };
+  try {
+    await guardarEnStore(actualizado);
+  } catch (e) {
+    console.error(e);
+    const pesada = foto.length > 700000;
+    toast(pesada
+      ? '❌ La foto pesa demasiado. Toma otra más de cerca.'
+      : avisoDeFallo(e, '❌ No se pudo guardar la foto. Revisa tu conexión.'));
+    return;
+  }
+  const i = creditos.findIndex(x => x.id === c.id);
+  if (i >= 0) creditos[i] = actualizado;
+  if (mini) { miniaturas.set(c.id, mini); DB.putMiniatura({ id: c.id, mini }).catch(() => {}); }
+  render();
+  renderInfo();
+  toast('📷 Foto de la boleta guardada');
 }
 
 async function manejarFoto(input) {
@@ -6006,8 +6065,7 @@ function renderDetalleDespacho() {
   let acciones = '';
   if (d.estado === 'credito' && d.creditoId) {
     acciones = `
-      <button type="button" class="btn btn-primary btn-block" id="btn-desp-ver-credito">📄 Ver crédito enlazado</button>
-      <button type="button" class="btn btn-secondary btn-block" data-desp-estado="reparto">↩️ Deshacer enlace (volver a “en reparto”)</button>`;
+      <button type="button" class="btn btn-primary btn-block" id="btn-desp-ver-credito">📄 Ver crédito enlazado</button>`;
   } else if (d.estado === 'contado' || d.estado === 'devuelto') {
     // Si al devolverlo se anuló su nota, esto no se deshace desde aquí: la
     // nota quedó anulada de constancia y su mercadería ya volvió al almacén.
@@ -6068,11 +6126,21 @@ async function devolverYAnular() {
     toast('🔒 Marcar como devuelto anula su nota, y no tienes ese permiso');
     return;
   }
+  // Su crédito se va con ella: no se entregó nada, así que no hay nada que
+  // cobrar. Si ya tuviera cobros, el dinero está en una hoja de cobranza y
+  // esto no se puede deshacer desde aquí.
+  const c = n ? creditoDeNota(n) : null;
+  if (c && abonosDe(c).length) {
+    alert(`No se puede dar por devuelto: su crédito (boleta ${numeroCorto(c.boleta)}) `
+      + `ya tiene ${abonosDe(c).length} cobro(s) registrado(s).\n\nQuita primero esos cobros.`);
+    return;
+  }
   const detalle = salidas.length
     ? `\n\nVuelven al almacén ${salidas.length} producto(s), anotados como "devuelto".` : '';
   const conNota = n ? `\nLa nota ${numeroCorto(n.numero)} queda anulada, de constancia.` : '';
+  const conCredito = c ? `\nSe borrará su crédito: no hay nada que cobrar.` : '';
   if (!confirm(`¿Marcar como devuelto el pedido de ${d.cliente || 'este cliente'}`
-    + `${d.boleta ? ` (boleta ${numeroCorto(d.boleta)})` : ''}?${conNota}${detalle}`)) return;
+    + `${d.boleta ? ` (boleta ${numeroCorto(d.boleta)})` : ''}?${conNota}${conCredito}${detalle}`)) return;
 
   const marca = { motivo: 'Devuelto en el reparto', por: quienSoy(), en: marcaDeTiempo() };
   try {
@@ -6094,7 +6162,12 @@ async function devolverYAnular() {
         motivo: 'devuelto', documento: `Devolución nota ${numeroCorto(n.numero)}`, notaId: n.id,
         nota: marca.motivo,
       })));
-      // 4) Y su número queda anotado como anulado
+      // 4) Su crédito desaparece: no se entregó nada que cobrar
+      if (c) {
+        await eliminarDeStore(c.id);
+        creditos = creditos.filter(x => x.id !== c.id);
+      }
+      // 5) Y su número queda anotado como anulado
       await guardarAnuladoEnStore({
         id: String(n.numero), boleta: String(n.numero), motivo: marca.motivo,
         notaId: n.id, anuladoPor: marca.por, anuladoEn: marca.en,
@@ -6119,9 +6192,21 @@ async function devolverYAnular() {
    Al guardar el crédito, el despacho queda marcado "a crédito" y enlazado
    (la foto de la boleta firmada y las notas se guardan en el crédito). */
 function crearCreditoDesdeDespacho(id) {
-  if (!puede('crear')) { toast('🔒 No tienes permiso para crear créditos'); return; }
   const d = despachoPorId(id);
   if (!d) return;
+  // La nota ya trajo su crédito al nacer, así que casi siempre no hay que
+  // crear nada: se abre el que hay para completarlo con lo que llega ahora
+  // —el pago inicial, la boleta firmada, alguna nota— y al guardar queda
+  // enlazado con el despacho. Crear otro dejaría dos créditos por una venta.
+  const n = d.notaId ? notas.find(x => x.id === d.notaId) : null;
+  const yaHay = n ? creditoDeNota(n) : null;
+  if (yaHay) {
+    if (!puede('editar')) { toast('🔒 No tienes permiso para editar créditos'); return; }
+    despachoOrigen = d.id;
+    abrirFormulario(yaHay);
+    return;
+  }
+  if (!puede('crear')) { toast('🔒 No tienes permiso para crear créditos'); return; }
   despachoOrigen = d.id;
   abrirFormulario(null, {
     desdeDespacho: true,
@@ -6333,13 +6418,12 @@ async function guardarCredito(ev) {
   const existente = creditos.find(c => c.id === id);
   const fecha = $('#f-fecha').value;
 
-  // Abonos: al editar vienen de la sección; al crear, del "pago inicial" opcional
-  let abonos;
-  if (existente) {
-    abonos = abonosActuales.slice();
-  } else {
+  // Abonos: al editar vienen de la sección; al crear —y al abrirlo desde el
+  // reparto, que es lo mismo pero sobre el crédito que ya existía— del "pago
+  // inicial" opcional.
+  const primeraEntrega = () => {
     const pagoInicial = Number($('#f-pago-inicial').value) || 0;
-    abonos = pagoInicial > 0 ? [{
+    return pagoInicial > 0 ? [{
       monto: pagoInicial,
       fecha,
       metodo: $('#f-pago-metodo').value,
@@ -6348,6 +6432,13 @@ async function guardarCredito(ev) {
       registradoFecha: hoyISO(),
       registrado: Date.now(),
     }] : [];
+  };
+  let abonos;
+  if (existente) {
+    abonos = abonosActuales.length ? abonosActuales.slice()
+      : (despachoOrigen ? primeraEntrega() : []);
+  } else {
+    abonos = primeraEntrega();
   }
 
   const credito = {
@@ -6397,8 +6488,10 @@ async function guardarCredito(ev) {
   const idx = creditos.findIndex(c => c.id === id);
   if (idx >= 0) creditos[idx] = credito; else creditos.push(credito);
 
-  // Si el crédito nació de un despacho, enlázalos y márcalo "a crédito"
-  const origen = existente ? null : despachoOrigen;
+  // Si se abrió desde un despacho, quedan enlazados y el reparto pasa a "a
+  // crédito". Vale igual si el crédito ya existía —que es lo normal ahora,
+  // porque lo trajo la nota—: lo que marca el cierre del reparto es esto.
+  const origen = despachoOrigen;
   despachoOrigen = null;
   if (origen) await vincularDespachoConCredito(origen, credito);
 
@@ -7841,12 +7934,65 @@ const ESTADOS_NOTA = {
   pagado:    { etiqueta: '✅ Pagado', clase: 'pedido-pagado' },
 };
 
+/* Ahora cada nota nace con su crédito (ver "Cada nota de venta es también un
+   crédito"), así que la existencia del crédito ya no dice en qué punto va: lo
+   dice el reparto. El orden es: si ya está cobrada del todo, pagada; si salió,
+   lo que diga su despacho; y si no ha salido, por despachar. */
 function estadoDeNota(nota) {
   // Una nota anulada ya no sigue el recorrido: se queda ahí, de constancia
   if (nota && nota.anulada) return 'anulada';
   const credito = creditoDeNota(nota);
-  if (credito) return estadoEfectivo(credito) === 'pagado' ? 'pagado' : 'credito';
-  return despachoDeNota(nota.id) ? 'reparto' : 'pendiente';
+  if (credito && estadoEfectivo(credito) === 'pagado') return 'pagado';
+  const d = despachoDeNota(nota.id);
+  if (d) return d.estado === 'credito' ? 'credito' : 'reparto';
+  return 'pendiente';
+}
+
+/* ====== Cada nota de venta es también un crédito ======
+   💳 Créditos no es una lista aparte de 🧮 Notas de venta: es la MISMA venta
+   con lo que se le añade después —los cobros, la boleta firmada, el
+   compromiso de pago—. Por eso la nota trae su crédito de nacimiento, en vez
+   de obligar a escribir a mano lo que la nota ya dice.
+
+   El enlace va en UNA sola dirección, y es a propósito: borrar la nota se
+   lleva su crédito (esa venta no existió), pero borrar el crédito NO borra la
+   nota, porque el crédito es lo añadido y la nota es el comprobante que se le
+   entregó al cliente. */
+async function crearCreditoDeLaNota(nota) {
+  if (!nota) return null;
+  // Una venta al contado se cobra en el acto: no hay nada que ir a cobrar
+  if (nota.condicion === 'contado') return null;
+  if (creditoDeNota(nota)) return null;          // ya lo tiene (o se enlazó)
+  const cli = nota.clienteId ? clientePorId(nota.clienteId) : null;
+  const credito = {
+    id: nuevoId(),
+    boleta: nota.numero || '',
+    cliente: nota.clienteNombre || (cli ? cli.nombre : ''),
+    clienteId: nota.clienteId || '',
+    zona: nota.zona || (cli ? cli.zona : ''),
+    monto: Number(nota.total) || 0,
+    fecha: nota.fecha || hoyISO(),
+    fechaDespacho: null,
+    vencimiento: nota.fechaPago || sumarDias(nota.fecha || hoyISO(), settings.dias),
+    abonos: [],
+    notas: '',
+    foto: null,
+    fotoMini: null,
+    notaId: nota.id,
+    creado: Date.now(),
+    compromiso: null,
+    compromisoPor: null,
+    compromisoEn: null,
+  };
+  credito.estado = estadoCalculado(credito);
+  try {
+    await guardarEnStore(credito);
+    if (!creditos.some(c => c.id === credito.id)) creditos.push(credito);
+    return credito;
+  } catch (e) {
+    console.error('No se pudo crear el crédito de la nota', nota.numero, e);
+    return null;
+  }
 }
 
 /* Las que todavía no salieron a reparto: es lo que se ofrece en Despachos */
@@ -7994,6 +8140,20 @@ function abrirNuevaNota(base = null, editandoId = '') {
   // ofrece, y vende siempre con el precio de la categoría del cliente.
   $('#nv-permitir-precios').checked = false;
   $('.nv-permiso').hidden = !puede('preciosEditar');
+  /* La serie, el número y la fecha de emisión son el talonario: cambiarlos a
+     mano sirve para dar de alta una boleta que faltaba, y eso lo decide el
+     administrador. Al vendedor se le enseñan —tiene que ver con qué número
+     está vendiendo— pero no los toca: el correlativo va solo. */
+  const mandaEl = mandaComoAdmin();
+  $('#nv-serie').disabled = !mandaEl;
+  $('#nv-correlativo').readOnly = !mandaEl;
+  $('#nv-fecha').disabled = !mandaEl;
+  // La pista de abajo la lleva la zona del cliente, así que lo de "esto no lo
+  // tocas tú" va donde se toca: en el propio campo.
+  const porQue = mandaEl ? '' : 'Solo el administrador puede cambiarlo';
+  $('#nv-serie').title = porQue;
+  $('#nv-correlativo').title = porQue || 'Se puede cambiar para dar de alta una boleta que falta';
+  $('#nv-fecha').title = porQue;
   $('#nv-cantidad').value = '';
   limpiarBuscadorNota();
   nvSeleccionarCliente(base ? (base.clienteId || '') : '');
@@ -8122,8 +8282,11 @@ function agregarItemNota() {
   const p = productoPorId(id);
   if (!p) return;
 
-  // Si el producto ya está en la nota, se suma a la línea que ya existe
-  const yaEsta = nvItems.find(it => it.productoId === id);
+  // Si el producto ya está en la nota, se suma a la línea que ya existe. Con
+  // una excepción: una línea que ya está de BONIFICACIÓN no se toca. Si se
+  // regalaron 3 y ahora se venden 5 cobrando, son dos cosas distintas y van en
+  // dos renglones; si no, los 5 se colarían dentro del regalo.
+  const yaEsta = nvItems.find(it => it.productoId === id && !it.bonificacion);
   if (yaEsta) {
     yaEsta.cantidad = (Number(yaEsta.cantidad) || 0) + cantidad;
   } else {
@@ -8322,6 +8485,9 @@ async function guardarNota(imprimir) {
   // Si la nota ya tenía despacho o crédito, se les pasa el importe nuevo: si
   // no, quedarían diciendo lo que la nota decía antes de corregirla.
   if (editando) await ponerAlDiaLoQueCuelgaDeLaNota(nota);
+  // Y si es nueva, su crédito nace con ella: la venta ya está hecha y lo que
+  // falta —cobrarla— se lleva en 💳 Créditos.
+  else await crearCreditoDeLaNota(nota);
 
   toast(editando
     ? `✏️ Nota ${numeroCorto(nota.numero)} modificada`
@@ -8816,6 +8982,8 @@ function inicializarEventos() {
 
   $('#f-foto-camara').addEventListener('change', ev => manejarFoto(ev.target));
   $('#f-foto-archivo').addEventListener('change', ev => manejarFoto(ev.target));
+  $('#info-foto-camara').addEventListener('change', ev => manejarFotoDesdeFicha(ev.target));
+  $('#info-foto-archivo').addEventListener('change', ev => manejarFotoDesdeFicha(ev.target));
   $('#btn-quitar-foto').addEventListener('click', () => {
     fotoActual = null;
     $('#foto-preview-wrap').hidden = true;
