@@ -38,14 +38,13 @@ service cloud.firestore {
         allow delete: if permiso('borrar');
       }
 
-      // Fotos de las boletas firmadas, una por crédito y con su mismo id.
-      // Viven fuera del crédito a propósito: pesan unos 660 KB cada una y
-      // dentro obligaban a bajarlas todas al arrancar. Los permisos son los
-      // mismos que los del crédito al que pertenecen.
+      // Hubo una versión que guardaba aquí la foto de la boleta, fuera del
+      // crédito. Se dio marcha atrás y la app las devuelve a su crédito, pero
+      // para poder hacerlo tiene que seguir pudiendo leerlas y borrarlas.
+      // Cuando no quede ninguna, este bloque se puede quitar.
       match /fotos/{docId} {
         allow read: if esMiembro();
-        allow create, update: if permiso('crear') || permiso('editar');
-        allow delete: if permiso('borrar') || permiso('editar');
+        allow write: if permiso('crear') || permiso('editar');
       }
 
       // Clientes del negocio (nombre + zona). Todos los miembros los pueden ver
@@ -119,15 +118,6 @@ service cloud.firestore {
       match /config/{docId} {
         allow read: if esMiembro();
         allow write: if esAdmin();
-      }
-
-      // El corte del kardex (en cuánto quedó cada producto hasta cierto día)
-      // lo calcula el administrador, pero lo tiene que poder RETOCAR cualquiera
-      // que registre movimientos de almacén: si alguien anota un movimiento con
-      // fecha anterior al corte, hay que sumárselo o ese movimiento no contaría
-      // en el stock de nadie.
-      match /config/corteKardex {
-        allow write: if permiso('ingresos') || permiso('ajustes') || permiso('ventas');
       }
 
       // Miembros y sus permisos

@@ -9,7 +9,7 @@ Aplicación para controlar los créditos que le das a tus clientes de distribuci
 - 📍 **Zona** del cliente (MODELO, 3 DE MAYO, CIUDAD, MILAGROS, CARRETERA, PADRE ALDAMIZ, ALAMEDA, LABERINTO, PAMPA)
 - 🅰️🅱️ **Categoría de precio del cliente (A, B o C)**: cada cliente se guarda con su categoría —**A mayorista, B intermedio, C menudeo**— y también con su **RUC / DNI**. Es lo que decide qué precio se le cobra al hacerle una nota de venta. Un cliente nuevo entra como **C** por defecto: así nunca se le cobra de menos por descuido
 - 🛒 **Productos** (botón 🛒): catálogo, solo eso — **crear, ver y editar**. Código de producto (PR-0001, PR-0002… se genera solo), nombre, presentación (Balde, Caja, Saco, Paquete o Unidad), **tres precios: A, B y C** y su **stock mínimo**, para que la app avise cuando se está acabando. Un producto nace siempre con **0 de stock**: cargarle mercadería se hace aparte, en 📥 Ingreso de productos, nunca desde aquí. **Editar o borrar** un producto **pide el código de seguridad**: sus precios deciden lo que se cobra en cada venta a partir de ahí. Crear uno nuevo no lo pide, porque todavía no afecta a nada. La mercadería **no entra desde aquí**: para eso está 📥 Ingreso de productos. Un producto que ya no vendes se marca **inactivo**: deja de salir al vender pero conserva todo su historial
-- 📥 **Ingreso de productos** (botón 📥): la sección donde entra la mercadería, con **dos formas de trabajar**. **Por factura o guía**, para cuando llega un camión: todo se llena en **un solo recuadro armado como el comprobante que estás copiando** —cabecera con el documento, el proveedor, la fecha y quién registra; detalle numerado ítem por ítem; y pie con los totales y el botón—. Anotas el **proveedor**, el **tipo y número de documento** y la fecha una sola vez (la cabecera los va repitiendo en grande, para comprobar de un vistazo), y luego **buscas los productos escribiendo su nombre** —van apareciendo debajo con su código, unidad y stock actual— y los vas **agregando a una lista**. Cada línea muestra cuánto entra y **en cuánto va a quedar el stock**; abajo, el total de productos y unidades. Un botón **📦 Agregar stock** registra toda la lista de una vez. La otra forma es **Ajuste o salida**, para un solo producto: **corregir el stock con el conteo físico** (escribes lo contado y la app calcula sola la diferencia) o anotar lo que salió sin venderse (merma, traslado). Abajo queda el historial: **cada factura se ve como una sola entrada** con sus productos debajo, no como filas sueltas. Toda la mercadería entra por aquí: en 🛒 Productos ya no hay botón de ingreso, para que el catálogo sea catálogo y el almacén, almacén
+- 📥 **Ingreso de productos** (botón 📥): la sección donde entra la mercadería, con **dos formas de trabajar**. **Por factura o guía**, para cuando llega un camión: todo se llena en **un solo recuadro armado como el comprobante que estás copiando** —cabecera con el documento, el proveedor, la fecha y quién registra; detalle numerado ítem por ítem; y pie con los totales y el botón—. Anotas el **proveedor**, el **tipo y número de documento** y la fecha una sola vez (la cabecera los va repitiendo en grande, para comprobar de un vistazo), y luego **buscas los productos escribiendo su nombre** —van apareciendo debajo con su código, unidad y stock actual— y los vas **agregando a una lista**. Cada línea muestra cuánto entra y **en cuánto va a quedar el stock**; abajo, el total de productos y unidades. Un botón **📦 Agregar stock** registra toda la lista de una vez. La otra forma es **Ajuste o salida**, para un solo producto: **corregir el stock con el conteo físico** (escribes lo contado y la app calcula sola la diferencia) o anotar lo que salió sin venderse (merma, traslado). Abajo queda el historial: **cada factura se ve como una sola entrada** con sus productos debajo, no como filas sueltas. Cada una trae dos botones: **✏️ corregirla** y **🗑️ anularla**, los dos con el código de seguridad. Corregir una factura la **vuelve a abrir en el mismo formulario** —con su proveedor, su documento, su fecha y sus productos— para cambiar una cantidad mal anotada, arreglar el número, agregar un producto que faltaba o quitar uno que no era; al guardar, **el stock se recalcula solo** y sigue siendo la misma factura, no una nueva. Antes había que anularla entera y volver a escribirla. Toda la mercadería entra por aquí: en 🛒 Productos ya no hay botón de ingreso, para que el catálogo sea catálogo y el almacén, almacén
 - 📒 **Kardex de almacén** (botón 📒): la hoja **se llena sola** —cada nota de venta descuenta lo vendido y cada ingreso que registras queda anotado—, así que ahí no hay que escribir nada: es la hoja que se consulta y se imprime, con todo el historial completo (ventas incluidas). Cada línea anota **fecha y hora, producto, tipo (📥 entrada / 📤 salida / ⚖️ ajuste), motivo**, **documento de referencia**, **cuánto entró o salió, el saldo que quedó** y **quién lo registró**. El stock **nunca se escribe a mano**: sale de sumar el kardex, así que siempre se puede auditar fila por fila. Se filtra por **producto, tipo de movimiento, motivo, quién lo registró, fechas** y un **buscador de texto** que mira el documento, el producto y la nota; el botón **Este mes** deja el rango del día 1 a hoy. Y hay dos formas de mirarlo: **📄 Movimientos**, uno a uno, o **📅 Stock por día**, que con un producto elegido enseña **en cuánto quedó su stock al cerrar cada día**, con lo que entró y lo que salió. Ese saldo sale del kardex completo, no de lo filtrado: mirar "solo agosto" no lo hace empezar de cero
 - 🧮 **Notas de venta** (botón 🧮): la toma de pedido completa, en **una sola pantalla y sin bajar con la rueda**. La **condición viene puesta en CRÉDITO**, que es como sale casi todo, con la fecha de pago ya calculada a los días que tengas configurados. Eliges el cliente y **al instante ves su categoría (A/B/C), su zona, su ubicación, su código, su RUC, su teléfono y cuánto te debe**. Quedan guardados la **fecha de emisión, la hora de creación y qué usuario la está haciendo**. El producto **se busca escribiendo su nombre o su código**: las coincidencias salen debajo con su código, su unidad y su stock, ordenadas por parecido —lo que empieza como lo escrito sale primero— y basta con que estén todas las palabras, en cualquier orden (`soya aceite` encuentra `ACEITE SOYA 20BOTX900ML`). Se elige con el ratón o con las flechas y Enter, y tras agregarlo el buscador queda listo para el siguiente. La **cantidad viene vacía** —no propone ninguna, para que nadie agregue "1" por descuido— y solo admite **números enteros** —aquí se venden sacos, cajas y baldes, nada se parte por la mitad—. Al agregar un producto, **el precio se pone solo según la categoría del cliente**; los precios están **bloqueados** salvo que marques **🔓 "Modificar precios"** (y entonces queda constancia de que ese precio se tocó a mano). Abajo se calculan el subtotal, la bonificación, el descuento, el **total a pagar** y el **importe en letras**. Al guardar, **cada producto vendido sale solo del almacén** con la nota como documento
 - 🔢 **Tres series, una por grupo de zonas**: **0001** para CIUDAD, MODELO, CARRETERA, 3 DE MAYO, MILAGROS, PADRE ALDAMIZ y ALAMEDA; **0002** para LABERINTO; **0003** para PAMPA. La serie **se elige sola al elegir el cliente**, según su zona, y se puede **cambiar a mano** (para el que llega al mostrador desde otra zona). El **correlativo es uno solo** para las tres: el número de boleta nunca se repite entre series
@@ -185,44 +185,10 @@ Opciones (la app es la misma):
 
 ## Preguntas frecuentes
 
-- **¿Cuánto cuesta?** Nada: Firebase (plan Spark), GitHub y Netlify tienen planes gratuitos. Con lo que ha crecido el sistema hubo que trabajar para que siga siendo así: ver "Qué gasta la app en la nube".
+- **¿Cuánto cuesta?** Nada: Firebase (plan Spark), GitHub y Netlify tienen planes gratuitos que sobran para este uso.
 - **¿Puedo compartirla con un socio o familiar?** Sí: que instale el APK y entre con el mismo correo y contraseña, o crea otra cuenta si quieres datos separados.
 - **¿Olvidé mi contraseña?** Pídesela al administrador: te pone una nueva con el botón **🔑 Restablecer clave** en 👥 Usuarios (ver "Restablecer la contraseña de un empleado"). No hay correo de recuperación para los empleados porque no entran con un correo suyo sino con un usuario corto (`juan`), y la dirección que la app arma por detrás no recibe mensajes.
 - **¿Y si estoy sin señal?** Puedes seguir usando la app; los cambios se sincronizan solos al volver la conexión.
-
-## Qué gasta la app en la nube
-
-El plan gratuito de Firebase da 1 GB guardado, 50.000 lecturas al día y 10 GB
-de descarga al mes. Lo que se come esos números no son las notas ni el kardex
-—un movimiento pesa unos 150 bytes— sino **las fotos de las boletas firmadas:
-660 KB cada una**, 450 veces más que toda la papelería de esa misma venta.
-
-Por eso la app hace dos cosas:
-
-**1. La foto vive fuera del crédito.** Está en `usuarios/{dueño}/fotos/{id del
-crédito}` y solo se baja cuando alguien la abre. Dentro del crédito queda la
-copia chica que usa la lista (~5 KB) y la marca `tieneFoto`. Los créditos de
-antes, que la llevaban dentro, se mudan solos en segundo plano la próxima vez
-que entra el administrador. Borrar un crédito borra también su foto.
-
-**2. No se baja el historial entero en cada arranque.** Se escuchan los
-últimos 6 meses de créditos, notas, despachos y hojas de cobranza —y, aparte,
-**todos los créditos que sigan debiéndose, sean de cuando sean**, que si no se
-perdería de vista una deuda vieja—. Lo demás se trae con el botón
-**📚 Cargar todo el historial**, que está debajo del resumen de Créditos.
-
-El kardex es el caso delicado, porque el stock se calcula sumándolo entero:
-recortarlo sin más dejaría a todos los productos con una cifra falsa. Para eso
-existe **el corte** (`config/corteKardex`): un único documento que dice en
-cuánto quedó cada producto hasta cierto día. El stock es el saldo del corte más
-los movimientos posteriores, que sí se escuchan; corte + ventana = la historia
-completa, exacta. El corte solo se aplica cuando el kardex viene recortado por
-esa misma fecha, así que nunca se cuenta nada dos veces. Si el corte todavía no
-existe, se escucha el kardex entero como siempre y el corte se calcula en
-segundo plano para la vez siguiente. Y si alguien registra un movimiento con
-fecha *anterior* al corte, se le suma al corte para que no se pierda.
-
-La ventana está en `MESES_EN_VIVO` (`js/app.js`).
 
 ## Tecnología
 

@@ -376,14 +376,6 @@
       </span>
     </section>
 
-    <!-- Qué parte del historial está cargada. La app trabaja con los últimos
-         meses (más todo lo que se siga debiendo, sea de cuando sea) para no
-         bajar el archivo entero cada vez que arranca. Lo demás, a un clic. -->
-    <section class="historial-aviso" id="historial-aviso" hidden>
-      <span class="historial-txt" id="historial-texto"></span>
-      <button type="button" id="btn-historial-todo" class="btn btn-secondary btn-small">📚 Cargar todo el historial</button>
-    </section>
-
     <!-- Aviso de notas de venta (guías) que faltan crear -->
     <button type="button" class="faltantes-aviso" id="faltantes-aviso" hidden>
       <span class="faltantes-aviso-txt" id="faltantes-texto"></span>
@@ -1305,6 +1297,10 @@
           </div>
         </header>
 
+        <!-- Aviso de que no se está registrando algo nuevo, sino corrigiendo
+             una factura que ya entró (y que el stock se va a recalcular) -->
+        <p class="ing-editando" id="ing-editando" hidden></p>
+
         <section class="doc-parte">
           <h3 class="doc-parte-tit"><span class="doc-paso">1</span>Datos del documento</h3>
           <div class="doc-campos">
@@ -1368,6 +1364,7 @@
             <div class="ing-resumen-dato"><span>Unidades que entran</span><strong id="ing-res-unidades">0</strong></div>
           </div>
           <div class="doc-pie-botones">
+            <button type="button" id="btn-ing-cancelar-edicion" class="btn btn-secondary" hidden>Cancelar</button>
             <button type="button" id="btn-ing-limpiar" class="btn btn-secondary">Vaciar lista</button>
             <button type="button" id="btn-ing-guardar" class="btn btn-primary">Agregar stock</button>
           </div>
