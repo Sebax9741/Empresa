@@ -263,6 +263,10 @@ async function cargarEquipo() {
     const doble = firmaDelDuenoConSuUsuarioCorto(miembros);
     if (doble && !mapa[doble.correo]) mapa[doble.correo] = doble.usuario;
     equipo = mapa;
+    // Aprovechando que ya está el equipo delante: si alguna ficha se quedó sin
+    // los permisos nuevos, se le escriben. Si no, la nube le rechaza cosas que
+    // la app sí le deja hacer.
+    escribirPermisosHeredados();
     if (fb.auth.currentUser) {
       guardarAccesoLocal(fb.auth.currentUser.uid, { ownerUid, yo, equipo });
     }
@@ -2039,6 +2043,8 @@ async function abrirUsuarios() {
 async function renderUsuarios() {
   const cont = $('#usuarios-list');
   cont.innerHTML = '<p class="abonos-vacio">Cargando…</p>';
+  // Antes de pintar: que lo que se enseñe marcado sea lo que hay escrito
+  await escribirPermisosHeredados();
   let docs = [];
   try {
     const snap = await fb.getDocs(fb.collection(fb.db, 'usuarios', ownerUid, 'miembros'));
@@ -2134,6 +2140,42 @@ async function crearUsuario(ev) {
   } finally {
     boton.disabled = false;
   }
+}
+
+/* ====== Que la ficha diga lo que la nube va a obedecer ======
+   La app deduce los permisos nuevos de los viejos: a quien podía "Emitir notas
+   de venta" antes de que existiera "Modificar notas ya emitidas" se le da por
+   heredado, para que nadie pierda de golpe algo que ya hacía. Pero las reglas
+   de Firestore no deducen nada: miran la ficha y, si la clave no está, dicen
+   que no. Resultado: la app le enseñaba el botón y la nube le rechazaba el
+   cambio ("La base de datos rechazó el cambio"), que es de las cosas más
+   desesperantes que le pueden pasar a alguien que solo quiere trabajar.
+
+   Se arregla por donde toca: escribiendo en la ficha lo que hoy se deduce. A
+   partir de ahí ficha, pantalla y nube dicen exactamente lo mismo. Es una
+   escritura por empleado y una sola vez; luego no vuelve a hacer nada. */
+async function escribirPermisosHeredados() {
+  if (!modoNube || !esAdmin()) return 0;
+  let arreglados = 0;
+  try {
+    const snap = await fb.getDocs(fb.collection(fb.db, 'usuarios', ownerUid, 'miembros'));
+    for (const d of snap.docs) {
+      const m = { uid: d.id, ...d.data() };
+      if (m.rol === 'admin') continue;          // los tiene todos por su rol
+      const guardados = m.permisos || {};
+      const faltan = PERMISOS_LISTA.filter(([k]) => guardados[k] === undefined);
+      if (!faltan.length) continue;
+      // Lo que la app venía dando por heredado, ahora por escrito
+      const permisos = Object.fromEntries(
+        PERMISOS_LISTA.map(([k]) => [k, tienePermiso(m, k)]));
+      await fb.updateDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', m.uid), { permisos });
+      arreglados++;
+    }
+  } catch (e) {
+    console.error('No se pudieron poner por escrito los permisos heredados:', e);
+  }
+  if (arreglados) console.info(`Permisos puestos por escrito en ${arreglados} ficha(s)`);
+  return arreglados;
 }
 
 async function cambiarPermiso(uid, perm, valor) {

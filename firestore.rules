@@ -24,10 +24,42 @@ service cloud.firestore {
       function esAdmin() {
         return esMiembro() && miMembresia().rol == 'admin';
       }
-      // .get(nombre, false) evita errores con usuarios creados antes de que
-      // existiera un permiso nuevo (la clave simplemente no está en su ficha).
+      // Los permisos se fueron afinando con el tiempo: donde antes había uno
+      // grueso ("Emitir notas de venta") ahora hay varios ("Modificar notas ya
+      // emitidas", "Anular notas de venta"…). A quien se dio de alta antes, la
+      // clave nueva sencillamente no le aparece en la ficha, y la app se la da
+      // por HEREDADA del permiso viejo para que no pierda de golpe algo que ya
+      // hacía. Aquí hay que deducir igual: si no, la app le enseña el botón y
+      // la nube le rechaza el cambio, que es lo peor de los dos mundos.
+      //
+      // Ojo con la diferencia entre "no está" y "está en false": una casilla
+      // desmarcada a propósito por el administrador dice NO y no hereda nada.
+      function valorDe(nombre) {
+        return miMembresia().get('permisos', {}).get(nombre, null);
+      }
+      function padreDe(nombre) {
+        return {
+          'clientes': 'crear', 'clientesBorrar': 'clientes',
+          'ventas': 'crear', 'ventasEditar': 'ventas', 'ventasAnular': 'ventas',
+          'preciosEditar': 'ventas', 'cobranzaExportar': 'cobranza',
+          'despachosCerrar': 'despachos', 'productosEditar': 'productos',
+          'ingresos': 'productos', 'ajustes': 'productos', 'kardex': 'productos'
+        }.get(nombre, '');
+      }
+      // El de más arriba, para las cadenas de dos saltos (ventasEditar → ventas → crear)
+      function abueloDe(nombre) {
+        return {
+          'clientesBorrar': 'crear', 'ventasEditar': 'crear',
+          'ventasAnular': 'crear', 'preciosEditar': 'crear'
+        }.get(nombre, '');
+      }
       function permiso(nombre) {
-        return esAdmin() || (esMiembro() && miMembresia().permisos.get(nombre, false) == true);
+        return esAdmin() || (esMiembro() && (
+          valorDe(nombre) == true
+          || (valorDe(nombre) == null && valorDe(padreDe(nombre)) == true)
+          || (valorDe(nombre) == null && valorDe(padreDe(nombre)) == null
+              && valorDe(abueloDe(nombre)) == true)
+        ));
       }
 
       // Créditos del negocio (datos compartidos por el equipo).
