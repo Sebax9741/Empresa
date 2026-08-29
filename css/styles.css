@@ -1798,8 +1798,16 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 /* ====== Responsive: celular ====== */
 @media (max-width: 760px) {
-  .table-wrap { display: none; }
+  /* Ojo: SOLO la tabla de créditos, que es la que tiene tarjetas de repuesto
+     para el celular. Esta regla decía ".table-wrap" a secas y escondía además
+     las de Productos, Kardex, Notas de venta y la lista de la factura en
+     curso, que no tienen repuesto: en el teléfono no se veía nada de eso.
+     Esas se leen desplazándolas de lado, que para una tabla de almacén es
+     mejor que resumirla en tarjetas. */
+  #view-creditos .table-wrap { display: none; }
   .cards { display: flex; }
+  .prod-tabla-wrap, .kdx-tabla-wrap, .kdx-dias-wrap,
+  .ing-lista-wrap, .nv-tabla-wrap { overflow-x: auto; }
   /* Despachos: en celular se muestran las tarjetas y se oculta la tabla.
      Se usa el id (#) para ganarle en especificidad a la regla por defecto
      ".despachos-list { display:none }" que aparece más abajo en el archivo. */
