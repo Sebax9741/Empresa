@@ -196,6 +196,7 @@ const MOTIVOS_KARDEX = {
   devolucion_cliente: 'Devolución de cliente',
   venta: 'Venta (nota de venta)',
   anulacion: 'Anulación de nota de venta',
+  devuelto: 'Devuelto en el reparto',
   merma: 'Merma o producto malogrado',
   traslado: 'Traslado a otro almacén',
   inventario: 'Conteo físico (inventario)',
@@ -4177,6 +4178,19 @@ function abrirFormulario(credito = null, prefill = null) {
       // Los días de crédito se cuentan desde el despacho (ver baseVencimiento)
       recalcularVencimiento();
     }
+    /* Lo que viene del despacho se enseña, no se reescribe: la boleta, el
+       cliente, el monto y las fechas ya vienen decididos por la nota y por el
+       reparto. Aquí solo se añade lo del cobro —el pago inicial, cómo pagó, la
+       nota y la foto de la boleta firmada—. Si algo de arriba está mal, se
+       corrige donde nació, no aquí: si no, el crédito acabaría diciendo una
+       cosa y su nota otra. */
+    const desdeDespacho = !!(prefill && prefill.desdeDespacho);
+    ['f-boleta', 'f-cliente-buscar', 'f-monto', 'f-fecha', 'f-fecha-despacho', 'f-vencimiento']
+      .forEach(id => { const el = $('#' + id); if (el) el.disabled = desdeDespacho; });
+    $('#btn-cliente-nuevo').disabled = desdeDespacho;
+    $('#btn-atajo-1').disabled = desdeDespacho;
+    $('#btn-atajo-2').disabled = desdeDespacho;
+    if (desdeDespacho) $('#f-zona').disabled = true;
   }
   abrirSinTeclado(modalForm);
 }
@@ -5449,6 +5463,58 @@ function actualizarBotonPasar() {
     : 'Mandar a reparto';
 }
 
+/* ====== Devolver a "Por despachar" ======
+   Un despacho que salió por error se deshace quitándolo: sin despacho, su nota
+   vuelve sola al lado izquierdo (el estado se deduce, no se guarda en dos
+   sitios). Solo vale para lo que sigue en reparto: lo que ya volvió y se
+   cerró se deshace desde su ficha, donde se ve qué se le hizo. */
+let modoSeleccionDespachos = false;
+const despachosElegidos = new Set();
+
+function ponerModoSeleccionDespachos(activo) {
+  modoSeleccionDespachos = activo;
+  despachosElegidos.clear();
+  $('#desp-devolver').hidden = !activo;
+  $('#btn-desp-seleccionar').textContent = activo ? '✖️ Cancelar' : '☑️ Seleccionar';
+  renderListaDespachos();
+}
+
+/* Marcar una casilla NO redibuja la tabla: se perderían las demás a medio
+   marcar. Solo se pone al día el botón. */
+function actualizarBotonDevolver() {
+  const boton = $('#btn-desp-devolver');
+  boton.disabled = despachosElegidos.size === 0;
+  $('#desp-devolver-cuenta').textContent = despachosElegidos.size
+    ? `${despachosElegidos.size} marcado(s)`
+    : 'Marca los que quieras devolver a “Por despachar”.';
+}
+
+async function devolverDespachosAPendiente(ids) {
+  if (!puede('despachos')) { toast('🔒 No tienes permiso para tocar los despachos'); return; }
+  const suyos = ids.map(id => despachoPorId(id))
+    .filter(d => d && estadoDespachoEfectivo(d) === 'reparto');
+  if (!suyos.length) { toast('⚠️ No hay nada marcado que se pueda devolver'); return; }
+  if (!confirm(`¿Devolver ${suyos.length} pedido(s) a “Por despachar”?\n\n`
+    + 'Se deshace su salida a reparto y sus notas vuelven a la lista de la izquierda.\n'
+    + 'La mercadería no se toca: la nota sigue siendo la misma.')) return;
+
+  const hechos = [];
+  for (const d of suyos) {
+    try {
+      await eliminarDespachoDeStore(d.id);
+      hechos.push(d.id);
+    } catch (e) {
+      console.error('No se pudo devolver el despacho', d.id, e);
+    }
+  }
+  despachos = despachos.filter(x => !hechos.includes(x.id));
+  if (!hechos.length) { toast('❌ No se pudo devolver. Revisa tu conexión.'); return; }
+  toast(hechos.length === suyos.length
+    ? `◀ ${hechos.length} pedido(s) de vuelta en “Por despachar”`
+    : `⚠️ Volvieron ${hechos.length} de ${suyos.length}. Revisa tu conexión.`);
+  ponerModoSeleccionDespachos(false);
+}
+
 function renderListaDespachos() {
   renderNotasPorDespachar();
   const lista = despachosDelDia();
@@ -5468,11 +5534,20 @@ function renderListaDespachos() {
     : `<div class="desp-resumen-monto">${rotulo} · sin despachos</div>`;
 
   // Tabla (escritorio): N° comprobante, cliente, monto, fecha, zona, repartidores y estado
+  $('.desp-col-check').hidden = !modoSeleccionDespachos;
   $('#desp-tabla-body').innerHTML = lista.map(d => {
     const info = estadoDespachoInfo(estadoDespachoEfectivo(d));
     const reps = repartidoresDe(d);
+    // Solo se puede devolver lo que sigue en reparto: uno ya cerrado se
+    // deshace desde su ficha, que es donde se ve qué se le hizo.
+    const devolvible = modoSeleccionDespachos && estadoDespachoEfectivo(d) === 'reparto';
     return `
-      <tr class="desp-fila ${info.clase}" data-abrir-despacho="${d.id}" title="${escapeHtml(info.etiqueta)} — ver detalle">
+      <tr class="desp-fila ${info.clase}${modoSeleccionDespachos ? ' desp-fila-eligiendo' : ''}"
+          ${modoSeleccionDespachos ? '' : `data-abrir-despacho="${d.id}"`}
+          title="${escapeHtml(info.etiqueta)}${modoSeleccionDespachos ? '' : ' — ver detalle'}">
+        ${modoSeleccionDespachos ? `<td class="desp-col-check">${devolvible
+          ? `<input type="checkbox" data-elegir-despacho="${d.id}" ${despachosElegidos.has(d.id) ? 'checked' : ''}>`
+          : ''}</td>` : ''}
         <td><strong>${escapeHtml(d.boleta ? numeroCorto(d.boleta) : '—')}</strong></td>
         <td>${escapeHtml(d.cliente || '(sin cliente)')}</td>
         <td class="col-num">${formatoMonto(Number(d.monto) || 0)}</td>
@@ -5502,6 +5577,11 @@ function renderListaDespachos() {
         ${reps.length ? `<div class="despacho-card-rep">🧍 ${reps.map(escapeHtml).join(', ')}</div>` : ''}
       </button>`;
   }).join('');
+
+  // Una marca que se quedó de un día que ya no se está mirando no cuenta
+  const visibles = new Set(lista.map(d => d.id));
+  for (const id of [...despachosElegidos]) if (!visibles.has(id)) despachosElegidos.delete(id);
+  actualizarBotonDevolver();
 }
 
 /* Llena el desplegable de días con despachos y sincroniza el campo de fecha */
@@ -5680,11 +5760,18 @@ function repartidoresSeleccionados() {
    nota. `lote` es la lista de ids, o null para el despacho de siempre. */
 function ponerModoLote(lote) {
   const enLote = !!lote;
+  // Primero se limpia lo de "una sola nota" (que también toca estos campos) y
+  // solo después se aplica lo del lote: al revés, lo de la nota volvería a
+  // marcar como obligatorios campos que aquí ni se ven, y guardar fallaría sin
+  // decir por qué —el navegador no puede señalar un campo escondido—.
+  ponerDatosDeLaNota(null);
   ['desp-campo-cliente', 'desp-campo-numeros', 'desp-campo-emision']
     .forEach(id => { $('#' + id).hidden = enLote; });
+  $('#desp-campo-fechas').hidden = false;   // la fecha de salida siempre se elige
   // Un campo oculto que siga siendo obligatorio impide guardar sin decir por qué
   $('#desp-monto').required = !enLote;
   $('#desp-emision').required = !enLote;
+  $('#desp-fecha').required = true;
   const caja = $('#desp-lote-resumen');
   caja.hidden = !enLote;
   if (!enLote) return;
@@ -5735,15 +5822,44 @@ function abrirFormDespacho(despacho = null, desdeNota = null) {
   $('#desp-fecha').value = despacho ? (despacho.fecha || hoyISO()) : hoyISO();
   $('#desp-notas').value = despacho ? (despacho.notas || '') : '';
   // Aviso de que viene de una nota, para que se vea de dónde salieron los datos
+  const nota = base && base.notaId ? notas.find(n => n.id === base.notaId) : null;
   const aviso = $('#desp-de-nota');
   if (aviso) {
-    const nota = desdeNota ? notas.find(n => n.id === desdeNota.notaId) : null;
     aviso.hidden = !nota;
     if (nota) aviso.innerHTML = `🧮 Sale de la nota de venta <strong>${escapeHtml(numeroCorto(nota.numero))}</strong>`;
   }
+  // Lo que sale de la nota se enseña, no se escribe: lo que se elige aquí es
+  // quién la lleva y poco más.
+  ponerDatosDeLaNota(nota);
   renderRepartidoresCheck(despacho ? repartidoresDe(despacho) : []);
   mostrarVistaDespacho('form');
-  $('#desp-cliente-buscar').focus();
+  if (!nota) $('#desp-cliente-buscar').focus();
+}
+
+/* Con una nota detrás, sus datos se enseñan en un recuadro y sus campos se
+   esconden. Los valores siguen puestos en los campos (escondidos) porque son
+   los que se guardan; lo único que desaparece es la posibilidad de cambiarlos
+   aquí, que solo servía para descuadrar el despacho respecto de su nota. */
+function ponerDatosDeLaNota(nota) {
+  const caja = $('#desp-datos-nota');
+  if (!caja) return;
+  ['desp-campo-cliente', 'desp-campo-numeros', 'desp-campo-fechas']
+    .forEach(id => { const el = $('#' + id); if (el) el.hidden = !!nota; });
+  $('#desp-monto').required = !nota;
+  $('#desp-emision').required = !nota;
+  $('#desp-fecha').required = !nota;
+  caja.hidden = !nota;
+  if (!nota) return;
+  const fila = (et, valor) =>
+    `<div class="desp-det-fila"><span>${et}</span><strong>${valor}</strong></div>`;
+  caja.innerHTML = [
+    fila('👤 Cliente', escapeHtml(nota.clienteNombre || '(sin cliente)')),
+    fila('🧾 Nota de venta', escapeHtml(numeroCorto(nota.numero))),
+    fila('💵 Monto', formatoMonto(Number(nota.total) || 0)),
+    nota.zona ? fila('📍 Zona', escapeHtml(nota.zona)) : '',
+    fila('🗓️ Emisión', formatoFecha(nota.fecha)),
+    fila('📦 Despacho', formatoFecha($('#desp-fecha').value)),
+  ].filter(Boolean).join('');
 }
 
 /* Varias notas de una vez: mismo repartidor y misma fecha, pero cada nota se
@@ -5893,14 +6009,24 @@ function renderDetalleDespacho() {
       <button type="button" class="btn btn-primary btn-block" id="btn-desp-ver-credito">📄 Ver crédito enlazado</button>
       <button type="button" class="btn btn-secondary btn-block" data-desp-estado="reparto">↩️ Deshacer enlace (volver a “en reparto”)</button>`;
   } else if (d.estado === 'contado' || d.estado === 'devuelto') {
-    acciones = `
-      <button type="button" class="btn btn-secondary btn-block" data-desp-estado="reparto">↩️ Volver a “en reparto”</button>`;
+    // Si al devolverlo se anuló su nota, esto no se deshace desde aquí: la
+    // nota quedó anulada de constancia y su mercadería ya volvió al almacén.
+    const suNota = d.notaId ? notas.find(n => n.id === d.notaId) : null;
+    acciones = (suNota && suNota.anulada)
+      ? `<p class="desp-det-cerrado">🚫 La nota ${escapeHtml(numeroCorto(suNota.numero))} quedó
+           <strong>anulada</strong> y su mercadería volvió al almacén.
+           Para volver a venderla, emite una nota nueva.</p>`
+      : `<button type="button" class="btn btn-secondary btn-block" data-desp-estado="reparto">↩️ Volver a “en reparto”</button>`;
   } else {
     acciones = `
       <button type="button" class="btn btn-primary btn-block" id="btn-desp-a-credito">📄 Volvió firmada → crear crédito</button>
-      <button type="button" class="btn btn-secondary btn-block" data-desp-estado="devuelto">↩️ Devuelto</button>`;
+      <button type="button" class="btn btn-danger btn-block" id="btn-desp-devuelto-anular">↩️ Devuelto y anular</button>`;
   }
   $('#desp-det-acciones').innerHTML = acciones;
+
+  // Mientras está en la calle no se toca: el papel lo tiene el repartidor y la
+  // mercadería va con él. Lo que ya volvió sí se puede corregir.
+  $('#btn-desp-editar').hidden = estadoDespachoEfectivo(d) === 'reparto' || !puede('despachos');
 }
 
 /* Cambia el estado del despacho abierto (al contado / devuelto / en reparto) */
@@ -5922,21 +6048,71 @@ async function cambiarEstadoDespacho(estado) {
   toast(`✅ Marcado: ${estadoDespachoInfo(estado).etiqueta}`);
 }
 
-async function borrarDespachoActual() {
+/* El pedido volvió sin entregarse: la mercadería está otra vez en el almacén y
+   la nota no llegó a ser una venta. Las dos cosas van juntas —por eso es un
+   solo botón— y quedan a la vista:
+     · el despacho se marca DEVUELTO (no se borra: salió, y eso pasó)
+     · la nota se marca ANULADA, con su motivo
+     · lo que salió del almacén vuelve, con motivo "devuelto" en el kardex
+   El kardex apunta una ENTRADA porque la mercadería regresó: deshace la salida
+   que hizo la venta y el stock queda como antes de la nota. La salida original
+   no se borra, para que el historial siga contando lo que de verdad pasó. */
+async function devolverYAnular() {
+  if (!puede('despachosCerrar')) { toast('🔒 No tienes permiso para cerrar repartos'); return; }
   const d = despachoPorId(despachoActivoId);
   if (!d) return;
-  if (!confirm(`¿Borrar el despacho de ${d.cliente || 'este cliente'} (boleta ${d.boleta ? numeroCorto(d.boleta) : '—'})?`)) return;
-  try {
-    await eliminarDespachoDeStore(d.id);
-  } catch (e) {
-    toast('❌ No se pudo borrar. Revisa tu conexión.');
+  const n = d.notaId ? notas.find(x => x.id === d.notaId) : null;
+  const salidas = n ? kardex.filter(m => m.notaId === n.id && m.motivo === 'venta') : [];
+
+  if (n && !puede('ventasAnular')) {
+    toast('🔒 Marcar como devuelto anula su nota, y no tienes ese permiso');
     return;
   }
-  despachos = despachos.filter(x => x.id !== d.id);
-  despachoActivoId = null;
-  toast('🗑️ Despacho borrado');
-  mostrarVistaDespacho('lista');
-  renderListaDespachos();
+  const detalle = salidas.length
+    ? `\n\nVuelven al almacén ${salidas.length} producto(s), anotados como "devuelto".` : '';
+  const conNota = n ? `\nLa nota ${numeroCorto(n.numero)} queda anulada, de constancia.` : '';
+  if (!confirm(`¿Marcar como devuelto el pedido de ${d.cliente || 'este cliente'}`
+    + `${d.boleta ? ` (boleta ${numeroCorto(d.boleta)})` : ''}?${conNota}${detalle}`)) return;
+
+  const marca = { motivo: 'Devuelto en el reparto', por: quienSoy(), en: marcaDeTiempo() };
+  try {
+    // 1) El despacho queda marcado, no se borra: salió, y eso pasó
+    const actualizado = { ...d, estado: 'devuelto', creditoId: '' };
+    await guardarDespachoEnStore(actualizado);
+    const idx = despachos.findIndex(x => x.id === d.id);
+    if (idx >= 0) despachos[idx] = actualizado;
+
+    if (n) {
+      // 2) La nota queda anulada, con su motivo
+      const anulada = { ...n, anulada: marca };
+      await guardarNotaEnStore(anulada);
+      const i = notas.findIndex(x => x.id === n.id);
+      if (i >= 0) notas[i] = anulada;
+      // 3) La mercadería vuelve
+      await Promise.all(salidas.map(m => registrarMovimiento({
+        productoId: m.productoId, fecha: hoyISO(), tipo: 'entrada', cantidad: Math.abs(m.cantidad),
+        motivo: 'devuelto', documento: `Devolución nota ${numeroCorto(n.numero)}`, notaId: n.id,
+        nota: marca.motivo,
+      })));
+      // 4) Y su número queda anotado como anulado
+      await guardarAnuladoEnStore({
+        id: String(n.numero), boleta: String(n.numero), motivo: marca.motivo,
+        notaId: n.id, anuladoPor: marca.por, anuladoEn: marca.en,
+      });
+    }
+  } catch (e) {
+    console.error(e);
+    toast(avisoDeFallo(e, '❌ No se pudo marcar como devuelto. Revisa tu conexión.'));
+    return;
+  }
+  renderDetalleDespacho();
+  renderVentas();
+  renderProductos();
+  renderKardex();
+  render();
+  toast(n
+    ? `↩️ Devuelto y nota ${numeroCorto(n.numero)} anulada`
+    : '↩️ Marcado como devuelto');
 }
 
 /* Abre el formulario de crédito ya prellenado con los datos del despacho.
@@ -7741,7 +7917,6 @@ function renderVentas() {
     const estado = estadoDeNota(n);
     const est = ESTADOS_NOTA[estado] || ESTADOS_NOTA.pendiente;
     const anulada = estado === 'anulada';
-    const pendiente = estado === 'pendiente';
     const motivo = anulada && n.anulada.motivo
       ? `<small class="nv-anul-motivo">📝 ${escapeHtml(n.anulada.motivo)}</small>` : '';
     return `<tr class="${anulada ? 'nv-fila-anulada' : ''}">
@@ -7755,9 +7930,8 @@ function renderVentas() {
       <td class="col-num"><strong>${soles(n.total)}</strong></td>
       <td>${escapeHtml(mostrarComo(anulada ? n.anulada.por : n.emitidaPor) || '—')}</td>
       <td class="col-acc">
-        ${!anulada && puede('ventasEditar') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
-        ${!anulada && pendiente && puede('despachos') ? `<button type="button" class="btn btn-secondary btn-small" data-despachar-nota="${escapeHtml(n.id)}" title="Mandarla a reparto">🚚</button>` : ''}
-        ${!anulada && !pendiente ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
+        ${!anulada && estado !== 'reparto' && puede('ventasEditar') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
+        ${!anulada && estado !== 'pendiente' ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
         ${!anulada && puede('ventasAnular') ? `<button type="button" class="btn btn-danger btn-small" data-anular-nota="${escapeHtml(n.id)}" title="Anular: la nota se queda de constancia">🚫</button>` : ''}
         ${mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-eliminar-nota="${escapeHtml(n.id)}" title="Eliminar del todo (pide tu código)">🗑️</button>` : ''}
@@ -7780,6 +7954,12 @@ function abrirNotaParaEditar(notaId) {
   const n = notas.find(x => x.id === notaId);
   if (!n) return;
   if (n.anulada) { toast('🚫 Esa nota está anulada: ya no se puede modificar'); return; }
+  // Salió con el repartidor: el papel ya no está aquí y la mercadería tampoco.
+  // Cambiarla ahora dejaría la nota diciendo una cosa y el reparto otra.
+  if (estadoDeNota(n) === 'reparto') {
+    toast('🚚 Esa nota ya salió a reparto: no se puede modificar hasta que vuelva');
+    return;
+  }
   // Si ya se cobró algo, el importe no puede moverse por debajo del cobro
   const c = creditoDeNota(n);
   if (c && abonosDe(c).length) {
@@ -8950,12 +9130,10 @@ function inicializarEventos() {
   $('#nv-body').addEventListener('click', ev => {
     const editar = ev.target.closest('[data-editar-nota]');
     const imprimir = ev.target.closest('[data-imprimir-nota]');
-    const despachar = ev.target.closest('[data-despachar-nota]');
     const seguir = ev.target.closest('[data-seguir-nota]');
     const anular = ev.target.closest('[data-anular-nota]');
     const eliminar = ev.target.closest('[data-eliminar-nota]');
     if (editar) { abrirNotaParaEditar(editar.dataset.editarNota); return; }
-    if (despachar) { despacharNota(despachar.dataset.despacharNota); return; }
     if (seguir) { seguirNota(seguir.dataset.seguirNota); return; }
     if (anular) { anularNota(anular.dataset.anularNota); return; }
     if (eliminar) { eliminarNota(eliminar.dataset.eliminarNota); return; }
@@ -9111,14 +9289,25 @@ function inicializarEventos() {
   // ====== Despachos ======
   $('#btn-despachos').addEventListener('click', abrirDespachos);
   $('#btn-desp-cerrar').addEventListener('click', () => mostrarSeccion('creditos'));
-  $('#btn-desp-nuevo').addEventListener('click', () => abrirFormDespacho());
   $('#btn-desp-repartidores').addEventListener('click', abrirRepartidores);
   $('#desp-form').addEventListener('submit', guardarDespachoForm);
   $('#btn-desp-editar').addEventListener('click', () => {
     const d = despachoPorId(despachoActivoId);
     if (d) abrirFormDespacho(d);
   });
-  $('#btn-desp-borrar').addEventListener('click', borrarDespachoActual);
+  // Marcar pedidos para devolverlos a "Por despachar"
+  $('#btn-desp-seleccionar').addEventListener('click',
+    () => ponerModoSeleccionDespachos(!modoSeleccionDespachos));
+  $('#btn-desp-devolver').addEventListener('click',
+    () => devolverDespachosAPendiente([...despachosElegidos]));
+  $('#desp-tabla-body').addEventListener('change', ev => {
+    const cb = ev.target.closest('[data-elegir-despacho]');
+    if (!cb) return;
+    const id = cb.dataset.elegirDespacho;
+    if (cb.checked) despachosElegidos.add(id); else despachosElegidos.delete(id);
+    cb.closest('tr').classList.toggle('elegida', cb.checked);
+    actualizarBotonDevolver();
+  });
   // Agregar un repartidor al vuelo desde el formulario (modal bonito)
   $('#btn-desp-rep-rapido').addEventListener('click', abrirModalRepNuevo);
   $('#form-rep-nuevo').addEventListener('submit', guardarRepNuevoForm);
@@ -9231,6 +9420,7 @@ function inicializarEventos() {
     const est = ev.target.closest('[data-desp-estado]');
     if (est) { cambiarEstadoDespacho(est.dataset.despEstado); return; }
     if (ev.target.closest('#btn-desp-a-credito')) { crearCreditoDesdeDespacho(despachoActivoId); return; }
+    if (ev.target.closest('#btn-desp-devuelto-anular')) { devolverYAnular(); return; }
     if (ev.target.closest('#btn-desp-ver-credito')) { verCreditoDeDespacho(despachoActivoId); return; }
   });
 

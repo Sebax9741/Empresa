@@ -2471,6 +2471,34 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 8px;
   background: var(--card); border-left: 3px solid var(--gray);
 }
+/* Barra para devolver pedidos a "Por despachar" */
+.desp-devolver {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  background: var(--warning-light);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.8rem;
+  margin-bottom: 0.7rem;
+  font-size: 0.85rem;
+  color: #92400e;
+}
+.desp-col-check { width: 2.2rem; text-align: center; }
+.desp-fila-eligiendo { cursor: default; }
+.desp-fila-eligiendo.elegida { background: var(--warning-light); }
+
+/* Los datos que vienen de la nota: se leen, no se escriben */
+.desp-datos-nota {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.9rem;
+  margin-bottom: 0.9rem;
+}
+
 .desp-nota:hover { border-color: var(--primary); }
 .desp-nota.elegida { border-left-color: var(--ink); background: var(--warning-light); }
 .desp-nota input { margin: 0.15rem 0 0; flex: none; }

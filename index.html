@@ -891,7 +891,6 @@
         <h2>📦 Despachos</h2>
         <div class="desp-cab-botones">
           <button type="button" id="btn-desp-repartidores" class="btn btn-secondary btn-small">🧍 Repartidores</button>
-          <button type="button" id="btn-desp-nuevo" class="btn btn-primary btn-small">➕ Nuevo despacho</button>
         </div>
       </div>
       <p class="desp-intro">Las <strong>notas de venta que todavía no salieron</strong> esperan en <strong>Por despachar</strong>. Márcalas y pásalas con la <strong>flecha</strong>: eliges quién las lleva y pasan a <strong>en reparto</strong>. Cuando el reparto vuelve, abres la que corresponda y dices si la boleta volvió firmada (pasa a <strong>crédito</strong>), si <strong>se pagó al contado</strong> o si fue <strong>devuelta</strong>.</p>
@@ -923,6 +922,12 @@
         <section class="desp-lado desp-lado-reparto" aria-labelledby="desp-reparto-tit">
           <div class="desp-lado-cab">
             <h3 id="desp-reparto-tit">🚚 En reparto y cerradas</h3>
+            <!-- Para devolver a "Por despachar" lo que salió por error -->
+            <button type="button" id="btn-desp-seleccionar" class="btn btn-secondary btn-small">☑️ Seleccionar</button>
+          </div>
+          <div class="desp-devolver" id="desp-devolver" hidden>
+            <span id="desp-devolver-cuenta">Marca los que quieras devolver a “Por despachar”.</span>
+            <button type="button" id="btn-desp-devolver" class="btn btn-primary btn-small" disabled>◀ Devolver a “Por despachar”</button>
           </div>
 
           <!-- Buscar despachos por día (como la hoja de cobranza) -->
@@ -947,6 +952,7 @@
             <table class="cob-tabla desp-tabla" id="desp-tabla">
               <thead>
                 <tr>
+                  <th class="desp-col-check" hidden></th>
                   <th>N° Comprobante</th>
                   <th>Cliente</th>
                   <th class="col-num">Monto</th>
@@ -984,6 +990,10 @@
         <input type="hidden" id="desp-lote">
         <p class="desp-de-nota" id="desp-de-nota" hidden></p>
         <div class="desp-lote-resumen" id="desp-lote-resumen" hidden></div>
+        <!-- Lo que viene de la nota se enseña, no se escribe: si aquí se
+             pudiera cambiar el cliente o el monto, el despacho diría una cosa
+             y su nota otra. Para corregirlo se corrige la nota. -->
+        <div class="desp-datos-nota" id="desp-datos-nota" hidden></div>
         <div class="field" id="desp-campo-cliente">
           <span class="field-label">Cliente *</span>
           <div class="cliente-picker">
@@ -1005,7 +1015,7 @@
           <label class="field"><span>Monto *</span>
             <input type="number" id="desp-monto" class="input" min="0" step="any" inputmode="decimal" placeholder="0" required></label>
         </div>
-        <div class="field-row">
+        <div class="field-row" id="desp-campo-fechas">
           <label class="field" id="desp-campo-emision"><span>Fecha de emisión *</span>
             <input type="date" id="desp-emision" class="input" required></label>
           <label class="field"><span>Fecha de despacho *</span>
@@ -1033,7 +1043,6 @@
         <h2 id="desp-det-title">Despacho</h2>
         <div class="desp-cab-botones">
           <button type="button" id="btn-desp-editar" class="btn btn-secondary btn-small">✏️ Editar</button>
-          <button type="button" id="btn-desp-borrar" class="btn btn-danger btn-small">🗑️ Borrar</button>
         </div>
       </div>
       <div id="desp-det-info" class="desp-det-info"></div>
