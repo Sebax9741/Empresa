@@ -1583,9 +1583,6 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .usr-dueno-cab { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
 .usr-dueno-cab strong { display: block; font-size: 1.02rem; }
 .usr-dueno-txt { margin: 0.35rem 0 0; font-size: 0.83rem; color: var(--muted); }
-.usr-unir { margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px dashed var(--border); }
-.usr-unir-fila { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem; }
-.usr-unir-fila .input { margin: 0; width: auto; flex: 1; min-width: 14rem; }
 
 .usr-tit {
   margin: 0 0 0.6rem;

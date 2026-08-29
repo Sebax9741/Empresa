@@ -227,13 +227,30 @@ function mostrarComo(quien) {
   return equipo[q] || q;
 }
 
+/* El dueño se dio de alta con su correo y después se creó un usuario corto
+   para no escribirlo cada vez. Son la MISMA persona, pero lo firmado antes
+   lleva el correo y lo de ahora el usuario corto, así que sin esto saldría
+   como dos cobradores distintos en la hoja de cobranza y en el kardex.
+
+   No hay nada que elegir: si el dueño entra con un correo y hay UN solo
+   administrador más con usuario corto, es él. Si hubiera varios no se
+   adivina —se dejan como están—, porque entonces sí podrían ser personas
+   distintas de verdad. */
+function firmaDelDuenoConSuUsuarioCorto(miembros) {
+  const dueno = miembros.find(m => m.uid === ownerUid);
+  if (!dueno || !dueno.usuario || !dueno.usuario.includes('@')) return null;
+  const cortos = miembros.filter(m => m.uid !== ownerUid && m.rol === 'admin'
+    && m.usuario && !m.usuario.includes('@'));
+  return cortos.length === 1 ? { correo: dueno.usuario, usuario: cortos[0].usuario } : null;
+}
+
 async function cargarEquipo() {
   if (!modoNube || !ownerUid) return;
   try {
     const snap = await fb.getDocs(fb.collection(fb.db, 'usuarios', ownerUid, 'miembros'));
+    const miembros = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
     const mapa = {};
-    snap.docs.forEach(d => {
-      const m = d.data();
+    miembros.forEach(m => {
       if (!m || !m.usuario) return;
       // Todo lo que alguna vez identificó a esta persona lleva a su usuario:
       // el nombre para mostrar que tuvo y los nombres con los que firmó antes.
@@ -242,6 +259,8 @@ async function cargarEquipo() {
         if (viejo && viejo !== m.usuario) mapa[viejo] = m.usuario;
       });
     });
+    const doble = firmaDelDuenoConSuUsuarioCorto(miembros);
+    if (doble && !mapa[doble.correo]) mapa[doble.correo] = doble.usuario;
     equipo = mapa;
     if (fb.auth.currentUser) {
       guardarAccesoLocal(fb.auth.currentUser.uid, { ownerUid, yo, equipo });
@@ -2034,8 +2053,6 @@ async function renderUsuarios() {
     cajaDueno.hidden = !dueno;
     if (dueno) $('#usr-dueno-nombre').textContent = dueno.usuario || 'administrador';
   }
-  pintarUnirFirmas(dueno, docs);
-
   const equipo = docs.filter(m => m.uid !== ownerUid);
   equipo.sort((a, b) => (a.rol === 'admin' ? -1 : 1) - (b.rol === 'admin' ? -1 : 1)
     || String(a.usuario || '').localeCompare(String(b.usuario || '')));
@@ -2071,57 +2088,6 @@ async function renderUsuarios() {
         ${permisosHtml}
       </article>`;
   }).join('');
-}
-
-/* Ofrece unir la firma de la cuenta de dueño con la de otro usuario.
-   Solo aparece cuando el dueño entró con un correo y hay otro usuario al que
-   atribuírselo: es el caso del que después se creó un usuario corto y desde
-   entonces firma con dos nombres distintos. Los que ya están unidos no se
-   vuelven a ofrecer. */
-function pintarUnirFirmas(dueno, docs) {
-  const caja = $('#usr-unir');
-  if (!caja) return;
-  const firmaVieja = (dueno && dueno.usuario) || '';
-  const candidatos = docs.filter(m => m.uid !== ownerUid && m.usuario
-    && !(m.nombresPrevios || []).includes(firmaVieja));
-  caja.hidden = !(firmaVieja && candidatos.length);
-  if (caja.hidden) return;
-  $('#usr-unir-destino').innerHTML = candidatos
-    .map(m => `<option value="${escapeHtml(m.uid)}">${escapeHtml(firmaVieja)} → ${escapeHtml(m.usuario)}</option>`)
-    .join('');
-}
-
-async function unirFirmaDelDueno() {
-  if (!esAdmin()) return;
-  const uid = $('#usr-unir-destino').value;
-  if (!uid) return;
-  let dueno, destino;
-  try {
-    const snap = await fb.getDocs(fb.collection(fb.db, 'usuarios', ownerUid, 'miembros'));
-    const docs = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-    dueno = docs.find(m => m.uid === ownerUid);
-    destino = docs.find(m => m.uid === uid);
-  } catch (e) {
-    toast('❌ No se pudo leer la lista de usuarios');
-    return;
-  }
-  if (!dueno || !destino || !dueno.usuario) return;
-  if (!confirm(`¿Todo lo firmado como "${dueno.usuario}" pasa a leerse como "${destino.usuario}"?\n\n`
-    + 'No se cambia ningún dato guardado: solo se anota que son la misma persona.')) return;
-  const previos = [...new Set([...(destino.nombresPrevios || []), dueno.usuario])];
-  try {
-    await fb.updateDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'miembros', uid), { nombresPrevios: previos });
-  } catch (e) {
-    toast('❌ No se pudo guardar. Revisa tu conexión.');
-    return;
-  }
-  await cargarEquipo();
-  await renderUsuarios();
-  // Todo lo que enseña firmas hay que volver a dibujarlo con el nombre unido
-  renderCobranza();
-  renderKardex();
-  renderVentas();
-  toast(`✅ "${dueno.usuario}" y "${destino.usuario}" son la misma persona`);
 }
 
 function crearUsuarioAuthSecundaria(email, pass) {
@@ -9224,7 +9190,6 @@ function inicializarEventos() {
   $('#btn-logout-header').addEventListener('click', cerrarSesion);
   $('#btn-cambiar-pass').addEventListener('click', cambiarMiContrasena);
   $('#btn-alias-crear').addEventListener('click', crearMiUsuarioDeAcceso);
-  $('#btn-usr-unir').addEventListener('click', unirFirmaDelDueno);
 
   // Menú del usuario: "Mi perfil" y "Configuración"
   $('#btn-cuenta').addEventListener('click', ev => {
