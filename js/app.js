@@ -36,6 +36,7 @@ let vencimientoEditadoManual = false;
 let modoNube = false;
 let fb = null;            // SDK y referencias de Firebase
 let unsubSnapshot = null; // cancela la suscripción en tiempo real
+let unsubPorCobrar = null; // los créditos que aún se deben, sean de cuando sean
 let unsubClientes = null; // suscripción en tiempo real de la lista de clientes
 let unsubAjustes = null;  // suscripción a la configuración del negocio
 let unsubSeguridad = null; // suscripción al código de seguridad
@@ -1150,6 +1151,9 @@ async function guardarEnStore(credito) {
 
 async function eliminarDeStore(id) {
   if (modoNube) {
+    // La foto vive en su propio documento: si no se borra aquí, se queda
+    // ocupando sitio para siempre sin que nadie pueda ya llegar a ella.
+    await eliminarFotoDeBoleta(id);
     await escrituraNube(
       fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', id)), 'borrado de un crédito');
   } else {
@@ -1356,6 +1360,11 @@ async function iniciarNube() {
     updateDoc: fsMod.updateDoc,
     deleteDoc: fsMod.deleteDoc,
     onSnapshot: fsMod.onSnapshot,
+    // Para escuchar solo una ventana de datos en vez de la colección entera
+    query: fsMod.query,
+    where: fsMod.where,
+    orderBy: fsMod.orderBy,
+    limit: fsMod.limit,
     serverTimestamp: fsMod.serverTimestamp,
     disableNetwork: fsMod.disableNetwork,
     enableNetwork: fsMod.enableNetwork,
@@ -1582,6 +1591,7 @@ function abrirSesionEnPantalla() {
 
 function sesionCerrada() {
   if (unsubSnapshot) { unsubSnapshot(); unsubSnapshot = null; }
+  if (unsubPorCobrar) { unsubPorCobrar(); unsubPorCobrar = null; }
   if (unsubClientes) { unsubClientes(); unsubClientes = null; }
   if (unsubAjustes) { unsubAjustes(); unsubAjustes = null; }
   if (unsubSeguridad) { unsubSeguridad(); unsubSeguridad = null; }
@@ -1595,6 +1605,14 @@ function sesionCerrada() {
   if (unsubKardex) { unsubKardex(); unsubKardex = null; }
   if (unsubNotas) { unsubNotas(); unsubNotas = null; }
   creditos = [];
+  creditosRecientes = [];
+  creditosPorCobrar = [];
+  historialCompleto = false;
+  // El corte y las fotos traídas son del negocio del que se fue
+  corteKardex = null;
+  corteEnUso = '';
+  mudanzaDeFotosHecha = false;
+  fotosDeBoleta.clear();
   clientes = [];
   hojas = [];
   despachos = [];
@@ -1630,17 +1648,67 @@ async function cerrarSesion() {
   }
 }
 
-function suscribirNube() {
+/* ====== Qué parte de la nube se escucha ======
+   Escuchar colecciones enteras significa bajarlas enteras cada vez que la app
+   arranca en frío, y eso crece para siempre: al año son decenas de miles de
+   documentos por arranque, aunque nadie vaya a mirar lo del año pasado.
+   Ahora se escucha una ventana —los últimos meses— y lo viejo se trae solo
+   cuando se pide (📚 Ver todo el historial).
+
+   Con una excepción que no se puede negociar: un crédito de hace un año que
+   SIGUE debiendo tiene que verse siempre, o el negocio pierde la deuda de
+   vista. Por eso los créditos llevan dos escuchas: la ventana por fecha y,
+   aparte, todo lo que no esté pagado, tenga la antigüedad que tenga. */
+const MESES_EN_VIVO = 6;
+let historialCompleto = false;   // alguien pidió ver todo, sin ventana
+
+function desdeCuandoSeEscucha() {
+  const d = new Date();
+  d.setMonth(d.getMonth() - MESES_EN_VIVO);
+  return d.toISOString().slice(0, 10);
+}
+
+/* Una escucha con ventana por fecha; sin ventana si se pidió el historial */
+function escucharVentana(nombreColeccion, alLlegar, alFallar) {
+  const col = fb.collection(fb.db, 'usuarios', ownerUid, nombreColeccion);
+  const consulta = historialCompleto
+    ? col
+    : fb.query(col, fb.where('fecha', '>=', desdeCuandoSeEscucha()));
+  return fb.onSnapshot(consulta, alLlegar, alFallar);
+}
+
+/* Los créditos llegan por dos caminos (la ventana y lo que se debe) y hay que
+   juntarlos en una sola lista sin repetir. Lo último que se mete manda: los
+   documentos son los mismos y da igual por qué escucha hayan entrado. */
+let creditosRecientes = [], creditosPorCobrar = [];
+let pendientesRecientes = false, pendientesPorCobrar = false;
+
+function juntarCreditos() {
+  const mapa = new Map();
+  for (const lista of [creditosRecientes, creditosPorCobrar]) {
+    for (const c of lista) mapa.set(c.id, c);
+  }
+  creditos = [...mapa.values()];
+  cambiosPendientes = pendientesRecientes || pendientesPorCobrar;
+}
+
+async function suscribirNube() {
+  // El corte del kardex hay que tenerlo ANTES de decidir qué se escucha de él
+  await leerCorteKardex();
   if (unsubSnapshot) unsubSnapshot();
   const coleccion = fb.collection(fb.db, 'usuarios', ownerUid, 'creditos');
   // includeMetadataChanges: sin esto Firestore solo avisa cuando cambian los
   // datos, y nunca sabríamos que un cambio ya terminó de subir ni que se
   // recuperó la conexión (el aviso de "subiendo…" se quedaría pegado).
-  unsubSnapshot = fb.onSnapshot(coleccion, { includeMetadataChanges: true }, snap => {
-    creditos = snap.docs.map(d => d.data());
-    guardarCopiaLocal(creditos);
+  const consultaCreditos = historialCompleto
+    ? coleccion
+    : fb.query(coleccion, fb.where('fecha', '>=', desdeCuandoSeEscucha()));
+  unsubSnapshot = fb.onSnapshot(consultaCreditos, { includeMetadataChanges: true }, snap => {
+    creditosRecientes = snap.docs.map(d => d.data());
     // hasPendingWrites: hay cambios guardados aquí que aún no llegaron al servidor
-    cambiosPendientes = snap.metadata.hasPendingWrites;
+    pendientesRecientes = snap.metadata.hasPendingWrites;
+    juntarCreditos();
+    guardarCopiaLocal(creditos);
     marcarOrigenDatos(snap);
     actualizarAvisoConexion();
     render();
@@ -1648,12 +1716,33 @@ function suscribirNube() {
     // Las fotos que lleguen nuevas también necesitan su copia chica
     cargarMiniaturas().then(() => { renderListaCreditos(); prepararMiniaturas(); });
     if (esAdmin()) ofrecerMigracionLocal(ownerUid);
+    mudarFotosFueraDelCredito();
   }, err => {
     console.error('Error de sincronización:', err);
     // Sin internet esto es normal: no hay que asustar con un error
     if (navigator.onLine === false) { actualizarAvisoConexion(); return; }
     banner('⚠️ Error de sincronización con la nube. Revisa tu conexión o las reglas de Firestore.');
   });
+
+  // Lo que se debe, sin importar de cuándo sea. Es la escucha que impide que
+  // una deuda vieja se caiga de la lista por quedarse fuera de la ventana.
+  if (unsubPorCobrar) unsubPorCobrar();
+  if (historialCompleto) {
+    creditosPorCobrar = [];
+    unsubPorCobrar = null;
+  } else {
+    unsubPorCobrar = fb.onSnapshot(
+      fb.query(coleccion, fb.where('estado', '!=', 'pagado')),
+      { includeMetadataChanges: true }, snap => {
+        creditosPorCobrar = snap.docs.map(d => d.data());
+        pendientesPorCobrar = snap.metadata.hasPendingWrites;
+        juntarCreditos();
+        guardarCopiaLocal(creditos);
+        render();
+      }, err => {
+        console.error('Error al sincronizar los créditos por cobrar:', err);
+      });
+  }
 
   if (unsubClientes) unsubClientes();
   unsubClientes = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'clientes'), snap => {
@@ -1666,7 +1755,7 @@ function suscribirNube() {
   });
 
   if (unsubHojas) unsubHojas();
-  unsubHojas = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'hojas'), snap => {
+  unsubHojas = escucharVentana('hojas', snap => {
     hojas = snap.docs.map(d => d.data());
     if (!$('#view-cobranza').hidden) renderCobranza();
     revisarAperturaAutomatica();
@@ -1675,7 +1764,7 @@ function suscribirNube() {
   });
 
   if (unsubDespachos) unsubDespachos();
-  unsubDespachos = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'despachos'), snap => {
+  unsubDespachos = escucharVentana('despachos', snap => {
     despachos = snap.docs.map(d => d.data());
     if (!$('#view-despachos').hidden) renderDespachos();
   }, err => {
@@ -1709,22 +1798,67 @@ function suscribirNube() {
     console.error('Error al sincronizar los productos:', err);
   });
 
+  /* El kardex es la única fuente de verdad del stock: recortarlo a lo alegre
+     dejaría a TODOS los productos con un stock falso. Por eso solo se escucha
+     una ventana cuando hay un corte guardado que dice en cuánto quedó cada
+     producto hasta esa fecha: corte + movimientos posteriores = la historia
+     completa, exacta. Sin corte se escucha entero, como siempre. */
   if (unsubKardex) unsubKardex();
-  unsubKardex = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'kardex'), snap => {
-    kardex = snap.docs.map(d => d.data());
-    if (!$('#view-kardex').hidden) renderKardex();
-    if (!$('#view-productos').hidden) renderProductos();
-  }, err => {
-    console.error('Error al sincronizar el kardex:', err);
-  });
+  const colKardex = fb.collection(fb.db, 'usuarios', ownerUid, 'kardex');
+  const corte = (!historialCompleto && corteKardex && corteKardex.hasta) ? corteKardex : null;
+  corteEnUso = corte ? corte.hasta : '';
+  unsubKardex = fb.onSnapshot(
+    corte ? fb.query(colKardex, fb.where('fecha', '>', corte.hasta)) : colKardex,
+    snap => {
+      kardex = snap.docs.map(d => d.data());
+      if (!$('#view-kardex').hidden) renderKardex();
+      if (!$('#view-productos').hidden) renderProductos();
+      // Con el kardex entero en la mano es cuando se puede calcular el corte
+      // que permitirá, la próxima vez, no tener que bajarlo entero.
+      if (!corteEnUso) prepararCorteKardex();
+    }, err => {
+      console.error('Error al sincronizar el kardex:', err);
+    });
 
   if (unsubNotas) unsubNotas();
-  unsubNotas = fb.onSnapshot(fb.collection(fb.db, 'usuarios', ownerUid, 'notas'), snap => {
+  unsubNotas = escucharVentana('notas', snap => {
     notas = snap.docs.map(d => d.data());
     if (!$('#view-ventas').hidden) renderVentas();
   }, err => {
     console.error('Error al sincronizar las notas de venta:', err);
   });
+}
+
+/* El aviso de qué parte del historial está cargada. Solo aparece en modo nube:
+   sin cuenta todo está en este equipo y no hay ventana que valga. */
+function mesEnPalabras(iso) {
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('es-PE', { month: 'long', year: 'numeric' });
+}
+
+function actualizarAvisoHistorial() {
+  const caja = $('#historial-aviso');
+  if (!caja) return;
+  if (!modoNube || historialCompleto) { caja.hidden = true; return; }
+  caja.hidden = false;
+  $('#historial-texto').textContent =
+    `📅 Se están viendo los créditos desde ${mesEnPalabras(desdeCuandoSeEscucha())}, `
+    + 'más todo lo que siga debiéndose sea de cuando sea.';
+}
+
+/* Trae el archivo entero: se rehacen todas las escuchas sin ventana. Es un
+   viaje caro (baja años de historia), así que se pide a propósito y se avisa. */
+async function cargarTodoElHistorial() {
+  if (!modoNube || historialCompleto) return;
+  historialCompleto = true;
+  toast('📚 Trayendo todo el historial…');
+  await suscribirNube();
+  actualizarAvisoHistorial();
+  render();
+  renderVentas();
+  renderKardex();
+  renderProductos();
+  if (!$('#view-despachos').hidden) renderDespachos();
 }
 
 /* Muestra/oculta botones según los permisos del usuario actual */
@@ -1894,6 +2028,43 @@ async function ofrecerMigracionLocal(uid) {
     }
     localStorage.setItem(marca, '1');
   } catch (e) { /* sin datos locales */ }
+}
+
+/* Muda a su propio documento las fotos que todavía están dentro del crédito.
+   Se hace una vez, de a poco y en segundo plano: son dos escrituras por
+   crédito y no hay ninguna prisa. Mientras no termine, la app funciona igual
+   —las fotos de antes se siguen leyendo desde dentro del crédito—; lo que se
+   gana al acabar es que arrancar deje de bajarlas todas. */
+let mudanzaDeFotosHecha = false;
+async function mudarFotosFueraDelCredito() {
+  if (mudanzaDeFotosHecha || !modoNube || !esAdmin()) return;
+  const pendientes = creditos.filter(c => c.foto);
+  if (!pendientes.length) return;
+  mudanzaDeFotosHecha = true;
+
+  let movidas = 0;
+  for (const c of pendientes) {
+    try {
+      const mini = c.fotoMini || miniDe(c) || await hacerMiniatura(c.foto);
+      await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'fotos', c.id),
+        { id: c.id, foto: c.foto, actualizado: Date.now() });
+      fotosDeBoleta.set(c.id, c.foto);
+      await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', c.id),
+        { ...c, foto: null, tieneFoto: true, fotoMini: mini });
+      if (mini) miniaturas.set(c.id, mini);
+      movidas++;
+    } catch (e) {
+      // Sin señal o sin permiso: se deja para la próxima vez que se entre
+      console.error('No se pudo mudar la foto del crédito', c.id, e);
+      mudanzaDeFotosHecha = false;
+      break;
+    }
+    await respiro();
+  }
+  if (movidas) {
+    console.info(`Fotos mudadas fuera del crédito: ${movidas}`);
+    render();
+  }
 }
 
 /* ====== Autenticación (usuario + contraseña) ====== */
@@ -2488,6 +2659,7 @@ function render() {
   actualizarContadorFiltro();
   if ($('#modal-info').open) renderInfo();   // la ficha se mantiene al día
   renderAvisoFaltantes();
+  actualizarAvisoHistorial();
   if (!$('#view-dashboard').hidden) renderDashboard();
   // Si un crédito enlazado se pagó, el estado del despacho pasa a "pagado":
   // mantén la vista de despachos al día si está abierta.
@@ -2602,6 +2774,60 @@ function renderResumen() {
   $('#sum-activos').textContent = String(activos);
 }
 
+/* ====== La foto de la boleta vive en su propio documento ======
+   Una foto de boleta pesa unos 660 KB. Guardada DENTRO del crédito, cada vez
+   que la app arrancaba en frío se bajaba el historial entero de fotos aunque
+   nadie fuera a mirar ninguna: con medio año de trabajo son cientos de megas
+   por arranque, y la caché de Firestore (40 MB) ni siquiera da para tenerlas
+   guardadas, así que se volvían a bajar una y otra vez.
+   Ahora el crédito solo lleva la copia chica que usa la lista (~5 KB) y una
+   marca de que hay foto; la grande está en `fotos/{id del crédito}` y se baja
+   únicamente cuando alguien la abre.
+   En modo local (sin cuenta) no hay nada que ahorrar —es el disco del propio
+   equipo— y la foto se sigue guardando dentro del crédito. */
+const fotosDeBoleta = new Map();   // id del crédito → foto ya traída de la nube
+
+/* ¿Este crédito tiene foto? `foto` es el de los créditos de antes (y el de
+   modo local); `tieneFoto`, el de los que ya la guardan aparte. */
+function tieneFoto(c) { return !!(c && (c.foto || c.tieneFoto)); }
+
+/* Trae la foto grande. Solo pega el viaje a la nube la primera vez. */
+async function leerFotoDeBoleta(c) {
+  if (!c) return null;
+  if (c.foto) return c.foto;                    // créditos de antes y modo local
+  if (!c.tieneFoto || !modoNube) return null;
+  if (fotosDeBoleta.has(c.id)) return fotosDeBoleta.get(c.id);
+  try {
+    const snap = await fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'fotos', c.id));
+    const foto = snap.exists() ? (snap.data().foto || null) : null;
+    if (foto) fotosDeBoleta.set(c.id, foto);
+    return foto;
+  } catch (e) {
+    console.error('No se pudo traer la foto de la boleta:', e);
+    return null;
+  }
+}
+
+async function guardarFotoDeBoleta(id, dataUrl) {
+  if (!modoNube) return;
+  await escrituraNube(
+    fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'fotos', id),
+      { id, foto: dataUrl, actualizado: Date.now() }),
+    'foto de la boleta');
+  fotosDeBoleta.set(id, dataUrl);
+}
+
+async function eliminarFotoDeBoleta(id) {
+  fotosDeBoleta.delete(id);
+  if (!modoNube) return;
+  // Si esto falla, la foto queda huérfana ocupando sitio; no vale la pena
+  // reventar por eso el borrado del crédito, que es lo que se pidió.
+  try {
+    await escrituraNube(
+      fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'fotos', id)), 'borrado de la foto');
+  } catch (e) { console.error('No se pudo borrar la foto de la boleta:', e); }
+}
+
 /* ====== Miniaturas de las fotos de boleta ======
    La foto se guarda grande a propósito (hay que poder leer la boleta) y pesa
    hasta 760 KB. Puesta tal cual en la lista, el navegador la descomprime
@@ -2666,9 +2892,14 @@ async function prepararMiniaturas() {
 /* En la lista va la copia chica; "loading=lazy" hace que el navegador solo
    cargue las que se están viendo, y "decoding=async" que no frene el dibujo */
 function celdaFoto(c) {
-  return c.foto
-    ? `<img src="${miniDe(c) || c.foto}" class="thumb" alt="Boleta ${c.boleta}" data-ver-foto="${c.id}" loading="lazy" decoding="async">`
-    : `<span class="no-photo">Sin foto</span>`;
+  if (!tieneFoto(c)) return `<span class="no-photo">Sin foto</span>`;
+  const mini = miniDe(c) || c.foto;
+  // Sin copia chica a mano (un crédito viejo en un equipo nuevo) se pone un
+  // botón que abre la foto igual: bajarla entera solo para la lista es
+  // justamente lo que se quiere evitar.
+  return mini
+    ? `<img src="${mini}" class="thumb" alt="Boleta ${c.boleta}" data-ver-foto="${c.id}" loading="lazy" decoding="async">`
+    : `<button type="button" class="thumb thumb-vacia" data-ver-foto="${c.id}" title="Ver la boleta">📷</button>`;
 }
 
 /* ====== La lista de créditos, por tandas ======
@@ -2860,7 +3091,7 @@ function renderTarjetas(lista) {
       </div>
       <div class="card-side">
         ${badgeEstado(c)}
-        ${c.foto ? celdaFoto(c) : ''}
+        ${tieneFoto(c) ? celdaFoto(c) : ''}
       </div>
       <div class="card-actions">
         <button class="btn btn-secondary btn-small" data-info="${c.id}">ℹ️ Información</button>
@@ -3822,8 +4053,16 @@ function renderInfo() {
       </div>`).join('')
     : '<p class="abonos-vacio">Todavía no hay pagos a cuenta.</p>';
 
-  $('#info-foto-wrap').hidden = !c.foto;
-  if (c.foto) $('#info-foto').src = c.foto;
+  // La foto grande se pide aparte: mientras llega se enseña la copia chica,
+  // que ya está aquí, para que la ficha no salte al terminar de bajarla.
+  $('#info-foto-wrap').hidden = !tieneFoto(c);
+  if (tieneFoto(c)) {
+    $('#info-foto').src = miniDe(c) || c.foto || '';
+    leerFotoDeBoleta(c).then(foto => {
+      // Solo si la ficha sigue enseñando este mismo crédito
+      if (foto && infoCreditoId === c.id) $('#info-foto').src = foto;
+    });
+  }
 
   // El apartado de cobro solo para quien tenga permiso de registrar pagos
   const puedeCobrar = puede('pagos') && debe > 0 && abonos.length < MAX_ABONOS;
@@ -3862,7 +4101,7 @@ function renderInfo() {
   // eso, la ficha reservaba igual sus columnas y quedaban huecos en blanco: se
   // le dice cuántas zonas hay de verdad para que se repartan el ancho.
   const ficha = $('#modal-info');
-  ficha.classList.toggle('sin-foto', !c.foto);
+  ficha.classList.toggle('sin-foto', !tieneFoto(c));
   ficha.classList.toggle('sin-cobro', !puedeCobrar);
 }
 
@@ -3996,6 +4235,10 @@ async function registrarCobro() {
 /* ====== Formulario ====== */
 const modalForm = $('#modal-form');
 let fotoActual = null;
+/* Id del crédito cuya foto grande todavía se está bajando de la nube. Mientras
+   valga algo, guardar el crédito NO toca su foto: si no, quien le diera a
+   guardar antes de que llegara la boleta la borraría sin querer. */
+let fotoBajando = '';
 let abonosActuales = [];   // abonos "a cuenta" en edición
 
 /* Pone las etiquetas de los botones-atajo según la configuración */
@@ -4034,6 +4277,7 @@ function abrirFormulario(credito = null, prefill = null) {
   $('#credit-form').reset();
   limpiarErrorFormulario();
   fotoActual = null;
+  fotoBajando = '';
   abonosActuales = [];
   abonoEditando = null;
   vencimientoEditadoManual = false;
@@ -4073,9 +4317,19 @@ function abrirFormulario(credito = null, prefill = null) {
     $('#f-vencimiento').value = credito.vencimiento;
     $('#f-notas').value = credito.notas || '';
     vencimientoEditadoManual = true; // no recalcular al editar
-    if (credito.foto) {
-      fotoActual = credito.foto;
-      mostrarPreview(credito.foto);
+    if (tieneFoto(credito)) {
+      // Se pide la foto grande al vuelo. Hasta que llegue, `fotoActual` queda
+      // en null a propósito: si se guardara el crédito antes de tenerla, se
+      // guardaría "sin foto" y se perdería la boleta.
+      fotoActual = null;
+      fotoBajando = credito.id;
+      mostrarPreview(miniDe(credito) || credito.foto || '');
+      leerFotoDeBoleta(credito).then(foto => {
+        if (!foto || $('#f-id').value !== credito.id || fotoBajando !== credito.id) return;
+        fotoActual = foto;
+        fotoBajando = '';
+        mostrarPreview(foto);
+      });
     }
     // Al editar: mostrar abonos y ocultar "pago inicial"
     // Se conserva la constancia (quién y cuándo registró cada pago): es la
@@ -4473,12 +4727,27 @@ function prepararZoomImagen() {
 let visorCreditoActual = null;   // crédito cuya foto se está viendo (null = otra imagen, ej. firma)
 let visorImagenActual = null;    // dataURL actual mostrada (con la rotación pendiente, si hay)
 
-function abrirVisorImagen(credito) {
+/* La foto grande ya no viene dentro del crédito: se pide al abrirla. Mientras
+   llega se enseña la copia chica, para que el visor abra al instante como
+   siempre; rotar solo se ofrece con la grande ya en mano. */
+async function abrirVisorImagen(credito) {
   const nombre = String(credito.boleta || 'foto').replace(/[^\w.-]/g, '_');
-  mostrarImagenGrande(credito.foto, `boleta-${nombre}.jpg`);
+  const archivo = `boleta-${nombre}.jpg`;
+  mostrarImagenGrande(miniDe(credito) || credito.foto || '', archivo);
+
+  const foto = await leerFotoDeBoleta(credito);
+  if (!foto) {
+    if (!miniDe(credito) && !credito.foto) toast('❌ No se pudo traer la foto de la boleta');
+    return;
+  }
+  // Si mientras bajaba se cerró el visor —o se abrió otra imagen— no se pisa
+  if (!$('#modal-imagen').open || $('#btn-descargar-imagen').download !== archivo) return;
+  $('#imagen-grande').src = foto;
+  $('#btn-descargar-imagen').href = foto;
+  reiniciarZoomImagen();
   if (puede('editar')) {
     visorCreditoActual = credito;
-    visorImagenActual = credito.foto;
+    visorImagenActual = foto;
     $('#btn-rotar-imagen').hidden = false;
     $('#btn-guardar-rotacion').hidden = false;
     $('#btn-guardar-rotacion').disabled = true;
@@ -4512,8 +4781,15 @@ async function guardarRotacionImagen() {
   const boton = $('#btn-guardar-rotacion');
   boton.disabled = true;
   try {
-    const actualizado = { ...visorCreditoActual, foto: visorImagenActual };
+    // La foto rotada va a su propio documento; en el crédito solo se refresca
+    // la copia chica de la lista, que si no seguiría enseñándola torcida.
+    const mini = await hacerMiniatura(visorImagenActual);
+    const actualizado = modoNube
+      ? { ...visorCreditoActual, foto: null, tieneFoto: true, fotoMini: mini }
+      : { ...visorCreditoActual, foto: visorImagenActual, tieneFoto: true, fotoMini: mini };
+    await guardarFotoDeBoleta(actualizado.id, visorImagenActual);
     await guardarEnStore(actualizado);
+    if (mini) { miniaturas.set(actualizado.id, mini); DB.putMiniatura({ id: actualizado.id, mini }).catch(() => {}); }
     const idx = creditos.findIndex(c => c.id === actualizado.id);
     if (idx >= 0) creditos[idx] = actualizado;
     visorCreditoActual = actualizado;
@@ -4569,6 +4845,7 @@ async function manejarFoto(input) {
   if (!file) return;
   try {
     fotoActual = await procesarImagen(file);
+    fotoBajando = '';        // manda la foto nueva, no la que estaba bajando
     mostrarPreview(fotoActual);
   } catch (e) {
     toast('❌ No se pudo procesar la imagen');
@@ -4871,7 +5148,11 @@ function renderDashboard() {
     { et: 'Cobrado hoy', val: formatoMonto(cobradoHoy), pie: 'ingresos del día', ico: '📈', color: 'var(--accent)', bg: 'var(--accent-light)' },
     { et: 'Vencidos', val: String(vencidos), pie: 'requieren atención', ico: '⚠️', color: 'var(--danger)', bg: 'var(--danger-light)' },
     { et: 'Créditos activos', val: String(activos), pie: 'en seguimiento', ico: '📋', color: 'var(--azul)', bg: '#e6efFB' },
-    { et: 'Cobrado total', val: formatoMonto(cobrado), pie: 'histórico', ico: '✅', color: 'var(--accent)', bg: 'var(--accent-light)' },
+    // Con la ventana puesta, aquí solo entra lo que está cargado: decir
+    // "histórico" sería mentir. Con el historial completo sí es el total.
+    { et: 'Cobrado total', val: formatoMonto(cobrado),
+      pie: (modoNube && !historialCompleto) ? `últimos ${MESES_EN_VIVO} meses` : 'histórico',
+      ico: '✅', color: 'var(--accent)', bg: 'var(--accent-light)' },
     { et: 'Despachos hoy', val: String(despHoy), pie: 'salieron a reparto', ico: '📦', color: 'var(--amber)', bg: 'var(--amber-light)' },
   ];
   $('#dash-kpis').innerHTML = kpis.map((k, i) => `
@@ -6106,6 +6387,10 @@ async function guardarCredito(ev) {
 
   const existente = creditos.find(c => c.id === id);
   const fecha = $('#f-fecha').value;
+  /* Si la foto grande todavía venía bajando cuando se le dio a guardar, se
+     deja la que ya tenía: nadie pierde una boleta por ir más rápido que la
+     red. Quitarla a propósito sí borra (el botón limpia esta marca). */
+  const conservaFoto = !!existente && fotoBajando === id && tieneFoto(existente);
 
   // Abonos: al editar vienen de la sección; al crear, del "pago inicial" opcional
   let abonos;
@@ -6140,13 +6425,21 @@ async function guardarCredito(ev) {
       : $('#f-vencimiento').value,
     abonos,
     notas: $('#f-notas').value.trim(),
-    foto: fotoActual,
-    // Copia chica para las listas: sin ella, cada fila cargaría la foto entera
-    fotoMini: fotoActual
-      ? (existente && existente.foto === fotoActual
-          ? (existente.fotoMini || miniDe(existente) || await hacerMiniatura(fotoActual))
-          : await hacerMiniatura(fotoActual))
-      : null,
+    // La foto grande se guarda aparte (ver "La foto de la boleta vive en su
+    // propio documento"). En el crédito queda solo la marca y la copia chica
+    // que usa la lista. `foto: null` de paso saca la foto vieja de los
+    // créditos de antes: editarlos los deja ya con el formato nuevo.
+    foto: modoNube ? null : (conservaFoto ? existente.foto : fotoActual),
+    tieneFoto: conservaFoto ? tieneFoto(existente) : !!fotoActual,
+    fotoMini: conservaFoto
+      ? (existente.fotoMini || miniDe(existente) || null)
+      : (fotoActual
+          // Si es la misma foto que ya tenía (esté dentro del crédito o
+          // traída aparte), se reaprovecha su copia chica en vez de rehacerla
+          ? (existente && (existente.foto === fotoActual || fotosDeBoleta.get(existente.id) === fotoActual)
+              ? (existente.fotoMini || miniDe(existente) || await hacerMiniatura(fotoActual))
+              : await hacerMiniatura(fotoActual))
+          : null),
     creado: existente ? existente.creado : Date.now(),
     // Se conserva el compromiso de pago anotado por quien cobra (editar el
     // crédito no debe borrarlo), junto con su constancia
@@ -6157,11 +6450,17 @@ async function guardarCredito(ev) {
   credito.estado = estadoCalculado(credito);  // pagado / parcial / pendiente automático
 
   try {
+    // Primero la foto y después el crédito: así el crédito nunca queda
+    // diciendo que tiene boleta antes de que la boleta exista de verdad.
+    if (!conservaFoto) {
+      if (fotoActual) await guardarFotoDeBoleta(id, fotoActual);
+      else if (existente && tieneFoto(existente)) await eliminarFotoDeBoleta(id);
+    }
     await guardarEnStore(credito);
   } catch (e) {
     console.error(e);
     // Causa más común: la foto hace que el registro pase del límite de 1 MB
-    const pesada = credito.foto && credito.foto.length > 700000;
+    const pesada = fotoActual && fotoActual.length > 700000;
     errorFormulario(pesada
       ? '❌ No se pudo guardar: la foto es demasiado pesada. Quítala y toma otra más de cerca (o guarda el crédito sin foto).'
       : '❌ No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.');
@@ -6344,8 +6643,89 @@ function cantidadConSigno(m) {
   return t.signo * (Number(m.cantidad) || 0);
 }
 
+/* ====== El corte del kardex ======
+   Para poder dejar de bajar el kardex entero en cada arranque hace falta saber
+   en cuánto quedó cada producto hasta cierto día. Eso es el corte: un único
+   documento con el saldo de cada producto hasta `hasta`. A partir de ahí, el
+   stock es el saldo del corte más los movimientos posteriores, que sí se
+   escuchan. Ni se pierde un movimiento ni se cuenta dos veces, porque el corte
+   solo se suma cuando el kardex viene recortado por esa misma fecha.
+   Si el corte no existe todavía, no pasa nada: se escucha el kardex completo
+   como siempre y el corte se calcula en segundo plano para la próxima vez. */
+let corteKardex = null;   // { hasta, saldos: { productoId: saldo }, generado }
+let corteEnUso = '';      // la fecha del corte que de verdad se está aplicando
+
+async function leerCorteKardex() {
+  corteKardex = null;
+  if (!modoNube) return;
+  try {
+    const snap = await fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'corteKardex'));
+    const d = snap.exists() ? snap.data() : null;
+    // Un corte a futuro no tiene sentido y taparía movimientos de hoy
+    if (d && d.hasta && d.saldos && d.hasta < hoyISO()) corteKardex = d;
+  } catch (e) { /* sin corte se escucha el kardex entero, que siempre funciona */ }
+}
+
+function saldoDelCorte(productoId) {
+  if (!corteEnUso || !corteKardex) return 0;
+  return Number((corteKardex.saldos || {})[productoId]) || 0;
+}
+
+/* Hasta qué día conviene cortar: el final del mes anterior a la ventana que se
+   escucha. Así el corte no se queda pegado al borde de lo que se está mirando. */
+function fechaDeCorteIdeal() {
+  const d = new Date(desdeCuandoSeEscucha());
+  d.setDate(0);   // último día del mes anterior
+  return d.toISOString().slice(0, 10);
+}
+
+/* Calcula y guarda el corte. Solo el administrador, solo con el kardex entero
+   delante y solo si hace falta: es una escritura y no corre ninguna prisa. */
+let corteEnMarcha = false;
+async function prepararCorteKardex() {
+  if (corteEnMarcha || !modoNube || !esAdmin() || corteEnUso) return;
+  const hasta = fechaDeCorteIdeal();
+  // Si el que hay ya llega hasta ahí, no hay nada que rehacer
+  if (corteKardex && corteKardex.hasta >= hasta) return;
+  if (!kardex.length) return;
+  corteEnMarcha = true;
+  try {
+    const saldos = {};
+    for (const m of kardex) {
+      if (!m.productoId || (m.fecha || '') > hasta) continue;
+      saldos[m.productoId] = (saldos[m.productoId] || 0) + cantidadConSigno(m);
+    }
+    const nuevo = { hasta, saldos, generado: Date.now(), generadoPor: quienSoy() };
+    // Sin esperar respuesta: es trabajo de fondo y sin señal la promesa se
+    // queda colgada hasta que vuelva la conexión. Firestore ya lo tiene
+    // apuntado en este equipo y lo subirá solo.
+    fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'corteKardex'), nuevo)
+      .catch(e => console.error('No se pudo guardar el corte del kardex:', e));
+    corteKardex = nuevo;
+    console.info(`Corte del kardex hasta ${hasta} (${Object.keys(saldos).length} productos)`);
+  } catch (e) {
+    console.error('No se pudo calcular el corte del kardex:', e);
+  } finally {
+    corteEnMarcha = false;
+  }
+}
+
+/* Un movimiento con fecha anterior al corte no lo vería nadie: queda fuera de
+   la ventana que se escucha y fuera del saldo ya calculado. Se le suma al
+   corte para que el stock siga cuadrando al céntimo. */
+async function sumarAlCorte(mov) {
+  if (!corteEnUso || !corteKardex || !mov.productoId) return;
+  if ((mov.fecha || '') > corteEnUso) return;
+  const saldos = { ...(corteKardex.saldos || {}) };
+  saldos[mov.productoId] = (saldos[mov.productoId] || 0) + cantidadConSigno(mov);
+  const nuevo = { ...corteKardex, saldos, actualizado: Date.now() };
+  corteKardex = nuevo;   // el stock de esta pantalla ya cuadra
+  fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'config', 'corteKardex'), nuevo)
+    .catch(e => console.error('No se pudo poner al día el corte del kardex:', e));
+}
+
 function stockDe(productoId) {
-  let s = 0;
+  let s = saldoDelCorte(productoId);
   for (const m of kardex) if (m.productoId === productoId) s += cantidadConSigno(m);
   return s;
 }
@@ -6359,8 +6739,13 @@ function kardexOrdenado() {
 
 /* Cada movimiento con el saldo que dejó ese producto: es la columna que hace
    que un kardex sirva de verdad (se puede auditar fila por fila). */
+/* El saldo que arrastra cada movimiento arranca en lo que decía el corte: si
+   no, el primer movimiento del mes parecería empezar el almacén de cero. */
 function kardexConSaldo() {
   const saldos = new Map();
+  if (corteEnUso && corteKardex) {
+    for (const [id, n] of Object.entries(corteKardex.saldos || {})) saldos.set(id, Number(n) || 0);
+  }
   return kardexOrdenado().map(m => {
     const previo = saldos.get(m.productoId) || 0;
     const saldo = previo + cantidadConSigno(m);
@@ -6738,6 +7123,9 @@ async function registrarMovimiento({ productoId, fecha, tipo, cantidad, motivo, 
     creado: Date.now(),
   };
   await guardarKardexEnStore(mov);
+  // Si se registró con una fecha anterior al corte, el corte tiene que
+  // enterarse: si no, ese movimiento no contaría en el stock de nadie.
+  await sumarAlCorte(mov);
   if (!modoNube) kardex.push(mov);
   return mov;
 }
@@ -8433,6 +8821,7 @@ function inicializarEventos() {
   $('#f-foto-archivo').addEventListener('change', ev => manejarFoto(ev.target));
   $('#btn-quitar-foto').addEventListener('click', () => {
     fotoActual = null;
+    fotoBajando = '';        // quitarla es a propósito: sí hay que borrarla
     $('#foto-preview-wrap').hidden = true;
   });
 
@@ -8529,7 +8918,9 @@ function inicializarEventos() {
       if (a && a.firma) mostrarImagenGrande(a.firma, `firma-${$('#f-boleta').value || 'pago'}-${idx + 1}.png`);
     } else if (verFotoInfo) {
       const c = creditos.find(x => x.id === infoCreditoId);
-      if (c && c.foto) abrirVisorImagen(c);
+      if (c && tieneFoto(c)) abrirVisorImagen(c);
+    } else if (ev.target.closest('#btn-historial-todo')) {
+      cargarTodoElHistorial();
     } else if (ev.target.closest('#faltantes-aviso')) {
       revisarFaltantes();
     } else if (anular) {
@@ -8568,7 +8959,7 @@ function inicializarEventos() {
       cancelarEdicionCompromiso();
     } else if (verFoto) {
       const c = creditos.find(x => x.id === verFoto.dataset.verFoto);
-      if (c && c.foto) abrirVisorImagen(c);
+      if (c && tieneFoto(c)) abrirVisorImagen(c);
     }
   });
   $('#btn-cerrar-imagen').addEventListener('click', () => $('#modal-imagen').close());

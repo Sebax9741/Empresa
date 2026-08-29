@@ -591,6 +591,23 @@ body {
 }
 
 /* Aviso de notas de venta (guías) faltantes: banda clicable */
+/* Qué parte del historial está cargada (y cómo traer el resto) */
+.historial-aviso {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.9rem;
+  margin: 0 0 1rem;
+  font-size: 0.86rem;
+}
+.historial-txt { flex: 1 1 18rem; }
+
 .faltantes-aviso {
   display: flex;
   align-items: center;
@@ -863,6 +880,14 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .thumb:hover { transform: scale(1.04); box-shadow: var(--shadow); }
 .no-photo { color: var(--muted); font-size: 0.82rem; font-style: italic; }
+/* Hay foto, pero su copia chica no está en este equipo: se ofrece abrirla sin
+   bajar la grande solo para enseñar un cuadradito de 44px. */
+.thumb-vacia {
+  background: var(--bg);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+}
 
 .row-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
 

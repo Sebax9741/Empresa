@@ -185,10 +185,44 @@ Opciones (la app es la misma):
 
 ## Preguntas frecuentes
 
-- **¿Cuánto cuesta?** Nada: Firebase (plan Spark), GitHub y Netlify tienen planes gratuitos que sobran para este uso.
+- **¿Cuánto cuesta?** Nada: Firebase (plan Spark), GitHub y Netlify tienen planes gratuitos. Con lo que ha crecido el sistema hubo que trabajar para que siga siendo así: ver "Qué gasta la app en la nube".
 - **¿Puedo compartirla con un socio o familiar?** Sí: que instale el APK y entre con el mismo correo y contraseña, o crea otra cuenta si quieres datos separados.
 - **¿Olvidé mi contraseña?** Pídesela al administrador: te pone una nueva con el botón **🔑 Restablecer clave** en 👥 Usuarios (ver "Restablecer la contraseña de un empleado"). No hay correo de recuperación para los empleados porque no entran con un correo suyo sino con un usuario corto (`juan`), y la dirección que la app arma por detrás no recibe mensajes.
 - **¿Y si estoy sin señal?** Puedes seguir usando la app; los cambios se sincronizan solos al volver la conexión.
+
+## Qué gasta la app en la nube
+
+El plan gratuito de Firebase da 1 GB guardado, 50.000 lecturas al día y 10 GB
+de descarga al mes. Lo que se come esos números no son las notas ni el kardex
+—un movimiento pesa unos 150 bytes— sino **las fotos de las boletas firmadas:
+660 KB cada una**, 450 veces más que toda la papelería de esa misma venta.
+
+Por eso la app hace dos cosas:
+
+**1. La foto vive fuera del crédito.** Está en `usuarios/{dueño}/fotos/{id del
+crédito}` y solo se baja cuando alguien la abre. Dentro del crédito queda la
+copia chica que usa la lista (~5 KB) y la marca `tieneFoto`. Los créditos de
+antes, que la llevaban dentro, se mudan solos en segundo plano la próxima vez
+que entra el administrador. Borrar un crédito borra también su foto.
+
+**2. No se baja el historial entero en cada arranque.** Se escuchan los
+últimos 6 meses de créditos, notas, despachos y hojas de cobranza —y, aparte,
+**todos los créditos que sigan debiéndose, sean de cuando sean**, que si no se
+perdería de vista una deuda vieja—. Lo demás se trae con el botón
+**📚 Cargar todo el historial**, que está debajo del resumen de Créditos.
+
+El kardex es el caso delicado, porque el stock se calcula sumándolo entero:
+recortarlo sin más dejaría a todos los productos con una cifra falsa. Para eso
+existe **el corte** (`config/corteKardex`): un único documento que dice en
+cuánto quedó cada producto hasta cierto día. El stock es el saldo del corte más
+los movimientos posteriores, que sí se escuchan; corte + ventana = la historia
+completa, exacta. El corte solo se aplica cuando el kardex viene recortado por
+esa misma fecha, así que nunca se cuenta nada dos veces. Si el corte todavía no
+existe, se escucha el kardex entero como siempre y el corte se calcula en
+segundo plano para la vez siguiente. Y si alguien registra un movimiento con
+fecha *anterior* al corte, se le suma al corte para que no se pierda.
+
+La ventana está en `MESES_EN_VIVO` (`js/app.js`).
 
 ## Tecnología
 
