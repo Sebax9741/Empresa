@@ -1902,34 +1902,75 @@ async function ofrecerMigracionLocal(uid) {
    había pasado se quedarían diciendo "Sin foto" —la foto sigue guardada, pero
    en un sitio que esta versión ya no mira—, así que aquí se traen de vuelta a
    donde siempre estuvieron y se borra la copia de fuera.
-   Va en segundo plano y de a poco: cuando no quede ninguna, no hace nada. */
-let fotosDevueltas = false;
-async function devolverFotosAlCredito() {
-  if (fotosDevueltas || !modoNube || !esAdmin()) return;
-  const pendientes = creditos.filter(c => !c.foto && c.tieneFoto);
-  if (!pendientes.length) return;
-  fotosDevueltas = true;
 
-  let vueltas = 0;
-  for (const c of pendientes) {
+   Se barre la colección `fotos` ENTERA, no los créditos: una foto puede haber
+   quedado ahí sin que su crédito lleve la marca `tieneFoto`, y mirando desde
+   el lado del crédito esa foto no se encontraría nunca.
+   Y no se corta al primer fallo: uno que dé error no puede dejar sin rescatar
+   a los cincuenta siguientes. Se cuenta todo y se informa al final. */
+let fotosDevueltas = false;
+
+async function recuperarFotosDeBoleta() {
+  const informe = { fotos: 0, recuperadas: 0, yaEstaban: 0, sinCredito: 0, vacias: 0, errores: [] };
+  if (!modoNube) return informe;
+
+  let sueltas;
+  try {
+    sueltas = await fb.getDocs(fb.collection(fb.db, 'usuarios', ownerUid, 'fotos'));
+  } catch (e) {
+    informe.errores.push(`No se pudo leer la lista de fotos: ${e.code || e.message}`);
+    return informe;
+  }
+
+  for (const d of sueltas.docs) {
+    informe.fotos++;
+    const id = d.id;
+    const foto = (d.data() || {}).foto || null;
+    if (!foto) { informe.vacias++; continue; }
+    const c = creditos.find(x => x.id === id);
+    if (!c) { informe.sinCredito++; continue; }
     try {
-      const snap = await fb.getDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'fotos', c.id));
-      const foto = snap.exists() ? (snap.data().foto || null) : null;
-      if (!foto) continue;   // no estaba: no hay nada que devolver
-      const { tieneFoto, ...resto } = c;
-      await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', c.id), { ...resto, foto });
-      await fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'fotos', c.id));
-      vueltas++;
+      if (c.foto) {
+        // Ya la tiene: solo sobra la copia de fuera
+        informe.yaEstaban++;
+      } else {
+        const { tieneFoto, ...resto } = c;
+        await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'creditos', id), { ...resto, foto });
+        const i = creditos.findIndex(x => x.id === id);
+        if (i >= 0) creditos[i] = { ...c, foto };
+        informe.recuperadas++;
+      }
+      await fb.deleteDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'fotos', id));
     } catch (e) {
-      // Sin señal: se deja para la próxima vez que se entre
-      console.error('No se pudo devolver la foto del crédito', c.id, e);
-      fotosDevueltas = false;
-      break;
+      informe.errores.push(`${c.boleta || id}: ${e.code || e.message}`);
     }
   }
-  if (vueltas) {
-    console.info(`Fotos devueltas al crédito: ${vueltas}`);
-    toast(`📷 ${vueltas} foto(s) de boleta recuperadas`);
+  return informe;
+}
+
+function textoDelInforme(inf) {
+  return [
+    `Fotos guardadas fuera del crédito: ${inf.fotos}`,
+    `  · devueltas a su crédito: ${inf.recuperadas}`,
+    inf.yaEstaban ? `  · el crédito ya la tenía: ${inf.yaEstaban}` : '',
+    inf.sinCredito ? `  · sin crédito al que volver: ${inf.sinCredito}` : '',
+    inf.vacias ? `  · guardadas vacías: ${inf.vacias}` : '',
+    `Créditos que dicen tener foto pero no la tienen: ${creditos.filter(c => !c.foto && c.tieneFoto).length}`,
+    `Créditos sin foto de ningún tipo: ${creditos.filter(c => !c.foto && !c.tieneFoto).length}`,
+    `Créditos con su foto puesta: ${creditos.filter(c => c.foto).length}`,
+    inf.errores.length ? `\nFallos (${inf.errores.length}):\n  ${inf.errores.slice(0, 10).join('\n  ')}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+/* En segundo plano al entrar: si no hay nada suelto, no hace nada */
+async function devolverFotosAlCredito() {
+  if (fotosDevueltas || !modoNube || !esAdmin()) return;
+  fotosDevueltas = true;
+  const inf = await recuperarFotosDeBoleta();
+  if (inf.errores.length) fotosDevueltas = false;   // se reintenta al volver a entrar
+  if (inf.recuperadas) {
+    console.info(textoDelInforme(inf));
+    toast(`📷 ${inf.recuperadas} foto(s) de boleta recuperadas`);
     render();
   }
 }
@@ -3125,6 +3166,9 @@ function actualizarEstadoPin() {
   if (!caja) return;
   // Solo el dueño/administrador puede poner o cambiar el código
   caja.hidden = modoNube && !esAdmin();
+  // El rescate de fotos, igual: es cosa del administrador y solo en la nube
+  const fotos = $('#settings-fotos');
+  if (fotos) fotos.hidden = !(modoNube && esAdmin());
   const puesto = pinConfigurado();
   $('#pin-estado').textContent = puesto
     ? '✅ Código activo: se pedirá al borrar.'
@@ -9366,6 +9410,20 @@ function inicializarEventos() {
   $('#btn-pin-quitar').addEventListener('click', quitarPin);
 
   $('#btn-exportar').addEventListener('click', exportarRespaldo);
+  $('#btn-recuperar-fotos').addEventListener('click', async () => {
+    const boton = $('#btn-recuperar-fotos');
+    const caja = $('#fotos-informe');
+    boton.disabled = true;
+    boton.textContent = '📷 Buscando…';
+    caja.hidden = false;
+    caja.textContent = 'Buscando…';
+    const inf = await recuperarFotosDeBoleta();
+    caja.textContent = textoDelInforme(inf);
+    boton.disabled = false;
+    boton.textContent = '📷 Buscar y recuperar fotos';
+    if (inf.recuperadas) { render(); toast(`📷 ${inf.recuperadas} foto(s) recuperadas`); }
+    else toast('No había fotos sueltas que devolver');
+  });
   $('#input-importar').addEventListener('change', ev => {
     const file = ev.target.files && ev.target.files[0];
     if (file) importarRespaldo(file);

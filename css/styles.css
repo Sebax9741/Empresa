@@ -3555,6 +3555,20 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .ing-grupo-tit strong { display: block; font-size: 0.95rem; }
 .ing-grupo-meta { font-size: 0.76rem; color: var(--muted); }
+/* El parte de lo que se encontró al rescatar las fotos de las boletas */
+.fotos-informe {
+  margin: 0.7rem 0 0;
+  padding: 0.7rem 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
 /* Se está corrigiendo una factura que ya entró, no registrando una nueva */
 .ing-editando {
   margin: 0;

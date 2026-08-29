@@ -1769,6 +1769,19 @@
         <small>Exporta un archivo con todos tus créditos (incluye fotos) para guardarlo o pasarlo a otro dispositivo.</small>
       </section>
 
+      <!-- ▸ Rescate de las fotos que quedaron guardadas fuera del crédito.
+           Solo hace falta por una versión que se deshizo; cuando no quede
+           ninguna, este bloque se puede quitar. -->
+      <section class="settings-grupo settings-fotos" id="settings-fotos" hidden>
+        <h3 class="settings-titulo">📷 Fotos de boletas</h3>
+        <small class="settings-grupo-desc">Si alguna boleta aparece como <strong>“Sin foto”</strong> aunque le hubieras tomado la foto,
+          es porque una versión anterior las guardó en otro sitio. Este botón las busca y las devuelve a su crédito.</small>
+        <div class="photo-actions">
+          <button type="button" id="btn-recuperar-fotos" class="btn btn-secondary">📷 Buscar y recuperar fotos</button>
+        </div>
+        <pre class="fotos-informe" id="fotos-informe" hidden></pre>
+      </section>
+
       <div class="modal-buttons">
         <button type="button" id="btn-settings-cerrar" class="btn btn-secondary">◀ Volver a créditos</button>
         <button type="submit" class="btn btn-primary">Guardar</button>
