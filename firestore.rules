@@ -30,12 +30,17 @@ service cloud.firestore {
         return esAdmin() || (esMiembro() && miMembresia().permisos.get(nombre, false) == true);
       }
 
-      // Créditos del negocio (datos compartidos por el equipo)
+      // Créditos del negocio (datos compartidos por el equipo).
+      // Anular una nota de venta borra el crédito que salió de ella, así que
+      // quien pueda anular notas puede borrarlo — pero SOLO si no tiene cobros
+      // registrados, que es exactamente lo que la app comprueba antes: ese
+      // dinero ya está contado en la hoja de cobranza de su día.
       match /creditos/{docId} {
         allow read: if esMiembro();
         allow create: if permiso('crear');
-        allow update: if permiso('editar') || permiso('pagos');
-        allow delete: if permiso('borrar');
+        allow update: if permiso('editar') || permiso('pagos') || permiso('ventasEditar');
+        allow delete: if permiso('borrar')
+                      || (permiso('ventasAnular') && resource.data.get('abonos', []).size() == 0);
       }
 
       // Clientes del negocio (nombre + zona). Todos los miembros los pueden ver
@@ -46,7 +51,7 @@ service cloud.firestore {
       match /clientes/{docId} {
         allow read: if esMiembro();
         allow create, update: if permiso('clientes') || permiso('crear');
-        allow delete: if esAdmin();
+        allow delete: if esAdmin() || permiso('clientesBorrar');
       }
 
       // Hojas de cobranza: cualquier miembro del equipo puede ABRIR la hoja del
@@ -66,14 +71,19 @@ service cloud.firestore {
       // anulación) también.
       match /anulados/{docId} {
         allow read: if esMiembro();
-        allow create, update, delete: if permiso('crear') || permiso('editar');
+        allow create, update, delete: if permiso('crear') || permiso('editar')
+                                      || permiso('ventasAnular');
       }
 
       // Despachos (viajes de reparto) y sus pedidos, y la lista de repartidores.
       // Quien tenga el permiso "despachos" (o el administrador) los arma y edita.
+      // Modificar una nota le pasa el importe nuevo a su despacho, y anularla
+      // lo quita de reparto: por eso esos dos permisos también entran aquí.
       match /despachos/{docId} {
         allow read: if esMiembro();
-        allow create, update, delete: if permiso('despachos');
+        allow create: if permiso('despachos');
+        allow update: if permiso('despachos') || permiso('ventasEditar');
+        allow delete: if permiso('despachos') || permiso('ventasAnular');
       }
       match /repartidores/{docId} {
         allow read: if esMiembro();
@@ -88,19 +98,26 @@ service cloud.firestore {
         allow create, update, delete: if permiso('productos');
       }
       // El kardex también lo escribe quien vende: cada nota de venta genera su
-      // salida de almacén. Nadie lo borra salvo quien gestiona el almacén.
+      // salida de almacén. Al modificar una nota se retiran sus salidas viejas
+      // y se anotan las nuevas, así que quien pueda modificar o anular notas
+      // tiene que poder borrarlas — pero SOLO las de venta: los ingresos de
+      // mercadería y los ajustes siguen siendo cosa del almacén.
       match /kardex/{docId} {
         allow read: if esMiembro();
         allow create: if permiso('productos') || permiso('ventas') || permiso('crear');
-        allow update, delete: if permiso('productos');
+        allow update, delete: if permiso('productos')
+                              || ((permiso('ventasEditar') || permiso('ventasAnular'))
+                                  && resource.data.get('motivo', '') == 'venta');
       }
 
-      // Notas de venta emitidas. Una vez grabadas no se editan ni se borran:
-      // son el comprobante que se le entregó al cliente.
+      // Notas de venta emitidas. Corregirlas y anularlas son dos permisos
+      // aparte; BORRARLAS de verdad, sin dejar rastro, sigue siendo solo del
+      // administrador (y con el código de seguridad).
       match /notas/{docId} {
         allow read: if esMiembro();
         allow create: if permiso('ventas') || permiso('crear');
-        allow update, delete: if esAdmin();
+        allow update: if permiso('ventasEditar') || permiso('ventasAnular');
+        allow delete: if esAdmin();
       }
 
       // Ajustes del negocio (por ahora: la huella del código de seguridad).

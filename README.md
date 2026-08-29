@@ -108,7 +108,8 @@ Para actualizar también el APK de Android, ve a **Actions → "Compilar APK de 
 - **La primera vez que inicies sesión** con tu cuenta (tu correo actual y su contraseña) quedas automáticamente como **administrador dueño**. Entra una vez para activarlo.
 - Como administrador verás el botón **👥** arriba. Desde ahí:
   - **Creas usuarios** para tus empleados: un usuario (ej. `juan`) y una contraseña, nada más. No usan correo; entran con ese usuario y contraseña, y con ese usuario queda firmado todo lo que hagan.
-  - **Das o quitas permisos** a cada uno con casillas: crear créditos, editar, registrar pagos, **borrar créditos**, ver/exportar cobranza. O lo marcas como **administrador** (todos los permisos).
+  - **Das o quitas permisos** a cada uno con casillas, **agrupadas por sección** del sistema (Dashboard, Créditos, Hoja de cobranza, Clientes, Notas de venta, Despachos, Productos, Ingreso de productos, Kardex). O lo marcas como **administrador** (todos los permisos). Entre ellos, en 🧮 Notas de venta, está **“Modificar precios al vender”**: quien no lo tenga ni siquiera ve la casilla 🔓 del formulario y vende siempre al precio de la categoría del cliente. **No viene puesto** en los usuarios nuevos, porque tocar el precio a mano es la excepción, no la norma.
+  - Los permisos que ves aquí son **los mismos que aplica la base de datos**: si a alguien le das “Modificar notas ya emitidas”, la nube se lo permite; si se lo quitas, se lo rechaza aunque llegue por otro camino. No hay una lista para la pantalla y otra para el servidor.
   - **Quitas el acceso** a un usuario cuando quieras.
 - Nadie puede registrarse solo: **solo tú creas usuarios**.
 - Si un empleado **olvida su contraseña**, puede cambiarla él mismo desde ⚙️ (estando dentro), o **tú le pones una nueva** con el botón **🔑 Restablecer clave** en 👥 Usuarios (no hace falta saber la anterior; ver siguiente sección para activarlo).

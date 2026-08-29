@@ -75,6 +75,7 @@ const PERMISO_HEREDA_DE = {
   ventas: 'crear',
   ventasEditar: 'ventas',
   ventasAnular: 'ventas',
+  preciosEditar: 'ventas',
   cobranzaExportar: 'cobranza',
   despachosCerrar: 'despachos',
   productosEditar: 'productos',
@@ -683,7 +684,7 @@ async function reabrirHojaCobranza(fechaISO) {
   if (!h || !h.cerrada) { toast('Esa hoja no está cerrada'); return; }
   if (!confirm(`¿Reabrir la hoja de cobranza del ${formatoFecha(fechaISO)}?\n\n`
     + 'Volverán a poder registrarse cobros de ese día. Acuérdate de cerrarla otra vez.')) return;
-  const autorizado = await pedirPin(`Vas a reabrir la hoja de cobranza del ${formatoFecha(fechaISO)}.`);
+  const autorizado = await pedirPin(`Vas a reabrir la hoja de cobranza del ${formatoFecha(fechaISO)}.`, 'reabrir');
   if (!autorizado) { toast('🔒 Cancelado'); return; }
   try {
     await actualizarHojaEnStore(fechaISO, {
@@ -1962,6 +1963,7 @@ const PERMISOS_SECCIONES = [
   ]],
   ['🧮 Notas de venta', [
     ['ventas', 'Emitir notas de venta'],
+    ['preciosEditar', 'Modificar precios al vender'],
     ['ventasEditar', 'Modificar notas ya emitidas'],
     ['ventasAnular', 'Anular notas de venta'],
   ]],
@@ -3039,12 +3041,15 @@ function avisarConfigSinNube() {
 
 /* Pide el código y devuelve true solo si es correcto.
    Si todavía no hay código configurado, deja pasar. */
-function pedirPin(motivo) {
+/* `accion` es lo que va a pasar si se confirma: se escribe en el botón, para
+   que nunca diga "borrar" cuando lo que se va a hacer es corregir algo. */
+function pedirPin(motivo, accion = 'borrar') {
   if (!pinConfigurado()) return Promise.resolve(true);
   const dlg = $('#modal-pin');
   const caja = $('#pin-input');
   const error = $('#pin-error');
   $('#pin-motivo').textContent = motivo;
+  $('#btn-pin-ok').textContent = `Confirmar y ${accion}`;
   caja.value = '';
   error.hidden = true;
   dlg.showModal();
@@ -3399,7 +3404,7 @@ function renderClientes() {
         ${permitido ? `
         <div class="cliente-acciones">
           <button type="button" class="btn btn-secondary btn-small" data-editar-cliente="${escapeHtml(c.id)}">✏️</button>
-          ${mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-borrar-cliente="${escapeHtml(c.id)}">🗑️</button>` : ''}
+          ${mandaComoAdmin() || puede('clientesBorrar') ? `<button type="button" class="btn btn-danger btn-small" data-borrar-cliente="${escapeHtml(c.id)}">🗑️</button>` : ''}
         </div>` : ''}
       </div>`;
   }).join('');
@@ -3501,9 +3506,11 @@ async function guardarClienteForm(ev) {
 }
 
 async function borrarCliente(id) {
-  // Registrar y corregir clientes lo hace el empleado; borrarlos, solo el
-  // administrador (la base de datos lo rechaza igual si se intenta a la fuerza).
-  if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede borrar clientes'); return; }
+  // Registrar y corregir clientes lo hace el empleado; borrarlos se lleva por
+  // delante su ficha y su historial, así que va con permiso aparte.
+  if (!mandaComoAdmin() && !puede('clientesBorrar')) {
+    toast('🔒 No tienes permiso para borrar clientes'); return;
+  }
   const cli = clientePorId(id);
   if (!cli) return;
   const usados = creditosDeCliente(id).length;
@@ -4196,7 +4203,8 @@ async function confirmarEdicionAbono(indice) {
       ? `del ${fechaVieja ? formatoFecha(fechaVieja) : 'sin fecha'} al ${formatoFecha(nuevaFecha)}`
       : `del ${formatoFecha(nuevaFecha)}`;
     const autorizado = await pedirPin(
-      `Vas a cambiar ${cambios.join(' y ')} de la ACUENTA ${indice + 1} ${detalle}. Esa hoja de cobranza ya está cerrada.`);
+      `Vas a cambiar ${cambios.join(' y ')} de la ACUENTA ${indice + 1} ${detalle}. Esa hoja de cobranza ya está cerrada.`,
+      'cambiar');
     if (!autorizado) { toast('🔒 Cambio cancelado'); cancelarEdicionAbono(); return; }
   }
 
@@ -6430,7 +6438,7 @@ async function editarProductoConClave(id) {
   const p = productoPorId(id);
   if (!p) return;
   if (!puede('productosEditar')) { toast('🔒 No tienes permiso para editar productos'); return; }
-  const autorizado = await pedirPin(`Vas a modificar el producto "${p.nombre}".`);
+  const autorizado = await pedirPin(`Vas a modificar el producto "${p.nombre}".`, 'modificar');
   if (!autorizado) { toast('🔒 Modificación cancelada'); return; }
   abrirFormProducto(p);
 }
@@ -6934,7 +6942,7 @@ async function editarLoteIngreso(loteId) {
     return;
   }
   const doc = delLote[0].documento || 'este ingreso';
-  const autorizado = await pedirPin(`Vas a corregir ${doc}: ${delLote.length} producto(s).`);
+  const autorizado = await pedirPin(`Vas a corregir ${doc}: ${delLote.length} producto(s).`, 'corregir');
   if (!autorizado) { toast('🔒 Corrección cancelada'); return; }
 
   ingModo = 'factura';
@@ -7341,7 +7349,7 @@ async function borrarMovimiento(id) {
     `El stock quedará en ${stockDe(m.productoId) - c}.${aviso}`)) return;
 
   const autorizado = await pedirPin(
-    `Vas a anular un movimiento de almacén de "${nombre}" (${c >= 0 ? '+' : ''}${c}).`);
+    `Vas a anular un movimiento de almacén de "${nombre}" (${c >= 0 ? '+' : ''}${c}).`, 'anular');
   if (!autorizado) { toast('🔒 Anulación cancelada'); return; }
 
   try {
@@ -7369,7 +7377,7 @@ async function borrarLoteIngreso(loteId) {
     `Se van a deshacer ${delLote.length} movimiento(s), ${unidades} unidad(es).\n` +
     'El stock de cada producto se recalcula solo.')) return;
 
-  const autorizado = await pedirPin(`Vas a anular ${doc}: ${delLote.length} producto(s), ${unidades} unidad(es).`);
+  const autorizado = await pedirPin(`Vas a anular ${doc}: ${delLote.length} producto(s), ${unidades} unidad(es).`, 'anular');
   if (!autorizado) { toast('🔒 Anulación cancelada'); return; }
 
   try {
@@ -7755,7 +7763,10 @@ function abrirNuevaNota(base = null, editandoId = '') {
   $('#nv-condicion').value = base ? (base.condicion || 'credito') : 'credito';
   nvProponerFechaPago();
   $('#nv-descuento').value = 0;
+  // Tocar el precio a mano es un permiso aparte: a quien no lo tenga ni se le
+  // ofrece, y vende siempre con el precio de la categoría del cliente.
   $('#nv-permitir-precios').checked = false;
+  $('.nv-permiso').hidden = !puede('preciosEditar');
   $('#nv-cantidad').value = '';
   limpiarBuscadorNota();
   nvSeleccionarCliente(base ? (base.clienteId || '') : '');
@@ -7917,7 +7928,7 @@ function cuentaDeLinea(it) {
 function renderNotaItems() {
   const cuerpo = $('#nv-items-body');
   if (!cuerpo) return;
-  const editable = $('#nv-permitir-precios').checked;
+  const editable = $('#nv-permitir-precios').checked && puede('preciosEditar');
   $('#nv-items-vacio').hidden = !!nvItems.length;
   $('.nv-items-wrap').hidden = !nvItems.length;
 
@@ -8289,7 +8300,7 @@ async function eliminarNota(notaId) {
   if (!confirm(`¿ELIMINAR del todo la nota ${numeroCorto(n.numero)}?${detalle}${conDespacho}${conCredito}\n\n`
     + 'No quedará constancia de que existió. Si lo que quieres es dejar registro, usa 🚫 Anular.')) return;
 
-  const autorizado = await pedirPin(`Vas a ELIMINAR la nota ${numeroCorto(n.numero)}. No quedará rastro.`);
+  const autorizado = await pedirPin(`Vas a ELIMINAR la nota ${numeroCorto(n.numero)}. No quedará rastro.`, 'eliminar');
   if (!autorizado) { toast('🔒 Eliminación cancelada'); return; }
 
   try {
@@ -8960,6 +8971,11 @@ function inicializarEventos() {
     if (ev.key === 'Enter') { ev.preventDefault(); agregarItemNota(); }
   });
   $('#nv-permitir-precios').addEventListener('change', ev => {
+    if (ev.target.checked && !puede('preciosEditar')) {
+      ev.target.checked = false;
+      toast('🔒 No tienes permiso para modificar precios');
+      return;
+    }
     if (!ev.target.checked) {
       // Al volver a bloquear los precios se restauran los de la lista, para que
       // no quede una nota con un precio suelto que nadie recuerda haber puesto
