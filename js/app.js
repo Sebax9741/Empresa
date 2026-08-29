@@ -1765,8 +1765,12 @@ function aplicarPlegadoNav(plegada) {
   document.body.classList.toggle('nav-plegada', plegada);
   const btn = $('#btn-plegar-nav');
   if (btn) {
-    btn.title = plegada ? 'Desplegar el menú' : 'Contraer el menú';
+    // Contraído el panel se abre solo al pasar el cursor, así que el botón no
+    // "despliega": lo deja fijo abierto. Se dice tal cual.
+    btn.title = plegada ? 'Dejar el menú fijo abierto' : 'Contraer el menú';
     btn.setAttribute('aria-label', btn.title);
+    const txt = btn.querySelector('.nav-txt');
+    if (txt) txt.textContent = plegada ? 'Dejarlo fijo' : 'Contraer menú';
   }
   // En pantalla angosta el ☰ no habla del panel contraído sino del cajón:
   // ahí el estado lo lleva abrirCajonNav().
@@ -7938,6 +7942,15 @@ const ESTADOS_NOTA = {
    crédito"), así que la existencia del crédito ya no dice en qué punto va: lo
    dice el reparto. El orden es: si ya está cobrada del todo, pagada; si salió,
    lo que diga su despacho; y si no ha salido, por despachar. */
+/* Pagada de verdad, con dinero de por medio. No cuenta una nota que sale en
+   cero porque se regaló entera: ahí no se cobró nada, así que corregirla no
+   descuadra ningún cobro y no hay razón para trabarla. */
+function notaCobrada(nota) {
+  if (estadoDeNota(nota) !== 'pagado') return false;
+  const c = creditoDeNota(nota);
+  return !!c && (Number(c.monto) || 0) > 0;
+}
+
 function estadoDeNota(nota) {
   // Una nota anulada ya no sigue el recorrido: se queda ahí, de constancia
   if (nota && nota.anulada) return 'anulada';
@@ -8082,7 +8095,7 @@ function renderVentas() {
       <td class="col-num"><strong>${soles(n.total)}</strong></td>
       <td>${escapeHtml(mostrarComo(anulada ? n.anulada.por : n.emitidaPor) || '—')}</td>
       <td class="col-acc">
-        ${!anulada && estado !== 'reparto' && puede('ventasEditar') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
+        ${!anulada && estado !== 'reparto' && !notaCobrada(n) && puede('ventasEditar') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
         ${!anulada && estado !== 'pendiente' ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
         ${!anulada && puede('ventasAnular') ? `<button type="button" class="btn btn-danger btn-small" data-anular-nota="${escapeHtml(n.id)}" title="Anular: la nota se queda de constancia">🚫</button>` : ''}
@@ -8110,6 +8123,12 @@ function abrirNotaParaEditar(notaId) {
   // Cambiarla ahora dejaría la nota diciendo una cosa y el reparto otra.
   if (estadoDeNota(n) === 'reparto') {
     toast('🚚 Esa nota ya salió a reparto: no se puede modificar hasta que vuelva');
+    return;
+  }
+  // Ya está cobrada: cambiarle el importe ahora dejaría el dinero recibido
+  // sin cuadrar con lo que dice la venta.
+  if (notaCobrada(n)) {
+    toast('✅ Esa nota ya está pagada: no se puede modificar');
     return;
   }
   // Si ya se cobró algo, el importe no puede moverse por debajo del cobro
@@ -9628,7 +9647,10 @@ function inicializarEventos() {
   vigilarIconos();   // los emojis pasan a ser iconos en color, iguales en todo equipo
 
   // Contraer / desplegar el panel lateral
-  aplicarPlegadoNav(localStorage.getItem(CLAVE_NAV_PLEGADA) === '1');
+  // Contraído de fábrica: el panel es un rail de iconos que se abre solo al
+  // acercar el cursor, y así la pantalla de trabajo empieza siendo lo ancha
+  // que puede ser. Quien prefiera tenerlo fijo lo despliega y se recuerda.
+  aplicarPlegadoNav(localStorage.getItem(CLAVE_NAV_PLEGADA) !== '0');
   $('#btn-plegar-nav').addEventListener('click', alternarNav);
   $('#btn-menu').addEventListener('click', alternarMenu);
 

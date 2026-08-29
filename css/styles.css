@@ -2146,7 +2146,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 /* El ancho vive en una variable para que el contenido y el panel se muevan
    juntos: al contraer, el panel se estrecha y el área de trabajo se ensancha
    en la misma transición, sin saltos. */
-:root { --ancho-nav: 252px; --ancho-nav-min: 68px; }
+:root { --ancho-nav: 252px; --ancho-nav-min: 68px; --ancho-nav-abierto: 252px; }
 
 /* El panel es el mismo en los dos tamaños: los mismos destinos, agrupados
    igual y con los mismos iconos. Lo único que cambia es cómo se coloca —en
@@ -2316,40 +2316,72 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 #btn-settings { display: none; }
 
 @media (min-width: 1000px) {
-  /* ── Panel contraído: solo los iconos ── */
-  body.nav-plegada .nav-lateral { padding-left: 0.5rem; padding-right: 0.5rem; }
+  /* ── Panel contraído: solo los iconos ──
+     El texto no se quita con display:none, se desvanece y el panel lo recorta
+     (overflow-x: hidden). Así, al abrirse, aparece deslizándose junto con el
+     ancho en vez de saltar de golpe. */
   body.nav-plegada .nav-txt,
-  body.nav-plegada .nav-marca span,
-  body.nav-plegada .nav-titulo { display: none; }
-  body.nav-plegada .nav-marca { justify-content: center; padding-left: 0; padding-right: 0; }
+  body.nav-plegada .nav-marca span {
+    opacity: 0;
+    transition: opacity 0.16s var(--ease);
+  }
+  /* El título de grupo además pliega su alto, para que el rail no se quede
+     con huecos donde antes ponía "VENTAS" o "ALMACÉN" */
+  body.nav-plegada .nav-titulo {
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    overflow: hidden;
+    transition: opacity 0.16s var(--ease), max-height 0.25s var(--ease),
+                padding-top 0.25s var(--ease), padding-bottom 0.25s var(--ease);
+  }
+  body.nav-plegada .nav-marca { justify-content: center; }
   body.nav-plegada .nav-item,
-  body.nav-plegada .nav-plegar { justify-content: center; padding-left: 0; padding-right: 0; }
+  body.nav-plegada .nav-plegar { justify-content: center; }
   body.nav-plegada .nav-plegar .nav-ico { transform: rotate(180deg); }
   /* Sin los títulos, una línea separa un grupo del siguiente */
   body.nav-plegada .nav-grupo + .nav-grupo {
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     padding-top: 0.5rem;
+    transition: border-color 0.2s var(--ease), padding-top 0.25s var(--ease);
   }
-  /* Con el panel contraído el nombre aparece al pasar el ratón */
-  body.nav-plegada .nav-item::after {
-    content: attr(data-nombre);
-    position: absolute;
-    left: calc(100% + 10px);
-    top: 50%;
-    transform: translateY(-50%);
-    background: var(--side-alt);
-    color: #fff;
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 0.35rem 0.7rem;
-    border-radius: 7px;
+
+  /* ── Al acercar el cursor, el panel se abre ──
+     Se abre POR ENCIMA del contenido, sin empujarlo: si empujara, la página
+     entera se movería cada vez que el ratón roza el borde izquierdo, y las
+     tablas tendrían que volver a medirse a cada paso. El sitio que ocupa la
+     página no cambia; lo único que cambia es el panel.
+     :focus-within lo abre igual al recorrerlo con el tabulador. */
+  body.nav-plegada .nav-lateral:hover,
+  body.nav-plegada .nav-lateral:focus-within {
+    width: var(--ancho-nav-abierto);
     box-shadow: var(--shadow-lg);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s var(--ease);
-    z-index: 30;
   }
-  body.nav-plegada .nav-item:hover::after { opacity: 1; }
+  body.nav-plegada .nav-lateral:hover .nav-txt,
+  body.nav-plegada .nav-lateral:hover .nav-marca span,
+  body.nav-plegada .nav-lateral:focus-within .nav-txt,
+  body.nav-plegada .nav-lateral:focus-within .nav-marca span { opacity: 1; }
+  body.nav-plegada .nav-lateral:hover .nav-titulo,
+  body.nav-plegada .nav-lateral:focus-within .nav-titulo {
+    opacity: 1;
+    max-height: 3rem;
+    padding-top: 0.7rem;
+    padding-bottom: 0.3rem;
+  }
+  body.nav-plegada .nav-lateral:hover .nav-marca,
+  body.nav-plegada .nav-lateral:hover .nav-item,
+  body.nav-plegada .nav-lateral:hover .nav-plegar,
+  body.nav-plegada .nav-lateral:focus-within .nav-marca,
+  body.nav-plegada .nav-lateral:focus-within .nav-item,
+  body.nav-plegada .nav-lateral:focus-within .nav-plegar { justify-content: flex-start; }
+  body.nav-plegada .nav-lateral:hover .nav-grupo + .nav-grupo,
+  body.nav-plegada .nav-lateral:focus-within .nav-grupo + .nav-grupo {
+    border-top-color: transparent;
+    padding-top: 0;
+  }
+  /* Ya no hace falta el globito con el nombre: al acercarse, el panel se abre
+     y el nombre se lee entero. */
   /* En PC el cajón no existe: el panel siempre está a la vista */
   .nav-velo { display: none; }
   .nav-cerrar { display: none; }
