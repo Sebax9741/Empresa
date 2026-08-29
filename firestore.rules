@@ -46,8 +46,8 @@ service cloud.firestore {
       // Clientes del negocio (nombre + zona). Todos los miembros los pueden ver
       // para elegirlos al crear un crédito; solo quien tenga el permiso los edita.
       // Borrar un cliente es distinto de registrarlo o corregirlo: se lleva por
-      // delante su ficha y su historial, así que eso solo lo hace el
-      // administrador, por mucho permiso de clientes que tenga el empleado.
+      // delante su ficha y su historial, así que va con permiso aparte
+      // ("Borrar clientes"), que por defecto no lleva nadie.
       match /clientes/{docId} {
         allow read: if esMiembro();
         allow create, update: if permiso('clientes') || permiso('crear');
