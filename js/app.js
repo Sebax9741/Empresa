@@ -7609,7 +7609,11 @@ function quienUsaElNumero(correlativo, exceptoNotaId) {
   const n = Number(correlativo);
   const nota = notas.find(x => x.id !== exceptoNotaId && numeroDeComprobante(x.numero) === n);
   if (nota) return { tipo: 'nota', nota };
-  const credito = creditos.find(c => numeroDeComprobante(c.boleta) === n);
+  // El crédito que salió de esta misma nota tampoco "usa" el número: ya son
+  // el mismo papel. Avisar de que "quedarán enlazados" los que ya lo están
+  // solo confunde a quien está corrigiendo una nota.
+  const credito = creditos.find(c => numeroDeComprobante(c.boleta) === n
+    && !(exceptoNotaId && c.notaId === exceptoNotaId));
   if (credito) return { tipo: 'credito', credito };
   return null;
 }
@@ -7618,7 +7622,8 @@ function quienUsaElNumero(correlativo, exceptoNotaId) {
 function nvAvisarNumero() {
   const pista = $('#nv-num-aviso');
   if (!pista) return;
-  const usa = quienUsaElNumero(nvCorrelativoEscrito(), null);
+  // Al modificar, la nota no choca consigo misma: es su propio número
+  const usa = quienUsaElNumero(nvCorrelativoEscrito(), nvEditandoId);
   if (!usa) { pista.textContent = ''; pista.className = 'nv-num-aviso'; return; }
   if (usa.tipo === 'nota') {
     pista.textContent = `⚠️ Ese número ya es de la nota ${numeroCorto(usa.nota.numero)}`;
