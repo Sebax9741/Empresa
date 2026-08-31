@@ -655,6 +655,27 @@
     </div>
   </section>
 
+  <!-- Modal: la nota tal como se imprimirá. No imprime: es para revisarla a
+       detalle antes de gastar papel. El marco de dentro carga el MISMO
+       documento que se manda a la impresora, con sus estilos de papel. -->
+  <dialog id="modal-vista-nota" class="modal modal-vista-nota" tabindex="-1">
+    <div class="info-cab">
+      <div class="info-cab-txt">
+        <h2 id="vista-nota-titulo">Nota de venta</h2>
+        <p class="info-sub" id="vista-nota-sub"></p>
+      </div>
+      <div class="vista-nota-acciones">
+        <button type="button" class="btn btn-secondary" id="btn-vista-imprimir">🖨️ Imprimir</button>
+        <button type="button" class="btn" id="btn-vista-cerrar">Cerrar</button>
+      </div>
+    </div>
+    <div class="vista-nota-hojas" id="vista-nota-hojas">
+      <div class="vista-nota-lienzo" id="vista-nota-lienzo">
+        <iframe id="vista-nota-marco" title="La nota de venta como se imprimirá"></iframe>
+      </div>
+    </div>
+  </dialog>
+
   <!-- Modal: información del crédito (solo lectura) y registro de cobro con firma -->
   <dialog id="modal-info" class="modal modal-info" tabindex="-1">
     <div class="info-cab">

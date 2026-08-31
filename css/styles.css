@@ -1877,6 +1877,46 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   margin: 0 0 0.8rem;
 }
 
+/* ====== Ver la nota tal como se imprimirá ======
+   La hoja de la nota mide 148 mm de ancho de verdad (≈ 560 px). El cuadro se
+   abre lo justo para que quepa entera y el papel se dibuja dentro de un marco
+   aparte, que trae sus propios estilos de impresión: así lo que se ve es
+   milímetro a milímetro lo que va a salir. */
+.modal-vista-nota {
+  width: min(640px, calc(100vw - 1.5rem));
+  padding-bottom: 1rem;
+}
+.vista-nota-acciones { display: flex; gap: 0.4rem; flex: none; }
+.vista-nota-hojas {
+  margin-top: 0.9rem;
+  border-radius: 10px;
+  overflow: auto;                 /* si aun así no cabe, se recorre */
+  background: #6b7280;            /* el mismo gris del marco, sin costura */
+  /* Lo que se recorre son las hojas, no el cuadro entero: el título y los
+     botones se quedan siempre arriba a la vista. */
+  max-height: calc(100dvh - 11rem);
+  overscroll-behavior: contain;
+}
+/* El lienzo lleva el tamaño YA reducido; el marco, el tamaño real. Hacen falta
+   los dos: al encoger con transform el hueco que ocupaba no se encoge solo, y
+   quedaría un vacío gris debajo del papel. */
+.vista-nota-lienzo { margin: 0 auto; }
+#vista-nota-marco {
+  display: block;
+  border: 0;
+  transform-origin: top left;
+}
+/* En el teléfono, repartir el ancho entre el título y los botones dejaba el
+   título en dos líneas y el cliente en cuatro, y la hoja —que es a lo que se
+   viene— empezaba a media pantalla. Cada cosa en su renglón. */
+@media (max-width: 620px) {
+  .modal-vista-nota .info-cab { flex-wrap: wrap; }
+  .modal-vista-nota .info-cab-txt { flex: 1 1 100%; }
+  .modal-vista-nota .info-sub { font-size: 0.78rem; }
+  .vista-nota-acciones { flex: 1 1 100%; }
+  .vista-nota-acciones .btn { flex: 1; }
+}
+
 /* ====== Ficha de información del crédito ====== */
 .modal-info { width: min(560px, calc(100vw - 1.5rem)); }
 

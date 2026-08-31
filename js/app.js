@@ -3845,7 +3845,15 @@ function renderInfo() {
   const cli = c.clienteId ? clientePorId(c.clienteId) : null;
 
   $('#info-cliente').textContent = c.cliente;
-  $('#info-sub').textContent = `Boleta Nº ${numeroCorto(c.boleta)} · Emitido el ${formatoFecha(c.fecha)}`;
+  // La hora de emisión la sabe la NOTA, que es donde se emitió la boleta; el
+  // crédito solo guarda el día. Un crédito dado de alta a mano desde una boleta
+  // de papel no tiene nota detrás y por tanto no tiene hora: ahí se queda solo
+  // la fecha, en vez de poner la hora en que alguien lo tecleó, que sería otra
+  // cosa distinta con el mismo nombre.
+  const notaDelCredito = c.notaId ? notas.find(x => x.id === c.notaId) : null;
+  const horaEmision = notaDelCredito ? (notaDelCredito.hora || '') : '';
+  $('#info-sub').textContent = `Boleta Nº ${numeroCorto(c.boleta)} · Emitido el ${formatoFecha(c.fecha)}`
+    + (horaEmision ? ` a las ${horaEmision}` : '');
   $('#info-estado').innerHTML = badgeEstado(c);
   $('#info-total').textContent = formatoMonto(c.monto);
   $('#info-debe').textContent = formatoMonto(debe);
@@ -8109,6 +8117,7 @@ function renderVentas() {
       <td class="col-acc">
         ${!anulada && estado !== 'reparto' && !notaCobrada(n) && puede('ventasEditar') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
         ${!anulada && estado !== 'pendiente' ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
+        <button type="button" class="btn btn-secondary btn-small" data-ver-nota="${escapeHtml(n.id)}" title="Verla tal como se imprimirá, sin imprimir">👁️</button>
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
         ${!anulada && puede('ventasAnular') ? `<button type="button" class="btn btn-danger btn-small" data-anular-nota="${escapeHtml(n.id)}" title="Anular: la nota se queda de constancia">🚫</button>` : ''}
         ${mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-eliminar-nota="${escapeHtml(n.id)}" title="Eliminar del todo (pide tu código)">🗑️</button>` : ''}
@@ -8782,8 +8791,13 @@ async function eliminarNota(notaId) {
   render();
 }
 
-/* ══════════ Impresión: media hoja A4 (A5 apaisado) ══════════ */
-function imprimirNota(nota) {
+/* ══════════ Impresión: media hoja A4 (A5 apaisado) ══════════
+   El papel y la vista previa salen del MISMO documento. Si fueran dos, con el
+   tiempo acabarían diciendo cosas distintas y la vista previa dejaría de servir
+   para lo único que sirve: comprobar antes de gastar papel. Lo único que las
+   separa es un bloque @media screen que dibuja las hojas sobre un fondo gris,
+   y un rótulo encima de cada una que en el papel no se imprime. */
+function documentoDeNota(nota, autoImprimir) {
   const emp = settings;
   // La columna del descuento por bonificación solo aparece si hay alguna: en
   // una nota normal sería una columna de guiones comiéndose el ancho.
@@ -8802,6 +8816,12 @@ function imprimirNota(nota) {
   // se la lleva el cliente. Se arma el bloque una vez y se repite, para que
   // no puedan acabar diciendo cosas distintas.
   const copia = bloqueDeNota(nota, emp, hayBonif, filas);
+  // La primera lleva su propia clase para el salto de página. NO vale decir
+  // ".copia:first-child": encima de cada copia va un rótulo de la vista previa,
+  // así que la primera copia ya no es el primer hijo del body y el salto se
+  // perdería — saldrían las dos seguidas y la segunda a media hoja.
+  const primeraCopia = bloqueDeNota(nota, emp, hayBonif, filas, 'copia-primera');
+  const rotulo = texto => `<p class="rotulo">${texto}</p>`;
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
   <title>Nota de venta ${escapeHtml(nota.numero)}</title>
@@ -8862,20 +8882,88 @@ function imprimirNota(nota) {
     /* Salen dos copias iguales, una para el negocio y otra para el cliente.
        El salto va después de la PRIMERA, no después de cada una: si no, la
        segunda arrastraría una media hoja en blanco detrás. */
-    .copia:first-child { break-after: page; page-break-after: always; }
-  </style></head><body>${copia}${copia}
-  <script>window.onload=function(){window.print();}<\/script>
-  </body></html>`;
+    .copia-primera { break-after: page; page-break-after: always; }
 
+    /* ── Solo en pantalla ──
+       En el papel la hoja YA es de 148 × 210 mm y el margen lo pone la
+       impresora. En pantalla no hay hoja, así que se dibuja: cada copia se
+       recorta a ese tamaño exacto, con sus 6 mm de margen, sobre un fondo gris
+       que deja ver dónde termina el papel. Lo que se ve aquí es milímetro a
+       milímetro lo que va a salir. */
+    @media screen {
+      body { background: #6b7280; padding: 10px 0 18px; }
+      .copia {
+        width: 148mm; min-height: 210mm; padding: 6mm;
+        margin: 0 auto; background: #fff;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      .rotulo {
+        width: 148mm; margin: 12px auto 5px; padding: 0 2px;
+        font-size: 11px; color: #e5e7eb; font-family: Arial, Helvetica, sans-serif;
+      }
+    }
+    /* El rótulo es de la vista previa, no de la nota: en el papel no existe */
+    @media print { .rotulo { display: none; } }
+  </style></head><body>${rotulo('Copia 1 de 2 · se queda en el negocio')}${primeraCopia}${rotulo('Copia 2 de 2 · para el cliente')}${copia}
+  ${autoImprimir ? '<script>window.onload=function(){window.print();}<\/script>' : ''}
+  </body></html>`;
+  return html;
+}
+
+function imprimirNota(nota) {
   const w = window.open('', '_blank');
   if (!w) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
-  w.document.write(html);
+  w.document.write(documentoDeNota(nota, true));
   w.document.close();
 }
+
+/* ---- Ver la nota tal como se va a imprimir ----
+   No imprime: enseña el papel en pantalla para poder revisarlo con calma —que
+   no falte un producto, que el cliente y la dirección estén bien, que quepa en
+   la hoja— antes de gastarlo. Va dentro de un marco aparte (un <iframe>) a
+   propósito: así el documento de la nota se dibuja con SUS estilos de papel,
+   sin que los de la app se le mezclen. Y como es el mismo documento que va a
+   la impresora, lo que se ve es lo que sale. */
+let notaEnVista = null;
+
+function verNotaImpresa(nota) {
+  if (!nota) return;
+  notaEnVista = nota;
+  $('#vista-nota-titulo').textContent = `Nota de venta ${numeroCorto(nota.numero)}`;
+  $('#vista-nota-sub').textContent = [
+    nota.clienteNombre || 'Sin cliente',
+    formatoFecha(nota.fecha) + (nota.hora ? ` · ${nota.hora}` : ''),
+    soles(nota.total),
+  ].join(' · ');
+  const marco = $('#vista-nota-marco');
+  marco.addEventListener('load', ajustarVistaNota, { once: true });
+  marco.srcdoc = documentoDeNota(nota, false);
+  $('#modal-vista-nota').showModal();
+}
+
+/* La hoja mide lo que mide —148 mm— y una pantalla de teléfono no da para
+   tanto. En vez de encoger la nota (que dejaría de ser fiel), se enseña
+   entera y se reduce de tamaño lo justo para que quepa de ancho, como quien
+   aleja el papel para verlo completo. */
+function ajustarVistaNota() {
+  const marco = $('#vista-nota-marco');
+  const lienzo = $('#vista-nota-lienzo');
+  const caja = $('#vista-nota-hojas');
+  const doc = marco && marco.contentDocument;
+  if (!doc || !doc.body) return;
+  const ancho = Math.max(1, doc.body.scrollWidth);
+  const alto = Math.max(1, doc.documentElement.scrollHeight);
+  marco.style.width = ancho + 'px';
+  marco.style.height = alto + 'px';
+  const escala = Math.min(1, (caja.clientWidth - 4) / ancho);
+  marco.style.transform = `scale(${escala})`;
+  lienzo.style.width = Math.round(ancho * escala) + 'px';
+  lienzo.style.height = Math.round(alto * escala) + 'px';
+}
 /* Una copia de la nota: es lo que va en cada media hoja. */
-function bloqueDeNota(nota, emp, hayBonif, filas) {
+function bloqueDeNota(nota, emp, hayBonif, filas, extraClase = '') {
   return `
-    <div class="copia">
+    <div class="copia${extraClase ? ' ' + extraClase : ''}">
     <div class="cab">
       <div class="cab-emp">
         <div class="lin">${escapeHtml(emp.empresaDireccion || '')}</div>
@@ -9357,6 +9445,7 @@ function inicializarEventos() {
   $('#nv-body').addEventListener('click', ev => {
     const editar = ev.target.closest('[data-editar-nota]');
     const imprimir = ev.target.closest('[data-imprimir-nota]');
+    const ver = ev.target.closest('[data-ver-nota]');
     const seguir = ev.target.closest('[data-seguir-nota]');
     const anular = ev.target.closest('[data-anular-nota]');
     const eliminar = ev.target.closest('[data-eliminar-nota]');
@@ -9364,10 +9453,21 @@ function inicializarEventos() {
     if (seguir) { seguirNota(seguir.dataset.seguirNota); return; }
     if (anular) { anularNota(anular.dataset.anularNota); return; }
     if (eliminar) { eliminarNota(eliminar.dataset.eliminarNota); return; }
+    if (ver) { verNotaImpresa(notas.find(x => x.id === ver.dataset.verNota)); return; }
     if (imprimir) {
       const n = notas.find(x => x.id === imprimir.dataset.imprimirNota);
       if (n) imprimirNota(n);
     }
+  });
+
+  // Vista previa de la nota: cerrar, imprimir desde ahí y volver a encajarla
+  // si la ventana cambia de tamaño (girar el teléfono, por ejemplo)
+  $('#btn-vista-cerrar').addEventListener('click', () => $('#modal-vista-nota').close());
+  $('#btn-vista-imprimir').addEventListener('click', () => {
+    if (notaEnVista) imprimirNota(notaEnVista);
+  });
+  window.addEventListener('resize', () => {
+    if ($('#modal-vista-nota').open) ajustarVistaNota();
   });
 
   // Buscador de cliente de la nota
