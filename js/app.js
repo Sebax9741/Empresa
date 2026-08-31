@@ -8712,7 +8712,13 @@ async function anularNota(notaId) {
    Esto sí borra: la nota desaparece y no queda rastro de que existió, así que
    es solo del administrador y pide el código de seguridad. Deshace lo mismo
    que anular —el stock vuelve, el despacho se va, el crédito desaparece— pero
-   sin dejar constancia. Para lo de todos los días está ANULAR. */
+   sin dejar constancia. Para lo de todos los días está ANULAR.
+
+   Si el crédito ya tenía cobros, ANTES no se dejaba: había que ir a la ficha,
+   quitar los cobros uno por uno y recién volver aquí. Ahora se borra todo de
+   una sola vez, porque la nota y su crédito son la misma venta y no tiene
+   sentido desarmarla a pedazos. Lo que no cambia es el aviso: se dice cuántos
+   cobros son, por cuánto y de qué día, y encima se pide el código. */
 async function eliminarNota(notaId) {
   if (!mandaComoAdmin()) { toast('🔒 Solo el administrador puede eliminar notas'); return; }
   const n = notas.find(x => x.id === notaId);
@@ -8720,21 +8726,32 @@ async function eliminarNota(notaId) {
 
   const d = despachoDeNota(notaId);
   const c = creditoDeNota(n);
-  if (c && abonosDe(c).length) {
-    alert(`No se puede eliminar la nota ${numeroCorto(n.numero)}: su crédito (boleta ${numeroCorto(c.boleta)}) `
-      + `ya tiene ${abonosDe(c).length} cobro(s) registrado(s).\n\nQuita primero esos cobros.`);
-    return;
-  }
+  const cobros = c ? abonosDe(c) : [];
 
   const salidas = kardex.filter(m => m.notaId === notaId);
   const detalle = salidas.length
     ? `\n\nSe borrarán sus ${salidas.length} apunte(s) de almacén y el stock volverá como estaba.` : '';
   const conDespacho = d ? '\nSe quitará de la zona de despachos.' : '';
   const conCredito = c ? `\nSe borrará su crédito (boleta ${numeroCorto(c.boleta)}).` : '';
-  if (!confirm(`¿ELIMINAR del todo la nota ${numeroCorto(n.numero)}?${detalle}${conDespacho}${conCredito}\n\n`
+  // La hoja de cobranza de cada día se arma con los abonos de los créditos: al
+  // irse el crédito, ese dinero deja de figurar en la hoja de su día y el total
+  // de ese día baja. No se puede avisar en general, hay que decir qué hojas
+  // quedan distintas, así que se nombran los días.
+  const diasCobrados = [...new Set(cobros.map(a => a.fecha).filter(Boolean))].sort();
+  const enDias = diasCobrados.length
+    ? ` del ${diasCobrados.map(formatoFecha).join(', ')}` : '';
+  const conCobros = cobros.length
+    ? `\n\n⚠️ ATENCIÓN: ese crédito ya tiene ${cobros.length} cobro(s)${enDias} `
+      + `por ${soles(totalAbonado(c))}.\nSe borran también, y la hoja de cobranza `
+      + `de ${diasCobrados.length === 1 ? 'ese día' : 'esos días'} dejará de contarlos.`
+    : '';
+  if (!confirm(`¿ELIMINAR del todo la nota ${numeroCorto(n.numero)}?${detalle}${conDespacho}${conCredito}${conCobros}\n\n`
     + 'No quedará constancia de que existió. Si lo que quieres es dejar registro, usa 🚫 Anular.')) return;
 
-  const autorizado = await pedirPin(`Vas a ELIMINAR la nota ${numeroCorto(n.numero)}. No quedará rastro.`, 'eliminar');
+  const porElDinero = cobros.length
+    ? ` Se van con ella ${soles(totalAbonado(c))} ya cobrados.` : '';
+  const autorizado = await pedirPin(
+    `Vas a ELIMINAR la nota ${numeroCorto(n.numero)}. No quedará rastro.${porElDinero}`, 'eliminar');
   if (!autorizado) { toast('🔒 Eliminación cancelada'); return; }
 
   try {
@@ -8756,7 +8773,8 @@ async function eliminarNota(notaId) {
   if (c) creditos = creditos.filter(x => x.id !== c.id);
   anulados = anulados.filter(a => numeroDeComprobante(a.boleta) !== numeroDeComprobante(n.numero));
 
-  toast(`🗑️ Nota ${numeroCorto(n.numero)} eliminada`);
+  toast(`🗑️ Nota ${numeroCorto(n.numero)} eliminada`
+    + (cobros.length ? ` con su crédito y ${cobros.length} cobro(s)` : ''));
   renderVentas();
   renderProductos();
   renderKardex();
@@ -9663,7 +9681,12 @@ function inicializarEventos() {
   // acercar el cursor, y así la pantalla de trabajo empieza siendo lo ancha
   // que puede ser. Quien prefiera tenerlo fijo lo despliega y se recuerda.
   aplicarPlegadoNav(localStorage.getItem(CLAVE_NAV_PLEGADA) !== '0');
-  $('#btn-plegar-nav').addEventListener('click', alternarNav);
+  // Mismo motivo que en los destinos: si el botón se queda con el foco, el
+  // panel recién contraído no se vuelve a recoger al retirar el cursor.
+  $('#btn-plegar-nav').addEventListener('click', ev => {
+    alternarNav();
+    if (ev.detail > 0) ev.currentTarget.blur();
+  });
   $('#btn-menu').addEventListener('click', alternarMenu);
 
   // El cajón del teléfono se cierra al elegir un apartado, al tocar fuera,
@@ -9681,7 +9704,19 @@ function inicializarEventos() {
   $('#nav-velo').addEventListener('click', cerrarCajonNav);
   $('#btn-nav-cerrar').addEventListener('click', cerrarCajonNav);
   $('#nav-lateral').addEventListener('click', ev => {
-    if (ev.target.closest('.nav-item')) cerrarCajonNav();
+    const destino = ev.target.closest('.nav-item');
+    if (!destino) return;
+    cerrarCajonNav();
+    // Contraído, el panel se abre al acercar el cursor Y con el tabulador
+    // (:focus-within). Al elegir un apartado CON EL RATÓN el botón se quedaba
+    // con el foco puesto, así que el panel seguía desplegado aunque el cursor
+    // ya estuviera en medio de la pantalla, y solo se recogía al hacer clic en
+    // otro sitio. Con el ratón se suelta el foco en cuanto se elige: el panel
+    // se recoge solo al retirar el cursor, que es lo que se espera.
+    // ev.detail es 0 cuando el clic vino del teclado (Enter o barra sobre el
+    // botón); ahí el foco NO se suelta, porque es lo que guía a quien navega
+    // con el tabulador y sin él se perdería el sitio.
+    if (ev.detail > 0) destino.blur();
   });
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape') cerrarCajonNav();
