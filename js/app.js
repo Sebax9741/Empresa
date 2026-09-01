@@ -8794,10 +8794,14 @@ async function eliminarNota(notaId) {
 /* ══════════ Impresión: media hoja A4 (A5 apaisado) ══════════
    El papel y la vista previa salen del MISMO documento. Si fueran dos, con el
    tiempo acabarían diciendo cosas distintas y la vista previa dejaría de servir
-   para lo único que sirve: comprobar antes de gastar papel. Lo único que las
-   separa es un bloque @media screen que dibuja las hojas sobre un fondo gris,
-   y un rótulo encima de cada una que en el papel no se imprime. */
-function documentoDeNota(nota, autoImprimir) {
+   para lo único que sirve: comprobar antes de gastar papel.
+
+   Lo único que cambia entre los dos:
+     · el papel lleva DOS copias (negocio y cliente); la vista previa, una
+       sola. Ver la misma nota dos veces no enseña nada nuevo: que salen dos
+       copias se dice arriba, con palabras.
+     · en pantalla se dibuja la hoja (fondo blanco, su tamaño exacto). */
+function documentoDeNota(nota, autoImprimir, unaSolaCopia) {
   const emp = settings;
   // La columna del descuento por bonificación solo aparece si hay alguna: en
   // una nota normal sería una columna de guiones comiéndose el ancho.
@@ -8812,16 +8816,15 @@ function documentoDeNota(nota, autoImprimir) {
       <td class="c-imp">${soles(it.bonificacion ? 0 : it.importe)}</td>
     </tr>`).join('');
 
-  // Salen SIEMPRE dos copias iguales: una se queda en el negocio y la otra
-  // se la lleva el cliente. Se arma el bloque una vez y se repite, para que
-  // no puedan acabar diciendo cosas distintas.
+  // En el papel salen SIEMPRE dos copias iguales: una se queda en el negocio y
+  // la otra se la lleva el cliente. Se arma el bloque una vez y se repite, para
+  // que no puedan acabar diciendo cosas distintas. La primera lleva su propia
+  // clase para el salto de página; si el salto colgara de ":first-child" y algo
+  // se colara delante, las dos saldrían seguidas y la segunda a media hoja.
   const copia = bloqueDeNota(nota, emp, hayBonif, filas);
-  // La primera lleva su propia clase para el salto de página. NO vale decir
-  // ".copia:first-child": encima de cada copia va un rótulo de la vista previa,
-  // así que la primera copia ya no es el primer hijo del body y el salto se
-  // perdería — saldrían las dos seguidas y la segunda a media hoja.
-  const primeraCopia = bloqueDeNota(nota, emp, hayBonif, filas, 'copia-primera');
-  const rotulo = texto => `<p class="rotulo">${texto}</p>`;
+  const cuerpo = unaSolaCopia
+    ? copia
+    : bloqueDeNota(nota, emp, hayBonif, filas, 'copia-primera') + copia;
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
   <title>Nota de venta ${escapeHtml(nota.numero)}</title>
@@ -8886,25 +8889,18 @@ function documentoDeNota(nota, autoImprimir) {
 
     /* ── Solo en pantalla ──
        En el papel la hoja YA es de 148 × 210 mm y el margen lo pone la
-       impresora. En pantalla no hay hoja, así que se dibuja: cada copia se
-       recorta a ese tamaño exacto, con sus 6 mm de margen, sobre un fondo gris
-       que deja ver dónde termina el papel. Lo que se ve aquí es milímetro a
-       milímetro lo que va a salir. */
+       impresora. En pantalla no hay hoja, así que se dibuja: la copia se
+       recorta a ese tamaño exacto, con sus 6 mm de margen. Lo que se ve aquí
+       es milímetro a milímetro lo que va a salir.
+       Nada se desplaza AQUÍ DENTRO: quien mueve la hoja es el cuadro de la
+       app, que la mide y la encaja. Si esto también se desplazara saldrían
+       tres barras —dos de este documento y una del cuadro— para una sola
+       hoja. */
     @media screen {
-      body { background: #6b7280; padding: 10px 0 18px; }
-      .copia {
-        width: 148mm; min-height: 210mm; padding: 6mm;
-        margin: 0 auto; background: #fff;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
-      }
-      .rotulo {
-        width: 148mm; margin: 12px auto 5px; padding: 0 2px;
-        font-size: 11px; color: #e5e7eb; font-family: Arial, Helvetica, sans-serif;
-      }
+      html, body { overflow: hidden; background: #fff; }
+      .copia { width: 148mm; min-height: 210mm; padding: 6mm; margin: 0; background: #fff; }
     }
-    /* El rótulo es de la vista previa, no de la nota: en el papel no existe */
-    @media print { .rotulo { display: none; } }
-  </style></head><body>${rotulo('Copia 1 de 2 · se queda en el negocio')}${primeraCopia}${rotulo('Copia 2 de 2 · para el cliente')}${copia}
+  </style></head><body>${cuerpo}
   ${autoImprimir ? '<script>window.onload=function(){window.print();}<\/script>' : ''}
   </body></html>`;
   return html;
@@ -8913,7 +8909,7 @@ function documentoDeNota(nota, autoImprimir) {
 function imprimirNota(nota) {
   const w = window.open('', '_blank');
   if (!w) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
-  w.document.write(documentoDeNota(nota, true));
+  w.document.write(documentoDeNota(nota, true, false));
   w.document.close();
 }
 
@@ -8923,7 +8919,11 @@ function imprimirNota(nota) {
    la hoja— antes de gastarlo. Va dentro de un marco aparte (un <iframe>) a
    propósito: así el documento de la nota se dibuja con SUS estilos de papel,
    sin que los de la app se le mezclen. Y como es el mismo documento que va a
-   la impresora, lo que se ve es lo que sale. */
+   la impresora, lo que se ve es lo que sale.
+
+   Se enseña UNA hoja. En el papel salen dos copias iguales —negocio y
+   cliente—, pero repetir la misma nota en pantalla no deja ver nada nuevo: se
+   dice con palabras arriba y se acabó. */
 let notaEnVista = null;
 
 function verNotaImpresa(nota) {
@@ -8937,28 +8937,50 @@ function verNotaImpresa(nota) {
   ].join(' · ');
   const marco = $('#vista-nota-marco');
   marco.addEventListener('load', ajustarVistaNota, { once: true });
-  marco.srcdoc = documentoDeNota(nota, false);
+  marco.srcdoc = documentoDeNota(nota, false, true);
   $('#modal-vista-nota').showModal();
 }
 
-/* La hoja mide lo que mide —148 mm— y una pantalla de teléfono no da para
-   tanto. En vez de encoger la nota (que dejaría de ser fiel), se enseña
+/* La hoja mide lo que mide —148 mm de ancho— y una pantalla de teléfono no da
+   para tanto. En vez de encoger la nota (que dejaría de ser fiel), se enseña
    entera y se reduce de tamaño lo justo para que quepa de ancho, como quien
-   aleja el papel para verlo completo. */
+   aleja el papel para verlo completo.
+
+   Se mide LA HOJA, no el documento: el documento redondea hacia arriba y se
+   quedaba un pelo más ancho que la hoja, lo justo para sacarle al marco su
+   propia barra de desplazamiento —y con ella, la de abajo—. Tres barras para
+   una sola hoja. Aquí se toma el ancho exacto de la hoja (con decimales) y se
+   redondea hacia arriba una sola vez. */
 function ajustarVistaNota() {
   const marco = $('#vista-nota-marco');
   const lienzo = $('#vista-nota-lienzo');
   const caja = $('#vista-nota-hojas');
   const doc = marco && marco.contentDocument;
-  if (!doc || !doc.body) return;
-  const ancho = Math.max(1, doc.body.scrollWidth);
-  const alto = Math.max(1, doc.documentElement.scrollHeight);
+  const hoja = doc && doc.querySelector('.copia');
+  if (!hoja) return;
+  const medida = hoja.getBoundingClientRect();
+  const ancho = Math.ceil(medida.width);
+  const alto = Math.ceil(medida.height);
   marco.style.width = ancho + 'px';
   marco.style.height = alto + 'px';
-  const escala = Math.min(1, (caja.clientWidth - 4) / ancho);
-  marco.style.transform = `scale(${escala})`;
-  lienzo.style.width = Math.round(ancho * escala) + 'px';
-  lienzo.style.height = Math.round(alto * escala) + 'px';
+
+  // Dos pasadas, y hacen falta las dos: al colocar la hoja aparece la barra de
+  // desplazamiento de largo, que se come unos 15 px de ancho del cuadro. Si se
+  // midiera una sola vez, la hoja quedaría calculada con el ancho de ANTES de
+  // que apareciera la barra y se le recortaría el borde derecho. Así que se
+  // coloca, se vuelve a medir, y si el cuadro cambió de ancho se rehace.
+  // (En los navegadores cuya barra flota por encima no cambia nada: la segunda
+  // pasada mide lo mismo y no toca nada.)
+  const colocar = () => {
+    const disponible = Math.max(1, caja.clientWidth - 2);
+    const escala = Math.min(1, disponible / ancho);
+    marco.style.transform = `scale(${escala})`;
+    lienzo.style.width = Math.floor(ancho * escala) + 'px';
+    lienzo.style.height = Math.ceil(alto * escala) + 'px';
+    return caja.clientWidth;
+  };
+  const antes = colocar();
+  if (caja.clientWidth !== antes) colocar();
 }
 /* Una copia de la nota: es lo que va en cada media hoja. */
 function bloqueDeNota(nota, emp, hayBonif, filas, extraClase = '') {

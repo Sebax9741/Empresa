@@ -669,9 +669,12 @@
         <button type="button" class="btn" id="btn-vista-cerrar">Cerrar</button>
       </div>
     </div>
+    <p class="vista-nota-aviso">🖨️ Al imprimir salen <strong>dos copias iguales</strong>: una se queda en el negocio y la otra es para el cliente.</p>
     <div class="vista-nota-hojas" id="vista-nota-hojas">
       <div class="vista-nota-lienzo" id="vista-nota-lienzo">
-        <iframe id="vista-nota-marco" title="La nota de venta como se imprimirá"></iframe>
+        <!-- scrolling="no": la hoja no se desplaza por dentro. Quien la mueve
+             es el cuadro de fuera, que la mide y la encaja. -->
+        <iframe id="vista-nota-marco" scrolling="no" title="La nota de venta como se imprimirá"></iframe>
       </div>
     </div>
   </dialog>

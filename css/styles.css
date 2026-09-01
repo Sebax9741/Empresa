@@ -1887,20 +1887,38 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   padding-bottom: 1rem;
 }
 .vista-nota-acciones { display: flex; gap: 0.4rem; flex: none; }
+.vista-nota-aviso {
+  margin: 0.9rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
 .vista-nota-hojas {
-  margin-top: 0.9rem;
-  border-radius: 10px;
-  overflow: auto;                 /* si aun así no cabe, se recorre */
-  background: #6b7280;            /* el mismo gris del marco, sin costura */
-  /* Lo que se recorre son las hojas, no el cuadro entero: el título y los
+  margin-top: 0.5rem;
+  /* UNA sola barra, y solo si la hoja no cabe de largo. De ancho nunca: la
+     hoja se reduce hasta caber, así que no hay nada que arrastrar de lado. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* El sitio de la barra se reserva SIEMPRE, aparezca o no. En los navegadores
+     cuya barra ocupa ancho de verdad (Chrome en Windows), al asomar se comía
+     unos 15 px del cuadro DESPUÉS de haber colocado la hoja, y a la hoja se le
+     recortaba el borde derecho. Reservado de antemano, el ancho no cambia. */
+  scrollbar-gutter: stable;
+  /* Lo que se recorre es la hoja, no el cuadro entero: el título y los
      botones se quedan siempre arriba a la vista. */
-  max-height: calc(100dvh - 11rem);
+  max-height: calc(100dvh - 13rem);
   overscroll-behavior: contain;
 }
 /* El lienzo lleva el tamaño YA reducido; el marco, el tamaño real. Hacen falta
    los dos: al encoger con transform el hueco que ocupaba no se encoge solo, y
-   quedaría un vacío gris debajo del papel. */
-.vista-nota-lienzo { margin: 0 auto; }
+   quedaría un vacío debajo del papel. */
+.vista-nota-lienzo {
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  background: #fff;
+}
 #vista-nota-marco {
   display: block;
   border: 0;
