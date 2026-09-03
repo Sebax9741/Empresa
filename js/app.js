@@ -8079,6 +8079,16 @@ function notaCobrada(nota) {
   return !!c && (Number(c.monto) || 0) > 0;
 }
 
+/* La misma condición que decide si sale el lápiz ✏️ en la lista, en un solo
+   sitio: la usan tanto la lista como "anterior / siguiente" al modificar,
+   para no arriesgarse a que un día digan cosas distintas. */
+function notaSePuedeEditar(n) {
+  if (!n) return false;
+  const estado = estadoDeNota(n);
+  return estado !== 'anulada' && estado !== 'reparto' && estado !== 'credito'
+    && !notaCobrada(n) && puede('ventasEditar');
+}
+
 function estadoDeNota(nota) {
   // Una nota anulada ya no sigue el recorrido: se queda ahí, de constancia
   if (nota && nota.anulada) return 'anulada';
@@ -8223,7 +8233,7 @@ function renderVentas() {
       <td class="col-num"><strong>${soles(n.total)}</strong></td>
       <td>${escapeHtml(mostrarComo(anulada ? n.anulada.por : n.emitidaPor) || '—')}</td>
       <td class="col-acc">
-        ${!anulada && estado !== 'reparto' && estado !== 'credito' && !notaCobrada(n) && puede('ventasEditar') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
+        ${notaSePuedeEditar(n) ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
         ${!anulada && estado !== 'pendiente' ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
         <button type="button" class="btn btn-secondary btn-small" data-ver-nota="${escapeHtml(n.id)}" title="Verla tal como se imprimirá, sin imprimir">👁️</button>
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
@@ -8317,6 +8327,7 @@ function abrirNuevaNota(base = null, editandoId = '') {
   $('#nv-cantidad').value = '';
   limpiarBuscadorNota();
   nvSeleccionarCliente(base ? (base.clienteId || '') : '');
+  actualizarNavEntreNotas();
   mostrarVistaVenta('form');
   renderNotaItems();
   window.scrollTo(0, 0);
@@ -8740,6 +8751,44 @@ function seguirNota(notaId) {
   const d = despachoDeNota(notaId);
   if (d) { abrirDespachos(); abrirDetalleDespacho(d.id); return; }
   toast('Esa nota todavía no salió a reparto');
+}
+
+/* ---- "Anterior / Siguiente" al modificar una nota ----
+   Se mueve por la lista en el mismo orden en que se ve en la tabla (la más
+   reciente arriba), sin tener que volver a buscarla. Si la vecina YA NO se
+   puede editar —salió a reparto, ya es un crédito, quedó pagada o
+   anulada— no tiene sentido abrirla en modo edición: en su lugar se enseña
+   su despacho o su crédito, igual que el botón 🔗 de la lista. */
+function irANotaAdyacente(paso) {
+  const lista = notasOrdenadas();
+  const i = lista.findIndex(n => n.id === nvEditandoId);
+  if (i < 0) return;
+  const destino = lista[i + paso];
+  if (!destino) {
+    toast(paso < 0 ? '⏹️ Ya estás en la nota más reciente' : '⏹️ Ya estás en la nota más antigua');
+    return;
+  }
+  if (notaSePuedeEditar(destino)) { abrirNotaParaEditar(destino.id); return; }
+  if (destino.anulada) {
+    toast(`🚫 La nota ${numeroCorto(destino.numero)} está anulada: no se puede editar`);
+    return;
+  }
+  if (creditoDeNota(destino) || despachoDeNota(destino.id)) { seguirNota(destino.id); return; }
+  toast(`🔒 La nota ${numeroCorto(destino.numero)} no se puede editar`);
+}
+
+/* Muestra u oculta "Anterior / Siguiente", y los apaga en la punta de la
+   lista: no tiene caso ofrecer un paso que no lleva a ninguna parte. */
+function actualizarNavEntreNotas() {
+  const nav = $('#nv-cab-nav');
+  if (!nav) return;
+  const editando = !!nvEditandoId;
+  nav.hidden = !editando;
+  if (!editando) return;
+  const lista = notasOrdenadas();
+  const i = lista.findIndex(n => n.id === nvEditandoId);
+  $('#btn-nv-anterior').disabled = i <= 0;
+  $('#btn-nv-siguiente').disabled = i < 0 || i >= lista.length - 1;
 }
 
 /* ---- Anular una nota ----
@@ -9593,6 +9642,8 @@ function inicializarEventos() {
   $('#btn-nv-nueva').addEventListener('click', () => abrirNuevaNota());
   $('#nv-buscar').addEventListener('input', renderVentas);
   $('#btn-nv-volver').addEventListener('click', () => { mostrarVistaVenta('lista'); renderVentas(); });
+  $('#btn-nv-anterior').addEventListener('click', () => irANotaAdyacente(-1));
+  $('#btn-nv-siguiente').addEventListener('click', () => irANotaAdyacente(1));
   $('#btn-nv-cancelar').addEventListener('click', () => {
     if (nvItems.length && !confirm('¿Descartar esta nota de venta?')) return;
     nvEditandoId = ''; nvItems = []; nvClienteId = '';

@@ -1567,6 +1567,15 @@
           <div><span>Hora</span><strong id="nv-hora">—</strong></div>
           <div><span>Vendedor</span><strong id="nv-vendedor">—</strong></div>
         </div>
+        <!-- Solo al MODIFICAR una nota: moverse a la anterior o la siguiente sin
+             tener que volver a la lista y buscarla de nuevo. Si esa nota vecina
+             ya no se puede editar (salió a reparto, ya es un crédito, está
+             pagada o anulada), en vez de abrirla en modo edición enseña su
+             despacho o su crédito — lo mismo que hace el botón 🔗 de la lista. -->
+        <div class="nv-cab-nav" id="nv-cab-nav" hidden>
+          <button type="button" id="btn-nv-anterior" class="nv-volver" title="Nota anterior (más reciente)">◀ Anterior</button>
+          <button type="button" id="btn-nv-siguiente" class="nv-volver" title="Nota siguiente (más antigua)">Siguiente ▶</button>
+        </div>
         <button type="button" id="btn-nv-volver" class="nv-volver">◀ Volver a la lista</button>
       </div>
 

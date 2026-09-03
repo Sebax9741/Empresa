@@ -3272,6 +3272,9 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   white-space: nowrap;
 }
 .nv-volver:hover { background: rgba(255, 255, 255, 0.2); }
+.nv-volver:disabled { opacity: 0.4; cursor: not-allowed; }
+.nv-volver:disabled:hover { background: rgba(255, 255, 255, 0.1); }
+.nv-cab-nav { display: flex; gap: 0.4rem; align-self: flex-start; }
 
 /* Paneles del formulario */
 .nv-panel {
