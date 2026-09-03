@@ -3041,6 +3041,13 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .kdx-saldo-item:hover { background: var(--bg-tint); }
 .kdx-saldo-item input { width: 17px; height: 17px; flex-shrink: 0; }
 .kdx-saldo-sin { padding: 0.7rem; margin: 0; color: var(--muted); font-size: 0.86rem; }
+.kdx-saldo-cab {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+.kdx-saldo-cab .sec-chips { margin: 0; }
+.kdx-saldo-exportar { display: flex; gap: 0.4rem; }
 .kdx-tipo {
   display: inline-block;
   font-size: 0.76rem;

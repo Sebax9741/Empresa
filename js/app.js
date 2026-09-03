@@ -7188,7 +7188,10 @@ function renderKardex() {
   }).join('');
 }
 
-function renderSaldoAFecha() {
+/* Lo que hace falta para pintar, imprimir o exportar el saldo a una fecha,
+   en un solo sitio: así el PDF y el Excel dicen exactamente lo mismo que la
+   pantalla, nunca un número recalculado aparte. */
+function datosSaldoAFecha() {
   const fecha = kdxSaldoFecha || hoyISO();
   const saldos = stockAFecha(fecha);
   // Van TODOS los productos, activos e inactivos: uno que ya no se vende
@@ -7199,18 +7202,24 @@ function renderSaldoAFecha() {
     ? productos
     : productos.filter(p => kdxSaldoSeleccion.has(p.id));
   const filas = universo.map(p => ({ p, saldo: saldos.has(p.id) ? saldos.get(p.id) : 0 }));
+  const sinNadaQueElegir = !kdxSaldoTodos && !kdxSaldoSeleccion.size;
+  const total = filas.reduce((s, f) => s + f.saldo, 0);
+  return { fecha, filas, sinNadaQueElegir, total };
+}
+
+function renderSaldoAFecha() {
+  const { fecha, filas, sinNadaQueElegir, total } = datosSaldoAFecha();
 
   $('#kdx-saldo-elegir').hidden = kdxSaldoTodos;
   if (!kdxSaldoTodos) renderSaldoProductosLista();
 
   // Sin "todos" y sin ningún producto marcado no hay nada que enseñar: se lo
   // dice en vez de mostrar una tabla vacía sin explicar por qué.
-  const sinNadaQueElegir = !kdxSaldoTodos && !kdxSaldoSeleccion.size;
   $('.kdx-saldo-tabla-wrap').hidden = sinNadaQueElegir;
   $('#kdx-saldo-vacio').hidden = !sinNadaQueElegir;
+  $('#kdx-saldo-exportar').hidden = sinNadaQueElegir;
   if (sinNadaQueElegir) { $('#kdx-saldo-chips').innerHTML = ''; return; }
 
-  const total = filas.reduce((s, f) => s + f.saldo, 0);
   $('#kdx-saldo-chips').innerHTML = [
     `<span class="chip">📦 ${filas.length} producto${filas.length === 1 ? '' : 's'}</span>`,
     `<span class="chip chip-saldo">Unidades en total: <strong>${total}</strong></span>`,
@@ -7227,6 +7236,80 @@ function renderSaldoAFecha() {
       <td class="col-num ${bajo ? 'prod-stock-bajo' : ''}" title="${bajo ? `Stock mínimo de hoy: ${min}` : ''}">${saldo}${bajo ? ' ⚠️' : ''}</td>
     </tr>`;
   }).join('');
+}
+
+/* ---- Saldo a una fecha: imprimir (o "Guardar como PDF" desde el propio
+   diálogo de impresión — la app no lleva una librería de PDF aparte, en
+   ningún otro reporte) y exportar a Excel ---- */
+function imprimirSaldoAFecha() {
+  const { fecha, filas, total } = datosSaldoAFecha();
+  const quienes = kdxSaldoTodos ? 'Todos los productos' : `${filas.length} producto(s) elegido(s)`;
+  const cuerpo = filas.map(({ p, saldo }) => {
+    const min = Number(p.stockMin) || 0;
+    const bajo = saldo <= min;
+    return `<tr><td>${escapeHtml(p.codigo || '—')}</td>
+      <td>${escapeHtml(p.nombre)}${p.activo === false ? ' (inactivo)' : ''}</td>
+      <td style="text-align:right${bajo ? ';color:#b91c1c;font-weight:bold' : ''}">${saldo}</td></tr>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Saldo de almacén</title>
+    <style>@page { size: A4 portrait; margin: 10mm; }
+      body{font-family:system-ui,sans-serif;margin:0;padding:0;color:#111}
+      h1{font-size:16px;margin:0 0 3px}.sub{color:#555;margin:0 0 10px;font-size:12px}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th,td{border:1px solid #bbb;padding:3px 5px;text-align:left}th{background:#eee}
+      tr{break-inside:avoid}
+    </style></head><body>
+    <h1>🗓️ Saldo de almacén al cierre del ${escapeHtml(formatoFecha(fecha))}</h1>
+    <p class="sub">${escapeHtml(quienes)} — ${filas.length} producto(s), ${total} unidad(es) en total</p>
+    <table><thead><tr><th>Código</th><th>Producto</th><th style="text-align:right">Stock a esa fecha</th></tr></thead>
+    <tbody>${cuerpo || '<tr><td colspan="3" style="text-align:center">Sin productos que mostrar</td></tr>'}</tbody></table>
+    <script>window.onload=function(){window.print();}<\/script></body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  w.document.write(html); w.document.close();
+}
+
+function exportarSaldoAFechaExcel() {
+  const { fecha, filas, total } = datosSaldoAFecha();
+  const quienes = kdxSaldoTodos ? 'Todos los productos' : `${filas.length} producto(s) elegido(s)`;
+
+  const OLIVA = '6D7350', BLANCO = 'FFFFFF', CARBON = '2B2B2D', GRIS_TXT = '77776E';
+  const CEBRA = 'F4F4F0', ROJO = 'B91C1C', ROJO_BG = 'FEE2E2';
+  const titulo = { bold: true, size: 15, color: CARBON, align: 'left' };
+  const subtit = { size: 11, color: GRIS_TXT, align: 'left' };
+  const th = { bold: true, color: BLANCO, bg: OLIVA, align: 'center', border: true };
+  const thIzq = { bold: true, color: BLANCO, bg: OLIVA, align: 'left', border: true };
+  const tdTxt = b => ({ align: 'left', border: true, bg: b ? CEBRA : undefined });
+  const tdNum = (b, bajo) => ({ align: 'right', border: true, bold: bajo,
+    color: bajo ? ROJO : undefined, bg: bajo ? ROJO_BG : (b ? CEBRA : undefined) });
+
+  const filasXlsx = [
+    [{ v: 'SALDO DE ALMACÉN', s: titulo }],
+    [{ v: `Al cierre del ${formatoFecha(fecha)}`, s: subtit }],
+    [{ v: `${quienes} — ${filas.length} producto(s), ${total} unidad(es) en total`, s: subtit }],
+    [],
+    [{ v: 'Código', s: th }, { v: 'Producto', s: thIzq }, { v: 'Stock a esa fecha', s: th }],
+  ];
+  filas.forEach(({ p, saldo }, i) => {
+    const z = i % 2 === 1;
+    const bajo = saldo <= (Number(p.stockMin) || 0);
+    filasXlsx.push([
+      { v: p.codigo || '—', s: { align: 'center', border: true, bold: true, bg: z ? CEBRA : undefined } },
+      { v: p.nombre + (p.activo === false ? ' (inactivo)' : ''), s: tdTxt(z) },
+      { v: saldo, s: tdNum(z, bajo) },
+    ]);
+  });
+  if (!filas.length) {
+    filasXlsx.push([{ v: 'Sin productos que mostrar', s: { align: 'left', color: GRIS_TXT } }]);
+  }
+
+  descargarXlsx(`saldo-almacen-${fecha}.xlsx`, {
+    nombre: 'Saldo',
+    cols: [12, 40, 18],
+    merges: ['A1:C1', 'A2:C2', 'A3:C3'],
+    filas: filasXlsx,
+  });
+  toast('⬇️ Saldo de almacén exportado (.xlsx)');
 }
 
 /* La lista de productos para elegir a mano, filtrada por lo que se busca.
@@ -9733,6 +9816,8 @@ function inicializarEventos() {
     else kdxSaldoSeleccion.delete(casilla.value);
     renderKardex();
   });
+  $('#btn-kdx-saldo-imprimir').addEventListener('click', imprimirSaldoAFecha);
+  $('#btn-kdx-saldo-excel').addEventListener('click', exportarSaldoAFechaExcel);
 
   // ────────── Notas de venta ──────────
   $('#btn-ventas').addEventListener('click', abrirVentas);
