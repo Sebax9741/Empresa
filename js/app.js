@@ -8808,18 +8808,28 @@ function seguirNota(notaId) {
 }
 
 /* ---- "Anterior / Siguiente" al modificar una nota ----
-   Se mueve por la lista en el mismo orden en que se ve en la tabla (la más
-   reciente arriba), sin tener que volver a buscarla. Si la vecina YA NO se
-   puede editar —salió a reparto, ya es un crédito, quedó pagada o
-   anulada— no tiene sentido abrirla en modo edición: en su lugar se enseña
-   su despacho o su crédito, igual que el botón 🔗 de la lista. */
+   Se mueve por NUMERACIÓN, no por fecha de creación: "Anterior" es el
+   número de boleta anterior (uno menos), "Siguiente" el que sigue (uno más)
+   — como pasar las hojas de un talonario. Las que no tienen un número
+   comprensible (casos raros, sin dígitos) quedan al final, sin estorbar.
+   Si la vecina YA NO se puede editar —salió a reparto, ya es un crédito,
+   quedó pagada o anulada— no tiene sentido abrirla en modo edición: en su
+   lugar se enseña su despacho o su crédito, igual que el botón 🔗. */
+function notasPorNumero() {
+  return notas.slice().sort((a, b) => {
+    const na = numeroDeComprobante(a.numero) || Infinity;
+    const nb = numeroDeComprobante(b.numero) || Infinity;
+    return na - nb;
+  });
+}
+
 function irANotaAdyacente(paso) {
-  const lista = notasOrdenadas();
+  const lista = notasPorNumero();
   const i = lista.findIndex(n => n.id === nvEditandoId);
   if (i < 0) return;
   const destino = lista[i + paso];
   if (!destino) {
-    toast(paso < 0 ? '⏹️ Ya estás en la nota más reciente' : '⏹️ Ya estás en la nota más antigua');
+    toast(paso < 0 ? '⏹️ Ya estás en el número más bajo' : '⏹️ Ya estás en el número más alto');
     return;
   }
   if (notaSePuedeEditar(destino)) { abrirNotaParaEditar(destino.id); return; }
@@ -8832,14 +8842,14 @@ function irANotaAdyacente(paso) {
 }
 
 /* Muestra u oculta "Anterior / Siguiente", y los apaga en la punta de la
-   lista: no tiene caso ofrecer un paso que no lleva a ninguna parte. */
+   numeración: no tiene caso ofrecer un paso que no lleva a ninguna parte. */
 function actualizarNavEntreNotas() {
   const nav = $('#nv-cab-nav');
   if (!nav) return;
   const editando = !!nvEditandoId;
   nav.hidden = !editando;
   if (!editando) return;
-  const lista = notasOrdenadas();
+  const lista = notasPorNumero();
   const i = lista.findIndex(n => n.id === nvEditandoId);
   $('#btn-nv-anterior').disabled = i <= 0;
   $('#btn-nv-siguiente').disabled = i < 0 || i >= lista.length - 1;
