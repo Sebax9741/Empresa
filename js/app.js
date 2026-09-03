@@ -7106,6 +7106,10 @@ function renderKardex() {
   const filtrosArriba = $('.kdx-filtros');
   if (filtrosArriba) filtrosArriba.hidden = kdxVista === 'saldo';
   $('.kdx-saldo-wrap').hidden = kdxVista !== 'saldo';
+  // El "🖨️ Imprimir" de la cabecera imprime los MOVIMIENTOS filtrados: en
+  // "Saldo a una fecha" no le pinta nada, porque esa vista ya trae su propio
+  // "Imprimir / PDF" (y su propio Excel), que sí imprime lo que se está viendo.
+  $('#btn-kardex-imprimir').hidden = kdxVista === 'saldo';
   if (kdxVista === 'saldo') {
     $('#kdx-chips').innerHTML = '';
     $('#kdx-alerta').hidden = true;
