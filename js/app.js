@@ -8112,6 +8112,13 @@ let nvNumero = '';
 let nvCreadoEn = 0;        // hora en que se empezó la nota
 let nvEditandoId = '';     // id de la nota que se está modificando ('' = nueva)
 let nvComboIndice = -1;
+/* true cuando este mismo formulario se abrió solo para MIRAR una nota que ya
+   no se puede editar (salió a reparto, ya es un crédito, está pagada o
+   anulada). Es la misma pantalla —mismos campos, misma tabla de productos—
+   pero con todo bloqueado y sin botones de guardar: reutilizarla evita que
+   la vista de "solo ver" un día diga algo distinto de lo que de verdad se
+   guarda al editar. */
+let nvSoloLectura = false;
 
 /* El número que lleva un comprobante, venga de una nota ("0001-00004181") o
    de la boleta anotada a mano en un crédito ("4137"). */
@@ -8405,7 +8412,7 @@ function renderVentas() {
       <td>${escapeHtml(mostrarComo(anulada ? n.anulada.por : n.emitidaPor) || '—')}</td>
       <td class="col-acc">
         ${notaSePuedeEditar(n) ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
-        ${!anulada && estado !== 'pendiente' ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
+        ${!anulada && estado !== 'pendiente' ? `<button type="button" class="btn btn-secondary btn-small" data-nota-info="${escapeHtml(n.id)}" title="Ver la nota completa (solo lectura)">ℹ️</button>` : ''}
         <button type="button" class="btn btn-secondary btn-small" data-ver-nota="${escapeHtml(n.id)}" title="Verla tal como se imprimirá, sin imprimir">👁️</button>
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
         ${!anulada && puede('ventasAnular') ? `<button type="button" class="btn btn-danger btn-small" data-anular-nota="${escapeHtml(n.id)}" title="Anular: la nota se queda de constancia">🚫</button>` : ''}
@@ -8457,12 +8464,14 @@ function abrirNotaParaEditar(notaId) {
   abrirNuevaNota(n, n.id);
 }
 
-function abrirNuevaNota(base = null, editandoId = '') {
+function abrirNuevaNota(base = null, editandoId = '', soloLectura = false) {
   if (!puede('ventas')) { toast('🔒 No tienes permiso para emitir notas de venta'); return; }
   if (!productosActivos().length) {
     toast('⚠️ Primero crea productos en la sección 🛒 Productos');
     return;
   }
+  nvSoloLectura = soloLectura;
+  $('#btn-nv-solo-seguir').hidden = true;   // se decide más abajo si aplica
   llenarSelectoresProducto();
   nvEditandoId = editandoId;
   nvItems = base ? (base.items || []).map(it => ({ ...it })) : [];
@@ -8499,9 +8508,33 @@ function abrirNuevaNota(base = null, editandoId = '') {
   limpiarBuscadorNota();
   nvSeleccionarCliente(base ? (base.clienteId || '') : '');
   actualizarNavEntreNotas();
+  if (soloLectura) aplicarSoloLecturaNota(base);
   mostrarVistaVenta('form');
   renderNotaItems();
   window.scrollTo(0, 0);
+}
+
+/* Deja el mismo formulario congelado: nada que tocar, nada que guardar. Se
+   usa para ver una nota que ya no se puede modificar —salió a reparto, ya
+   es un crédito, quedó pagada o anulada— sin tener que armar una pantalla
+   aparte que un día pudiera decir algo distinto del formulario de verdad. */
+function aplicarSoloLecturaNota(nota) {
+  $('#nv-form-titulo').textContent = `Nota de venta Nº ${numeroCorto(nota.numero)} · solo lectura`;
+  $('#nv-cab-nav').hidden = true;   // Anterior/Siguiente es cosa de "Modificando"
+  ['nv-serie', 'nv-correlativo', 'nv-fecha', 'nv-cliente-buscar', 'nv-condicion', 'nv-fpago',
+    'nv-buscar-producto', 'nv-cantidad', 'nv-permitir-precios', 'nv-descuento'].forEach(id => {
+    const el = $('#' + id);
+    if (el) el.disabled = true;
+  });
+  $('#btn-nv-cliente-nuevo').hidden = true;
+  $('#btn-nv-agregar').hidden = true;
+  $('.nv-permiso').hidden = true;
+  $('#btn-nv-guardar').hidden = true;
+  $('#btn-nv-guardar-imprimir').hidden = true;
+  $('#btn-nv-cancelar').textContent = '◀ Cerrar';
+  // Que se pueda seguir llegando al despacho o al crédito, aunque ya no
+  // esté el botón 🔗 de la lista: solo se ofrece si de verdad hay algo
+  $('#btn-nv-solo-seguir').hidden = !(creditoDeNota(nota) || despachoDeNota(nota.id));
 }
 
 /* ---- Buscador de cliente de la nota ---- */
@@ -8660,7 +8693,7 @@ function cuentaDeLinea(it) {
 function renderNotaItems() {
   const cuerpo = $('#nv-items-body');
   if (!cuerpo) return;
-  const editable = $('#nv-permitir-precios').checked && puede('preciosEditar');
+  const editable = !nvSoloLectura && $('#nv-permitir-precios').checked && puede('preciosEditar');
   $('#nv-items-vacio').hidden = !!nvItems.length;
   $('.nv-items-wrap').hidden = !nvItems.length;
 
@@ -8669,6 +8702,15 @@ function renderNotaItems() {
     const p = productoPorId(it.productoId);
     const stock = p ? stockDe(p.id) : 0;
     const falta = p && (Number(it.cantidad) || 0) > stock;
+    // Solo lectura: la cantidad y el precio son texto, no cuadros para
+    // escribir — es la misma información, pero nada en esta fila se toca.
+    const celdaCant = nvSoloLectura
+      ? `<td class="col-num">${it.cantidad}</td>`
+      : `<td class="col-num"><input type="number" class="input input-mini" data-nv-cant="${i}" min="1" step="1" inputmode="numeric" value="${it.cantidad}"></td>`;
+    const celdaPrecio = nvSoloLectura
+      ? `<td class="col-num">${soles(it.precio)}</td>`
+      : `<td class="col-num"><input type="number" class="input input-mini" data-nv-precio="${i}" min="0" step="0.01"
+          value="${Number(it.precio).toFixed(2)}" ${editable ? '' : 'readonly'}></td>`;
     return `<tr class="${it.bonificacion ? 'nv-fila-bonif' : ''}">
       <td class="col-n">${i + 1}</td>
       <td class="col-cod"><code>${escapeHtml(it.codigo || '—')}</code></td>
@@ -8676,23 +8718,17 @@ function renderNotaItems() {
         ${it.bonificacion ? '<span class="nv-etq-bonif">Bonificación</span>' : ''}
         ${falta ? `<small class="nv-sin-stock">⚠️ solo hay ${stock} en almacén</small>` : ''}
         ${it.precioEditado ? '<small class="nv-precio-tocado">precio modificado a mano</small>' : ''}</td>
-      <td class="col-num">
-        <input type="number" class="input input-mini" data-nv-cant="${i}" min="1" step="1" inputmode="numeric" value="${it.cantidad}">
-      </td>
+      ${celdaCant}
       <td class="col-um">${escapeHtml(it.um || '')}</td>
-      <td class="col-num">
-        <input type="number" class="input input-mini" data-nv-precio="${i}" min="0" step="0.01"
-          value="${Number(it.precio).toFixed(2)}" ${editable ? '' : 'readonly'}>
-      </td>
+      ${celdaPrecio}
       <td class="col-num nv-importe">${soles(importe)}</td>
       <td class="col-num nv-dscto">${dsctoBonif ? '−' + soles(dsctoBonif) : '—'}</td>
       <td class="col-num nv-neto"><strong>${soles(neto)}</strong></td>
-      <td class="col-acc">
+      <td class="col-acc">${nvSoloLectura ? '' : `
         <button type="button" class="btn btn-secondary btn-small" data-nv-bonif="${i}"
           title="${it.bonificacion ? 'Volver a cobrarla' : 'Convertir en bonificación (se regala)'}"
           aria-pressed="${it.bonificacion ? 'true' : 'false'}">🎁</button>
-        <button type="button" class="btn btn-danger btn-small" data-nv-quitar="${i}" title="Quitar">✕</button>
-      </td>
+        <button type="button" class="btn btn-danger btn-small" data-nv-quitar="${i}" title="Quitar">✕</button>`}</td>
     </tr>`;
   }).join('');
 
@@ -8922,6 +8958,17 @@ function seguirNota(notaId) {
   const d = despachoDeNota(notaId);
   if (d) { abrirDespachos(); abrirDetalleDespacho(d.id); return; }
   toast('Esa nota todavía no salió a reparto');
+}
+
+/* Botón ℹ️ de la lista: para una nota que ya no se puede modificar, en vez
+   de saltar a su despacho o su crédito, enseña la nota misma —el mismo
+   formulario que "Modificando nota", con lo mismo dentro, pero congelado—.
+   Sigue habiendo forma de llegar al despacho o al crédito: desde ahí mismo,
+   con el botón 🔗 que ya tiene su ficha. */
+function verNotaInfo(notaId) {
+  const n = notas.find(x => x.id === notaId);
+  if (!n) return;
+  abrirNuevaNota(n, n.id, true);
 }
 
 /* ---- "Anterior / Siguiente" al modificar una nota ----
@@ -9825,10 +9872,14 @@ function inicializarEventos() {
   $('#btn-nv-nueva').addEventListener('click', () => abrirNuevaNota());
   $('#nv-buscar').addEventListener('input', renderVentas);
   $('#btn-nv-volver').addEventListener('click', () => { mostrarVistaVenta('lista'); renderVentas(); });
+  $('#btn-nv-solo-seguir').addEventListener('click', () => seguirNota(nvEditandoId));
   $('#btn-nv-anterior').addEventListener('click', () => irANotaAdyacente(-1));
   $('#btn-nv-siguiente').addEventListener('click', () => irANotaAdyacente(1));
   $('#btn-nv-cancelar').addEventListener('click', () => {
-    if (nvItems.length && !confirm('¿Descartar esta nota de venta?')) return;
+    // De solo lectura no hay nada que "descartar": no se tocó nada
+    if (!nvSoloLectura && nvItems.length && !confirm('¿Descartar esta nota de venta?')) return;
+    nvSoloLectura = false;
+    $('#btn-nv-cancelar').textContent = 'Cancelar';   // vuelve a su texto normal para la próxima
     nvEditandoId = ''; nvItems = []; nvClienteId = '';
     mostrarVistaVenta('lista'); renderVentas();
   });
@@ -9836,11 +9887,11 @@ function inicializarEventos() {
     const editar = ev.target.closest('[data-editar-nota]');
     const imprimir = ev.target.closest('[data-imprimir-nota]');
     const ver = ev.target.closest('[data-ver-nota]');
-    const seguir = ev.target.closest('[data-seguir-nota]');
+    const info = ev.target.closest('[data-nota-info]');
     const anular = ev.target.closest('[data-anular-nota]');
     const eliminar = ev.target.closest('[data-eliminar-nota]');
     if (editar) { abrirNotaParaEditar(editar.dataset.editarNota); return; }
-    if (seguir) { seguirNota(seguir.dataset.seguirNota); return; }
+    if (info) { verNotaInfo(info.dataset.notaInfo); return; }
     if (anular) { anularNota(anular.dataset.anularNota); return; }
     if (eliminar) { eliminarNota(eliminar.dataset.eliminarNota); return; }
     if (ver) { verNotaImpresa(notas.find(x => x.id === ver.dataset.verNota)); return; }
