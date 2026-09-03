@@ -8524,7 +8524,9 @@ function abrirNuevaNota(base = null, editandoId = '', soloLectura = false) {
    aparte que un día pudiera decir algo distinto del formulario de verdad. */
 function aplicarSoloLecturaNota(nota) {
   $('#nv-form-titulo').textContent = `Nota de venta Nº ${numeroCorto(nota.numero)} · solo lectura`;
-  $('#nv-cab-nav').hidden = true;   // Anterior/Siguiente es cosa de "Modificando"
+  // Anterior/Siguiente se queda: se sigue pudiendo pasar de una nota a la
+  // vecina estando aquí, no solo estando en "Modificando" (los deja listos
+  // actualizarNavEntreNotas(), que ya se llamó más arriba).
   ['nv-serie', 'nv-correlativo', 'nv-fecha', 'nv-cliente-buscar', 'nv-condicion', 'nv-fpago',
     'nv-buscar-producto', 'nv-cantidad', 'nv-permitir-precios', 'nv-descuento'].forEach(id => {
     const el = $('#' + id);
@@ -9000,13 +9002,11 @@ function irANotaAdyacente(paso) {
     toast(paso < 0 ? '⏹️ Ya estás en el número más bajo' : '⏹️ Ya estás en el número más alto');
     return;
   }
+  // Si se puede editar, a modificarla; si no —en reparto, a crédito, pagada
+  // o anulada—, a su información en solo lectura. Nunca se queda sin abrir
+  // nada: siempre hay algo que enseñar de una nota que existe.
   if (notaSePuedeEditar(destino)) { abrirNotaParaEditar(destino.id); return; }
-  if (destino.anulada) {
-    toast(`🚫 La nota ${numeroCorto(destino.numero)} está anulada: no se puede editar`);
-    return;
-  }
-  if (creditoDeNota(destino) || despachoDeNota(destino.id)) { seguirNota(destino.id); return; }
-  toast(`🔒 La nota ${numeroCorto(destino.numero)} no se puede editar`);
+  verNotaInfo(destino.id);
 }
 
 /* Muestra u oculta "Anterior / Siguiente", y los apaga en la punta de la
