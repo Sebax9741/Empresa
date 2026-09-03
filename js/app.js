@@ -1735,7 +1735,6 @@ function suscribirNube() {
 
 /* Muestra/oculta botones según los permisos del usuario actual */
 function aplicarPermisos() {
-  $('#btn-new').hidden = !puede('crear');
   $('#btn-dashboard').hidden = !puedeVerDashboard();
   $('#btn-cobranza').hidden = !puede('cobranza');
   $('#btn-despachos').hidden = !puede('despachos');
@@ -1870,12 +1869,8 @@ function mostrarSeccion(nombre) {
     void vista.offsetWidth;          // reinicia la animación
     vista.classList.add('entrando');
   }
-  // El botón "＋ Nuevo crédito" solo aplica en Créditos
-  const btnNew = $('#btn-new');
-  if (btnNew) btnNew.hidden = (nombre !== 'creditos') || !puede('crear');
   // Resaltar el destino activo en el panel lateral y en la cabecera
   const navId = nombre === 'creditos' ? 'nav-inicio' : 'nav-' + nombre;
-  if (nombre === 'dashboard' && btnNew) btnNew.hidden = true;
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('activo', b.id === navId));
   const btnId = { dashboard: 'btn-dashboard', creditos: 'btn-creditos', ventas: 'btn-ventas', productos: 'btn-productos', ingresos: 'btn-ingresos', kardex: 'btn-kardex', despachos: 'btn-despachos', clientes: 'btn-clientes', cobranza: 'btn-cobranza', usuarios: 'btn-usuarios', settings: 'btn-settings' }[nombre];
   document.querySelectorAll('.header-actions .btn-icon').forEach(b => b.classList.toggle('activo', b.id === btnId));
@@ -4191,6 +4186,13 @@ function abrirFormulario(credito = null, prefill = null) {
     $('#foto-acciones-wrap').style.display = soloEditarCampos ? '' : 'none';
     // Vuelve a bloquear la zona si el cliente elegido ya la define
     if (soloEditarCampos) aplicarClienteSeleccionado();
+    // El nro de boleta, el cliente, la fecha de emisión y la de despacho son
+    // datos de la NOTA (la misma venta): el crédito es solo lo que se le
+    // añade después. Editarlos aquí dejaría a la nota y a su crédito diciendo
+    // cosas distintas, así que en TODA edición de un crédito ya existente
+    // quedan bloqueados, vengan o no de un despacho.
+    ['f-boleta', 'f-cliente-buscar', 'f-fecha', 'f-fecha-despacho'].forEach(id => { $('#' + id).disabled = true; });
+    $('#btn-cliente-nuevo').disabled = true;
     // Abierto desde el reparto: lo de arriba viene de la nota y no se toca
     if (despachoOrigen) {
       $('#form-title').textContent = `Crédito de la boleta ${numeroCorto(credito.boleta)} (desde despacho)`;
@@ -9158,7 +9160,6 @@ function poblarSelectores() {
 function inicializarEventos() {
   poblarSelectores();
 
-  $('#btn-new').addEventListener('click', () => abrirFormulario());
   $('#btn-cancelar').addEventListener('click', () => modalForm.close());
   // Si se cancela un crédito que venía de un despacho, se descarta el enlace pendiente
   modalForm.addEventListener('close', () => { despachoOrigen = null; });
@@ -10048,6 +10049,22 @@ function inicializarEventos() {
   $('#btn-cobro-todo').addEventListener('click', () => {
     const c = creditos.find(x => x.id === infoCreditoId);
     if (c) $('#cobro-monto').value = saldoDe(c);
+  });
+  // El administrador puede poner el cobro en otro día, pero no en uno cuya
+  // hoja ya está cerrada: se le avisa al momento (no hay que esperar a firmar
+  // para enterarse) y se le devuelve a hoy. Si hoy TAMBIÉN está cerrada, se le
+  // ofrece reabrirla ahí mismo —con su código, como cualquier reapertura—
+  // para no mandarlo a buscar el botón en otra pantalla.
+  $('#cobro-fecha').addEventListener('change', async () => {
+    const hoy = hoyISO();
+    const elegida = $('#cobro-fecha').value;
+    if (elegida && elegida !== hoy && hojaCerrada(elegida)) {
+      alert(`La hoja de cobranza del ${formatoFecha(elegida)} ya está cerrada.\n\n`
+        + 'Se pondrá la fecha de hoy.');
+      $('#cobro-fecha').value = hoy;
+      if (hojaCerrada(hoy)) await reabrirHojaCobranza(hoy);
+      renderInfo();
+    }
   });
   // Lienzo de la firma: lápiz táctil, dedo o mouse
   const lienzo = $('#firma-canvas');
