@@ -1806,8 +1806,20 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
      mejor que resumirla en tarjetas. */
   #view-creditos .table-wrap { display: none; }
   .cards { display: flex; }
-  .prod-tabla-wrap, .kdx-tabla-wrap, .kdx-dias-wrap,
+  .prod-tabla-wrap, .kdx-tabla-wrap, .kdx-dias-wrap, .kdx-saldo-tabla-wrap,
   .ing-lista-wrap, .nv-tabla-wrap { overflow-x: auto; }
+  /* Ojo con esto: poner overflow-x sin más convierte el recuadro en SU PROPIA
+     zona de scroll (overflow-y pasa a "auto" solo, aunque no se pida) — y con
+     eso la fila de títulos pegada dejó de "pegarse" a la pantalla y pasó a
+     pegarse A ESE RECUADRO, con el mismo hueco de siempre (--alto-cabecera)
+     empujándola hacia abajo dentro de una caja que no tiene tanto alto: la
+     fila quedaba tapando la de datos, en vez de encima de la tabla. A
+     kdx-tabla-wrap, prod-tabla-wrap y nv-tabla-wrap esto no les pasaba porque
+     son tan anchas que el guion (ajustarCorrimiento) ya les pone su propia
+     clase ".tabla-corre" con este mismo arreglo. kdx-dias-wrap y
+     kdx-saldo-tabla-wrap pueden caber sin ella, así que necesitan el arreglo
+     puesto a mano. */
+  .kdx-dias-wrap .kdx-tabla th, .kdx-saldo-tabla-wrap .kdx-tabla th { top: 0; }
   /* Despachos: en celular se muestran las tarjetas y se oculta la tabla.
      Se usa el id (#) para ganarle en especificidad a la regla por defecto
      ".despachos-list { display:none }" que aparece más abajo en el archivo. */
@@ -2997,6 +3009,34 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .kdx-fecha small { display: block; color: var(--muted); font-size: 0.72rem; }
 .kdx-tabla td small { display: block; color: var(--muted); font-size: 0.74rem; }
+
+/* ── Saldo a una fecha ── */
+.kdx-saldo-controles {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem 1.4rem;
+  margin-bottom: 0.9rem;
+}
+.kdx-saldo-fecha-campo { margin: 0; min-width: 11rem; }
+.kdx-saldo-todos-campo { margin: 0; padding-bottom: 0.55rem; }
+.kdx-saldo-elegir {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 0.7rem 0.8rem; margin-bottom: 0.9rem; background: var(--bg-tint);
+}
+.kdx-saldo-elegir .input { margin-bottom: 0.5rem; }
+.kdx-saldo-lista {
+  display: flex; flex-direction: column;
+  max-height: 12rem; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.kdx-saldo-item {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.4rem 0.6rem; font-size: 0.88rem; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.kdx-saldo-item:last-child { border-bottom: none; }
+.kdx-saldo-item:hover { background: var(--bg-tint); }
+.kdx-saldo-item input { width: 17px; height: 17px; flex-shrink: 0; }
+.kdx-saldo-sin { padding: 0.7rem; margin: 0; color: var(--muted); font-size: 0.86rem; }
 .kdx-tipo {
   display: inline-block;
   font-size: 0.76rem;

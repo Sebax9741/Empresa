@@ -6870,11 +6870,25 @@ async function borrarProducto(id) {
 /* ══════════════════════ Kardex de almacén ══════════════════════ */
 
 let kdxFiltros = { producto: '', tipo: '', motivo: '', usuario: '', texto: '', desde: '', hasta: '' };
-let kdxVista = 'movimientos';    // 'movimientos' | 'dias'
+let kdxVista = 'movimientos';    // 'movimientos' | 'dias' | 'saldo'
+
+/* ---- "Saldo a una fecha": el estado vive aparte de kdxFiltros ----
+   Es otra pregunta ("cuánto queda") que la de los movimientos ("qué pasó"),
+   así que no comparte sus filtros: una fecha sola (no un rango) y, en vez de
+   un producto a la vez, todos o los que elijas. */
+let kdxSaldoFecha = '';                 // se pone a hoy la primera vez que se abre Kardex
+let kdxSaldoTodos = true;
+const kdxSaldoSeleccion = new Set();    // ids de producto, solo cuando NO son "todos"
 
 function abrirKardex() {
   llenarSelectoresProducto();
   llenarFiltrosKardex();
+  // Se pone a hoy la PRIMERA vez nada más: si el usuario ya eligió una fecha
+  // y sale y vuelve a entrar, se la respeta —es lo que estaba mirando—.
+  if (!kdxSaldoFecha) {
+    kdxSaldoFecha = hoyISO();
+    $('#kdx-saldo-fecha').value = kdxSaldoFecha;
+  }
   renderKardex();
   mostrarSeccion('kardex');
 }
@@ -6975,10 +6989,45 @@ function stockPorDia(productoId) {
   return lista.sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
+/* El saldo de CADA producto tal como quedó tras su último movimiento en esa
+   fecha o antes. Igual que en stockPorDia, sale del kardex COMPLETO, nunca de
+   lo filtrado arriba —que además es de otra pestaña y no aplica aquí—. Un
+   producto sin ningún movimiento hasta ese día tenía 0, así de sencillo. */
+function stockAFecha(fechaISO) {
+  const saldos = new Map();
+  for (const m of kardexConSaldo()) {
+    if ((m.fecha || '') > fechaISO) continue;
+    // kardexConSaldo ya viene en orden cronológico: el último que se procese
+    // para cada producto es su último movimiento hasta esa fecha, y su saldo
+    // es el que queda.
+    saldos.set(m.productoId, m.saldo);
+  }
+  return saldos;
+}
+
 function renderKardex() {
   const cuerpo = $('#kdx-body');
   if (!cuerpo) return;
   llenarFiltrosKardex();
+
+  // "Saldo a una fecha" es otra pregunta que las dos vistas de movimientos
+  // ("qué pasó" contra "cuánto queda"): no usa los filtros de arriba —una
+  // fecha sola, no un rango; el producto se elige en su propio panel—, así
+  // que se resuelve aparte y no comparte nada más de esta función.
+  const filtrosArriba = $('.kdx-filtros');
+  if (filtrosArriba) filtrosArriba.hidden = kdxVista === 'saldo';
+  $('.kdx-saldo-wrap').hidden = kdxVista !== 'saldo';
+  if (kdxVista === 'saldo') {
+    $('#kdx-chips').innerHTML = '';
+    $('#kdx-alerta').hidden = true;
+    $('.kdx-tabla-wrap').hidden = true;
+    $('.kdx-dias-wrap').hidden = true;
+    $('#kdx-dias-aviso').hidden = true;
+    $('#kdx-vacio').hidden = true;
+    renderSaldoAFecha();
+    return;
+  }
+
   const lista = movimientosFiltrados();
 
   let entradas = 0, salidas = 0;
@@ -7048,6 +7097,64 @@ function renderKardex() {
         ? `<button type="button" class="btn btn-danger btn-small" data-borrar-kardex="${escapeHtml(m.id)}" title="Anular movimiento (pide tu código)">🗑️</button>` : ''}</td>
     </tr>`;
   }).join('');
+}
+
+function renderSaldoAFecha() {
+  const fecha = kdxSaldoFecha || hoyISO();
+  const saldos = stockAFecha(fecha);
+  // Van TODOS los productos, activos e inactivos: uno que ya no se vende
+  // puede seguir teniendo mercadería de sobra en el almacén, y este es
+  // justamente el reporte para encontrarla. Se marca "inactivo" para que no
+  // se confunda con lo que sí se puede vender hoy.
+  const universo = kdxSaldoTodos
+    ? productos
+    : productos.filter(p => kdxSaldoSeleccion.has(p.id));
+  const filas = universo.map(p => ({ p, saldo: saldos.has(p.id) ? saldos.get(p.id) : 0 }));
+
+  $('#kdx-saldo-elegir').hidden = kdxSaldoTodos;
+  if (!kdxSaldoTodos) renderSaldoProductosLista();
+
+  // Sin "todos" y sin ningún producto marcado no hay nada que enseñar: se lo
+  // dice en vez de mostrar una tabla vacía sin explicar por qué.
+  const sinNadaQueElegir = !kdxSaldoTodos && !kdxSaldoSeleccion.size;
+  $('.kdx-saldo-tabla-wrap').hidden = sinNadaQueElegir;
+  $('#kdx-saldo-vacio').hidden = !sinNadaQueElegir;
+  if (sinNadaQueElegir) { $('#kdx-saldo-chips').innerHTML = ''; return; }
+
+  const total = filas.reduce((s, f) => s + f.saldo, 0);
+  $('#kdx-saldo-chips').innerHTML = [
+    `<span class="chip">📦 ${filas.length} producto${filas.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip chip-saldo">Unidades en total: <strong>${total}</strong></span>`,
+  ].join('');
+
+  $('#kdx-saldo-body').innerHTML = filas.map(({ p, saldo }) => {
+    // El mínimo es el de HOY, configurado en el producto: no hay una versión
+    // de "cuál era el mínimo en esa fecha", así que se avisa con el de ahora.
+    const min = Number(p.stockMin) || 0;
+    const bajo = saldo <= min;
+    return `<tr class="${p.activo === false ? 'prod-inactivo' : ''}">
+      <td class="col-cod"><code>${escapeHtml(p.codigo || '—')}</code></td>
+      <td>${escapeHtml(p.nombre)}${p.activo === false ? ' <span class="prod-etq">inactivo</span>' : ''}</td>
+      <td class="col-num ${bajo ? 'prod-stock-bajo' : ''}" title="${bajo ? `Stock mínimo de hoy: ${min}` : ''}">${saldo}${bajo ? ' ⚠️' : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* La lista de productos para elegir a mano, filtrada por lo que se busca.
+   La selección vive en kdxSaldoSeleccion y no se toca al filtrar: buscar
+   "aceite", marcar uno y luego borrar la búsqueda no debe perderlo. */
+function renderSaldoProductosLista() {
+  const buscado = normalizarNombre($('#kdx-saldo-buscar').value || '');
+  const lista = buscado
+    ? productos.filter(p => normalizarNombre(p.nombre).includes(buscado)
+        || normalizarNombre(p.codigo).includes(buscado))
+    : productos;
+  $('#kdx-saldo-lista').innerHTML = lista.length ? lista.map(p => `
+    <label class="kdx-saldo-item">
+      <input type="checkbox" class="kdx-saldo-check" value="${escapeHtml(p.id)}" ${kdxSaldoSeleccion.has(p.id) ? 'checked' : ''}>
+      <span>${escapeHtml(p.codigo || '')} · ${escapeHtml(p.nombre)}${p.activo === false ? ' <small>(inactivo)</small>' : ''}</span>
+    </label>`).join('')
+    : '<p class="kdx-saldo-sin">Ningún producto coincide con la búsqueda.</p>';
 }
 
 /* Guarda un movimiento. En un ajuste, `cantidad` es lo CONTADO en el almacén y
@@ -9437,20 +9544,41 @@ function inicializarEventos() {
     $('#kdx-fil-hasta').value = kdxFiltros.hasta;
     renderKardex();
   });
-  // Las dos formas de mirar el kardex
-  for (const [id, vista] of [['#btn-kdx-vista-mov', 'movimientos'], ['#btn-kdx-vista-dias', 'dias']]) {
+  // Las tres formas de mirar el kardex
+  const BOTONES_VISTA_KDX = ['#btn-kdx-vista-mov', '#btn-kdx-vista-dias', '#btn-kdx-vista-saldo'];
+  for (const [id, vista] of [['#btn-kdx-vista-mov', 'movimientos'], ['#btn-kdx-vista-dias', 'dias'],
+    ['#btn-kdx-vista-saldo', 'saldo']]) {
     $(id).addEventListener('click', () => {
       kdxVista = vista;
-      $('#btn-kdx-vista-mov').classList.toggle('activo', vista === 'movimientos');
-      $('#btn-kdx-vista-dias').classList.toggle('activo', vista === 'dias');
-      $('#btn-kdx-vista-mov').setAttribute('aria-selected', String(vista === 'movimientos'));
-      $('#btn-kdx-vista-dias').setAttribute('aria-selected', String(vista === 'dias'));
+      BOTONES_VISTA_KDX.forEach(sel => {
+        const activo = sel === id;
+        $(sel).classList.toggle('activo', activo);
+        $(sel).setAttribute('aria-selected', String(activo));
+      });
       renderKardex();
     });
   }
   $('#kdx-body').addEventListener('click', ev => {
     const borrar = ev.target.closest('[data-borrar-kardex]');
     if (borrar) borrarMovimiento(borrar.dataset.borrarKardex);
+  });
+
+  // ── Saldo a una fecha ──
+  $('#kdx-saldo-fecha').addEventListener('change', () => {
+    kdxSaldoFecha = $('#kdx-saldo-fecha').value || hoyISO();
+    renderKardex();
+  });
+  $('#kdx-saldo-todos').addEventListener('change', () => {
+    kdxSaldoTodos = $('#kdx-saldo-todos').checked;
+    renderKardex();
+  });
+  $('#kdx-saldo-buscar').addEventListener('input', renderSaldoProductosLista);
+  $('#kdx-saldo-lista').addEventListener('change', ev => {
+    const casilla = ev.target.closest('.kdx-saldo-check');
+    if (!casilla) return;
+    if (casilla.checked) kdxSaldoSeleccion.add(casilla.value);
+    else kdxSaldoSeleccion.delete(casilla.value);
+    renderKardex();
   });
 
   // ────────── Notas de venta ──────────

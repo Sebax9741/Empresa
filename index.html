@@ -66,9 +66,9 @@
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v6h6"/><path d="M9 13h7M9 17h5"/></svg>
         <span class="nav-txt">Notas de venta</span>
       </button>
-      <button type="button" class="nav-item" id="nav-inicio" data-nombre="Créditos">
+      <button type="button" class="nav-item" id="nav-inicio" data-nombre="Créditos y Pagados">
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
-        <span class="nav-txt">Créditos</span>
+        <span class="nav-txt">Créditos y Pagados</span>
       </button>
       <button type="button" class="nav-item" id="nav-cobranza" data-nombre="Hoja de cobranza">
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a1 1 0 0 1 1 1v17l-3-2-3 2-3-2-3 2-3-2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6"/></svg>
@@ -147,7 +147,7 @@
       </button>
       <div class="header-actions">
         <button id="btn-dashboard" class="btn-icon" title="Dashboard" aria-label="Dashboard">📊</button>
-        <button id="btn-creditos" class="btn-icon" title="Créditos" aria-label="Créditos">📋</button>
+        <button id="btn-creditos" class="btn-icon" title="Créditos y Pagados" aria-label="Créditos y Pagados">📋</button>
         <button id="btn-ventas" class="btn-icon" title="Notas de venta" aria-label="Notas de venta">🧮</button>
         <button id="btn-productos" class="btn-icon" title="Productos" aria-label="Productos">🛒</button>
         <button id="btn-ingresos" class="btn-icon" title="Ingreso de productos" aria-label="Ingreso de productos">📥</button>
@@ -1249,11 +1249,13 @@
       </div>
     </div>
 
-    <!-- Dos formas de mirar lo mismo: movimiento a movimiento, o el cierre
-         de cada día con el stock en que quedó el producto. -->
+    <!-- Tres formas de mirar lo mismo: movimiento a movimiento, el cierre
+         de cada día de un producto, o el saldo de todo (o de lo que elijas)
+         al cierre de una fecha cualquiera. -->
     <div class="kdx-vistas" role="tablist">
       <button type="button" id="btn-kdx-vista-mov" class="kdx-vista activo" role="tab" aria-selected="true">📄 Movimientos</button>
       <button type="button" id="btn-kdx-vista-dias" class="kdx-vista" role="tab" aria-selected="false">📅 Stock por día</button>
+      <button type="button" id="btn-kdx-vista-saldo" class="kdx-vista" role="tab" aria-selected="false">🗓️ Saldo a una fecha</button>
     </div>
 
     <div class="sec-chips" id="kdx-chips"></div>
@@ -1293,6 +1295,40 @@
         <tbody id="kdx-dias-body"></tbody>
       </table>
     </div>
+
+    <!-- El saldo de todo el almacén (o de lo que elijas) tal como quedó al
+         cierre de una fecha. Es otro tipo de pregunta que las dos vistas de
+         arriba —"qué pasó" contra "cuánto queda"—, así que trae su propio
+         panel en vez de sumarse a los filtros de movimientos, que no le
+         pintan nada a esto. -->
+    <div class="kdx-saldo-wrap" hidden>
+      <div class="kdx-saldo-controles">
+        <label class="field kdx-saldo-fecha-campo"><span>Saldo al cierre del</span>
+          <input type="date" id="kdx-saldo-fecha" class="input"></label>
+        <label class="field field-check kdx-saldo-todos-campo">
+          <input type="checkbox" id="kdx-saldo-todos" checked>
+          <span>Todos los productos</span></label>
+      </div>
+      <div class="kdx-saldo-elegir" id="kdx-saldo-elegir" hidden>
+        <input type="search" id="kdx-saldo-buscar" class="input" placeholder="🔍 Buscar el producto que quieres elegir…">
+        <div class="kdx-saldo-lista" id="kdx-saldo-lista"></div>
+      </div>
+      <div class="sec-chips" id="kdx-saldo-chips"></div>
+      <div class="table-wrap kdx-saldo-tabla-wrap">
+        <table class="kdx-tabla" id="kdx-saldo-tabla">
+          <thead>
+            <tr>
+              <th class="col-cod">Código</th>
+              <th>Producto</th>
+              <th class="col-num">Stock a esa fecha</th>
+            </tr>
+          </thead>
+          <tbody id="kdx-saldo-body"></tbody>
+        </table>
+      </div>
+      <p class="sec-vacio" id="kdx-saldo-vacio" hidden>Elige al menos un producto arriba para ver su stock.</p>
+    </div>
+
     <p class="sec-vacio" id="kdx-dias-aviso" hidden>Elige un producto arriba para ver en cuánto quedó su stock cada día.</p>
     <p class="sec-vacio" id="kdx-vacio" hidden>Todavía no hay movimientos de almacén.</p>
   </section>
