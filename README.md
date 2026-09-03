@@ -34,6 +34,7 @@ Aplicación para controlar los créditos que le das a tus clientes de distribuci
 - 🔀 **Ordena** por vencimiento, boleta, cliente, zona, total, saldo o fecha
 - 🏷️ Estados: Pendiente, Pago parcial, Pagado — y marca **Vencido automáticamente** al pasar la fecha
 - 📷 **Foto de la boleta física** (cámara o galería) en alta calidad; se ve **a pantalla completa** y se puede **descargar**
+- ◀▶ **Anterior / Siguiente en la ficha del crédito**: salta al número de boleta anterior o siguiente sin volver a la lista, igual que en "Modificando nota" — útil también cuando "Anterior / Siguiente" de una nota te trae aquí porque esa nota vecina ya no se podía editar
 - ☁️ **Nube en tiempo real**: entra con tu usuario y contraseña en todos tus dispositivos a la vez (varias sesiones activas) y todos ven los mismos datos
 - 🔒 **Código de seguridad (4 dígitos)**: lo pone el administrador en ⚙️ y se pide para **borrar un crédito**, **borrar una "a cuenta"** o **anular un movimiento de almacén** —y anular movimientos (un ingreso entero o una línea del kardex) es **solo del administrador**, porque cambia el stock hacia atrás. Se guarda solo su huella (SHA-256 con sal), nunca el código en claro. **Queda guardado en la nube** (vale en todos los dispositivos) y además copiado en cada equipo, así no se pierde al actualizar la página ni sin internet
 - ⚙️ **La configuración se guarda en la nube**: los días de crédito, la moneda y los atajos los define el administrador y **valen para todo el equipo y en todos los dispositivos**. El aviso de vencimiento sí es de cada celular

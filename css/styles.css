@@ -1200,6 +1200,10 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   gap: 0.6rem;
   margin-top: 1rem;
 }
+/* "Anterior / Siguiente" de la ficha del crédito: a la izquierda, separado
+   de "Cerrar" por el hueco que deja el propio flex (justify-content lo
+   manda a la derecha, esto lo ancla a la izquierda). */
+.info-nav { display: flex; gap: 0.5rem; margin-right: auto; }
 
 /* Visor de imagen a pantalla completa */
 .modal-imagen {

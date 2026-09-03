@@ -3729,8 +3729,42 @@ let firmaPendiente = null;
 let editandoVencimiento = false;
 let editandoCompromiso = false;
 
+/* ---- "Anterior / Siguiente" en la ficha del crédito ----
+   Igual que en "Modificando nota": se mueve por número de boleta, como
+   pasar las hojas de un talonario. La ficha es de solo mirar (y cobrar), no
+   hay un estado que la bloquee, así que a diferencia de las notas aquí no
+   hace falta desviar a "lo que tenga": el crédito vecino simplemente se
+   abre. */
+function creditosPorNumero() {
+  return creditos.slice().sort((a, b) => {
+    const na = numeroDeComprobante(a.boleta) || Infinity;
+    const nb = numeroDeComprobante(b.boleta) || Infinity;
+    return na - nb;
+  });
+}
+
+function irACreditoAdyacente(paso) {
+  const lista = creditosPorNumero();
+  const i = lista.findIndex(c => c.id === infoCreditoId);
+  if (i < 0) return;
+  const destino = lista[i + paso];
+  if (!destino) {
+    toast(paso < 0 ? '⏹️ Ya estás en el número más bajo' : '⏹️ Ya estás en el número más alto');
+    return;
+  }
+  abrirInfo(destino);
+}
+
+function actualizarNavEntreCreditos() {
+  const lista = creditosPorNumero();
+  const i = lista.findIndex(c => c.id === infoCreditoId);
+  $('#btn-info-anterior').disabled = i <= 0;
+  $('#btn-info-siguiente').disabled = i < 0 || i >= lista.length - 1;
+}
+
 function abrirInfo(credito) {
   infoCreditoId = credito.id;
+  actualizarNavEntreCreditos();
   firmaPendiente = null;
   editandoVencimiento = false;
   editandoCompromiso = false;
@@ -10164,6 +10198,8 @@ function inicializarEventos() {
 
   // Ficha de información y cobro con firma
   $('#btn-info-cerrar').addEventListener('click', () => $('#modal-info').close());
+  $('#btn-info-anterior').addEventListener('click', () => irACreditoAdyacente(-1));
+  $('#btn-info-siguiente').addEventListener('click', () => irACreditoAdyacente(1));
   $('#btn-firma').addEventListener('click', pedirFirmaCobro);
   $('#btn-registrar-cobro').addEventListener('click', registrarCobro);
   $('#btn-cobro-todo').addEventListener('click', () => {
