@@ -5125,7 +5125,6 @@ function renderEstadoHoja(fecha, filas = []) {
   const cerrada = fechaHoraDeTimestamp(h.cerradaEn);
   if (h.cerrada) {
     lineas.push(`🔒 Cerrada por ${mostrarComo(h.cerradaPor) || '—'} ${cerrada ? 'el ' + cerrada : '(hora pendiente de confirmar)'}`);
-    lineas.push('🚫 Cerrada: no entra ni sale ningún cobro de este día');
   }
   // Si alguna vez se reabrió, queda dicho: es la única puerta que tiene
   if (h.reabiertaPor) {
@@ -8224,7 +8223,7 @@ function renderVentas() {
       <td class="col-num"><strong>${soles(n.total)}</strong></td>
       <td>${escapeHtml(mostrarComo(anulada ? n.anulada.por : n.emitidaPor) || '—')}</td>
       <td class="col-acc">
-        ${!anulada && estado !== 'reparto' && !notaCobrada(n) && puede('ventasEditar') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
+        ${!anulada && estado !== 'reparto' && estado !== 'credito' && !notaCobrada(n) && puede('ventasEditar') ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
         ${!anulada && estado !== 'pendiente' ? `<button type="button" class="btn btn-secondary btn-small" data-seguir-nota="${escapeHtml(n.id)}" title="Ver su despacho o su crédito">🔗</button>` : ''}
         <button type="button" class="btn btn-secondary btn-small" data-ver-nota="${escapeHtml(n.id)}" title="Verla tal como se imprimirá, sin imprimir">👁️</button>
         <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
@@ -8253,6 +8252,12 @@ function abrirNotaParaEditar(notaId) {
   // Cambiarla ahora dejaría la nota diciendo una cosa y el reparto otra.
   if (estadoDeNota(n) === 'reparto') {
     toast('🚚 Esa nota ya salió a reparto: no se puede modificar hasta que vuelva');
+    return;
+  }
+  // La boleta volvió firmada y ya es un crédito: cambiar la nota ahora
+  // dejaría al crédito diciendo un importe que la nota ya no dice.
+  if (estadoDeNota(n) === 'credito') {
+    toast('📄 Esa nota ya está a crédito: no se puede modificar. Corrige el crédito si hace falta.');
     return;
   }
   // Ya está cobrada: cambiarle el importe ahora dejaría el dinero recibido
