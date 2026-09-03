@@ -34,6 +34,19 @@ let vencimientoEditadoManual = false;
 
 /* Modo nube (Firebase) */
 let modoNube = false;
+/* Se pone en `true` recién cuando de verdad se sabe qué puede ver este
+   usuario: en modo local, en cuanto se confirma que es local (ahí no hay
+   restricciones); en la nube, en cuanto llega su ficha con sus permisos.
+   Antes de eso —cargando el SDK de Firebase, esperando la respuesta de la
+   nube tras recargar la página— puede() ya contesta bien, pero solo porque
+   trata "todavía no sé" como "no", salvo un caso: mientras el SDK de
+   Firebase se está cargando, `modoNube` sigue en `false` y puede() lo lee
+   como modo local (todo permitido). Sin esta bandera, un empleado que
+   recargara la página tenía ese instante para entrar a un apartado que no
+   le tocaba —y quedarse ahí, aunque el botón desapareciera un momento
+   después—. Con ella, mostrarSeccion() no abre nada que no sea neutral
+   hasta que se sepa de verdad. */
+let accesoResuelto = false;
 let fb = null;            // SDK y referencias de Firebase
 let unsubSnapshot = null; // cancela la suscripción en tiempo real
 let unsubClientes = null; // suscripción en tiempo real de la lista de clientes
@@ -1574,12 +1587,19 @@ function servirDeLoGuardado() {
 }
 
 function abrirSesionEnPantalla() {
+  // Ya se sabe qué puede ver: `yo` trae su ficha real (de la nube o, sin
+  // internet, la copia que se guardó la última vez que sí contestó).
+  accesoResuelto = true;
   $('#auth-screen').hidden = true;
   $('#settings-cuenta').hidden = false;
   $('#cuenta-email').textContent = `${yo.usuario}${esAdmin() ? ' (administrador)' : ''}`;
   mostrarAliasDeAcceso();
   banner(null);
   aplicarPermisos();
+  // Recién ahora se sabe si el destino de entrada de verdad le toca: al
+  // arrancar, mostrarSeccion() aterrizó en Créditos porque todavía no se
+  // sabía nada (ver puedeVerSeccion). Se corrige al que corresponde.
+  mostrarSeccion(seccionDeInicio());
   cargarSeguridad();        // copia local mientras llega la de la nube
   suscribirConfigNube();
   suscribirNube();
@@ -1587,6 +1607,9 @@ function abrirSesionEnPantalla() {
 }
 
 function sesionCerrada() {
+  // Si después entra otro usuario en la misma pestaña (sin recargar), su
+  // acceso también tiene que esperar a que se sepa de verdad.
+  accesoResuelto = false;
   if (unsubSnapshot) { unsubSnapshot(); unsubSnapshot = null; }
   if (unsubClientes) { unsubClientes(); unsubClientes = null; }
   if (unsubAjustes) { unsubAjustes(); unsubAjustes = null; }
@@ -1850,11 +1873,42 @@ function sincronizarNavLateral() {
 const SECCIONES = ['dashboard', 'creditos', 'ventas', 'productos', 'ingresos', 'kardex', 'despachos', 'clientes', 'cobranza', 'usuarios', 'settings'];
 let seccionActual = 'dashboard';
 
+/* Qué hace falta para entrar a cada apartado. No es solo para decidir qué
+   botón mostrar en el menú: es el candado de VERDAD, el que revisa
+   mostrarSeccion() antes de abrir nada.
+
+   Por qué hace falta un candado aparte del menú: nada más entrar (o al
+   recargar la página) el menú todavía no sabe qué le toca a este usuario
+   —esos permisos llegan de la nube un instante después—, así que durante
+   ese instante el menú puede mostrar apartados de más. Si mostrarSeccion()
+   se fiara de que "si el botón está a la vista, se puede entrar", alcanzaba
+   con tocarlo en ese instante para quedarse dentro aunque el botón
+   desapareciera después. puede() ya contesta bien desde el primer momento
+   (dice que no a todo salvo lo abierto a cualquiera mientras no se sepa más),
+   así que apoyándose en eso el candado no depende de que el menú haya
+   alcanzado a dibujarse. */
+function puedeVerSeccion(nombre) {
+  // Mientras no se sepa de verdad qué puede ver este usuario, solo lo
+  // neutral: ni "todo" (podría ser un empleado) ni "nada" (se vería vacía
+  // la app un instante hasta para el dueño). Créditos es lo único que
+  // cualquier miembro ve siempre, así que es un destino seguro para esperar.
+  if (!accesoResuelto) return nombre === 'creditos';
+  switch (nombre) {
+    case 'dashboard': return puedeVerDashboard();
+    case 'ventas': return puede('ventas');
+    case 'productos': return puede('productos');
+    case 'ingresos': return puede('ingresos') || puede('ajustes');
+    case 'kardex': return puede('kardex');
+    case 'despachos': return puede('despachos');
+    case 'cobranza': return puede('cobranza');
+    case 'usuarios': return esAdmin();
+    default: return true;   // creditos, clientes, settings: cualquier miembro
+  }
+}
+
 function mostrarSeccion(nombre) {
   if (!SECCIONES.includes(nombre)) nombre = 'creditos';
-  // El Dashboard es solo para el administrador, salvo que lo habilite para
-  // el equipo (⚙️ Configuración → Dashboard)
-  if (nombre === 'dashboard' && !puedeVerDashboard()) nombre = 'creditos';
+  if (!puedeVerSeccion(nombre)) nombre = 'creditos';
   seccionActual = nombre;
   SECCIONES.forEach(s => {
     const el = $('#view-' + s);
@@ -10234,6 +10288,8 @@ function inicializarEventos() {
 
 /* ====== Inicio ====== */
 async function iniciarLocal() {
+  // Modo local confirmado: un solo dueño, sin restricciones que esperar.
+  accesoResuelto = true;
   try {
     creditos = await DB.getAll();
     clientes = await DB.getAllClientes();
@@ -10262,6 +10318,10 @@ async function iniciarLocal() {
   llenarSelectoresProducto();
   await cargarMiniaturas();
   render();
+  // Recién ahora se sabe que es local (sin restricciones): se corrige el
+  // destino de entrada, que al arrancar había aterrizado en Créditos por no
+  // saberlo todavía (ver puedeVerSeccion).
+  mostrarSeccion(seccionDeInicio());
   avisoAlAbrir();
   // Las que falten se van haciendo en segundo plano, sin frenar la app
   prepararMiniaturas();

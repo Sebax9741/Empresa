@@ -54,7 +54,10 @@
          lista corrida: con once destinos, encontrarlos era ir leyendo uno a uno. -->
     <div class="nav-grupo">
       <div class="nav-titulo">General</div>
-      <button type="button" class="nav-item" id="nav-dashboard" data-nombre="Dashboard">
+      <!-- Escondidos de fábrica, igual que Usuarios: hasta que se sepa qué
+           puede ver este usuario (ver accesoResuelto en app.js) no hay que
+           mostrar ni un instante un apartado que tal vez no le toque. -->
+      <button type="button" class="nav-item" id="nav-dashboard" hidden data-nombre="Dashboard">
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
         <span class="nav-txt">Dashboard</span>
       </button>
@@ -62,7 +65,7 @@
 
     <div class="nav-grupo">
       <div class="nav-titulo">Ventas</div>
-      <button type="button" class="nav-item" id="nav-ventas" data-nombre="Notas de venta">
+      <button type="button" class="nav-item" id="nav-ventas" hidden data-nombre="Notas de venta">
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v6h6"/><path d="M9 13h7M9 17h5"/></svg>
         <span class="nav-txt">Notas de venta</span>
       </button>
@@ -70,7 +73,7 @@
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
         <span class="nav-txt">Créditos y Pagados</span>
       </button>
-      <button type="button" class="nav-item" id="nav-cobranza" data-nombre="Hoja de cobranza">
+      <button type="button" class="nav-item" id="nav-cobranza" hidden data-nombre="Hoja de cobranza">
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a1 1 0 0 1 1 1v17l-3-2-3 2-3-2-3 2-3-2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6"/></svg>
         <span class="nav-txt">Hoja de cobranza</span>
       </button>
@@ -82,19 +85,19 @@
 
     <div class="nav-grupo">
       <div class="nav-titulo">Almacén</div>
-      <button type="button" class="nav-item" id="nav-productos" data-nombre="Productos">
+      <button type="button" class="nav-item" id="nav-productos" hidden data-nombre="Productos">
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5"/><path d="M12 12v9"/></svg>
         <span class="nav-txt">Productos</span>
       </button>
-      <button type="button" class="nav-item" id="nav-ingresos" data-nombre="Ingreso de productos">
+      <button type="button" class="nav-item" id="nav-ingresos" hidden data-nombre="Ingreso de productos">
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/></svg>
         <span class="nav-txt">Ingreso de productos</span>
       </button>
-      <button type="button" class="nav-item" id="nav-kardex" data-nombre="Kardex">
+      <button type="button" class="nav-item" id="nav-kardex" hidden data-nombre="Kardex">
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H5.5A1.5 1.5 0 0 1 4 19.5z"/><path d="M4 17h16"/><path d="M8 7h8M8 11h5"/></svg>
         <span class="nav-txt">Kardex</span>
       </button>
-      <button type="button" class="nav-item" id="nav-despachos" data-nombre="Despachos">
+      <button type="button" class="nav-item" id="nav-despachos" hidden data-nombre="Despachos">
         <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 7h11v9H2z"/><path d="M13 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>
         <span class="nav-txt">Despachos</span>
       </button>
