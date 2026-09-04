@@ -1,10 +1,27 @@
-/* Tipografía propia (autoalojada, funciona sin internet): variable de peso 200-800 */
+/* Tipografía propia (autoalojada, funciona sin internet): variable de peso 300-900.
+   Figtree, la sans geométrica más parecida a la Styrene que usa Claude —esa es
+   de pago y con licencia cerrada, no se puede meter en el proyecto—. Va en dos
+   archivos, como los sirve Google: el corriente y el de los acentos raros; el
+   navegador solo baja el segundo si de verdad le hace falta. */
 @font-face {
-  font-family: "Plus Jakarta Sans";
-  src: url("fonts/PlusJakartaSans-Variable.woff2") format("woff2");
-  font-weight: 200 800;
+  font-family: "Figtree";
+  src: url("fonts/Figtree-Variable.woff2") format("woff2");
+  font-weight: 300 900;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+                 U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+                 U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Figtree";
+  src: url("fonts/Figtree-Variable-ext.woff2") format("woff2");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+                 U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+                 U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 /* ====== Base ====== */
@@ -43,7 +60,7 @@
   --radius-sm: 11px;
   --shadow: 0 1px 2px rgba(20, 32, 50, 0.04), 0 6px 20px rgba(20, 32, 50, 0.06);
   --shadow-lg: 0 14px 50px rgba(20, 32, 50, 0.16);
-  --font: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* Ritmo de las animaciones */
   --ease: cubic-bezier(0.22, 0.75, 0.3, 1);
