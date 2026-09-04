@@ -104,7 +104,11 @@
       menu.appendChild(v);
     }
 
-    document.body.appendChild(menu);
+    // Una ventana <dialog> abierta se dibuja en una capa aparte, por encima de
+    // todo lo demás: un menú colgado del body queda debajo y no se ve, por
+    // muchos z-index que se le pongan. Así que si el desplegable vive dentro de
+    // una ventana, el menú se cuelga de esa misma ventana.
+    (cara.closest('dialog[open]') || document.body).appendChild(menu);
     cara.setAttribute('aria-expanded', 'true');
     abierto = { sel, cara, menu, items, indice: -1 };
     colocar();
