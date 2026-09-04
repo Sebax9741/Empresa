@@ -229,38 +229,66 @@ body {
 .usuario-cuenta[aria-expanded="true"] .usuario-caret { transform: rotate(180deg); }
 
 /* Menú desplegable: Mi perfil / Configuración */
-.usuario-menu {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  right: 0;
+/* ══════════ Menús: uno solo para toda la aplicación ══════════
+   El recuadro que baja del chip del usuario y el que abre cualquier
+   desplegable son el mismo: tarjeta blanca de esquinas redondeadas, sombra
+   suave, y adentro renglones que se pintan al pasarles el ratón por encima.
+   Así no hay dos maneras distintas de enseñar una lista de acciones. */
+.menu {
   min-width: 190px;
+  max-width: min(92vw, 340px);
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-lg);
-  padding: 0.4rem;
+  border-radius: 13px;
+  box-shadow: 0 12px 34px rgba(20, 32, 50, 0.15), 0 2px 6px rgba(20, 32, 50, 0.07);
+  padding: 0.3rem;
   z-index: 60;
-  animation: entrarArriba 0.16s var(--ease) both;
+  animation: entrarArriba 0.14s var(--ease) both;
 }
-.usuario-menu-item {
+.menu-item {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.6rem;
   width: 100%;
   background: none;
   border: none;
-  border-radius: 8px;
-  padding: 0.55rem 0.6rem;
+  border-radius: 9px;
+  padding: 0.5rem 0.6rem;
   font-family: inherit;
   font-size: 0.86rem;
   font-weight: 600;
   color: var(--text);
   text-align: left;
   cursor: pointer;
-  transition: background 0.13s var(--ease);
+  transition: background 0.12s var(--ease);
 }
-.usuario-menu-item:hover { background: var(--bg-tint); }
-.usuario-menu-item span { font-size: 1rem; line-height: 1; }
+.menu-item:hover,
+.menu-item.activo { background: var(--bg-tint); }
+.menu-item:focus-visible { outline: none; background: var(--bg-tint); }
+.menu-item > span:first-child:not(.menu-item-txt) { font-size: 1rem; line-height: 1; }
+.menu-item.inerte { opacity: 0.45; cursor: default; }
+.menu-item.inerte:hover { background: none; }
+/* La opción que ya está puesta: en el color de la casa y con su visto bueno */
+.menu-item.elegido { color: var(--primary); }
+.menu-visto { width: 15px; height: 15px; margin-left: auto; flex-shrink: 0; }
+.menu-item-txt { flex: 1 1 auto; min-width: 0; }
+.menu-titulo {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0.5rem 0.6rem 0.25rem;
+}
+.menu-sep { height: 1px; background: var(--border); margin: 0.3rem 0.15rem; }
+.menu-vacio { padding: 0.6rem; font-size: 0.84rem; color: var(--muted); text-align: center; }
+
+/* El menú del chip de usuario: el mismo, colgado del botón */
+.usuario-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+}
 
 /* Botón de salir: aparte, en rojo y con texto (no un símbolo suelto) */
 .btn-salir {
@@ -660,7 +688,7 @@ body {
 }
 
 .search-input { flex: 2 1 220px; }
-.toolbar select { flex: 1 1 150px; }
+
 
 /* Panel de filtros */
 .filtro-wrap { position: relative; flex: 1 1 150px; }
@@ -742,6 +770,52 @@ body {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
 }
 select.input { cursor: pointer; }
+
+/* ── Desplegables: la cara que se ve en vez del <select> ──
+   El <select> de verdad sigue ahí debajo, invisible pero en su sitio: es el
+   que guarda el valor y el que hace saltar el aviso de "campo obligatorio".
+   Por eso no se esconde con display:none, que se lo llevaría de la página. */
+.sel { position: relative; display: block; }
+.sel-nativo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+.sel-cara {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  text-align: left;
+  cursor: pointer;
+}
+.sel-cara-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-flecha {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: transform 0.15s var(--ease);
+}
+.sel-cara[aria-expanded="true"] .sel-flecha { transform: rotate(180deg); }
+.sel-cara:disabled { cursor: not-allowed; opacity: 0.6; }
+.sel-cara.sel-vacia .sel-cara-txt { color: var(--muted); }
+/* Enfocado con el teclado se marca igual que un campo de escribir */
+.sel-cara.input:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+/* El menú que baja: va suelto sobre la página para que ningún recuadro con
+   desplazamiento se lo recorte */
+.sel-menu { position: fixed; max-height: 320px; overflow-y: auto; }
+/* Los dos sitios donde el desplegable era un elemento flexible de su fila */
+.toolbar .sel { flex: 1 1 150px; }
+.desp-rep-fila .sel { flex: 1 1 auto; }
 
 /* ====== Tabla (pantallas grandes) ====== */
 /* El desplazamiento es el de la PÁGINA, no el de un recuadro interno: por eso
@@ -2820,7 +2894,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .rep-form .field { flex: 1 1 200px; margin-bottom: 0; }
 
 .desp-rep-fila { display: flex; gap: 0.4rem; align-items: center; }
-.desp-rep-fila select { flex: 1 1 auto; }
+.desp-rep-fila .sel { flex: 1 1 auto; }
 
 .repartidores-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.5rem; }
 .repartidor-item {
@@ -3228,10 +3302,14 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 8px;
-  padding: 0 0.1rem 0 0.35rem;
+  padding: 0.15rem 0.4rem;
   cursor: pointer;
 }
 .nv-serie:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+/* Aquí la cara va sobre el fondo oscuro de la cabecera, así que la flecha
+   tiene que verse en claro y el ancho no puede bailar al cambiar de serie */
+.sel-cara.nv-serie { gap: 0.3rem; }
+.sel-cara.nv-serie .sel-flecha { width: 17px; height: 17px; opacity: 0.75; }
 .nv-serie option { color: var(--text); background: #fff; font-size: 1rem; }
 .nv-serie-pista { display: block; font-size: 0.68rem; color: var(--side-text); margin-top: 0.15rem; }
 /* El correlativo se escribe: hace falta para dar de alta una boleta que falta */

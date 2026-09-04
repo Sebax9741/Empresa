@@ -1,5 +1,5 @@
 /* Service worker: permite instalar la app y usarla sin internet */
-const CACHE = 'creditos-v137';
+const CACHE = 'creditos-v138';
 const ARCHIVOS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const ARCHIVOS = [
   './js/app.js',
   './js/db.js',
   './js/firebase-config.js',
+  './js/menus.js',
   './js/notifications.js',
   './js/vendor/firebase.js',
   './js/xlsx-lite.js',
