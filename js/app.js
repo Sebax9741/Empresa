@@ -8540,7 +8540,12 @@ function aplicarSoloLecturaNota(nota) {
   $('#btn-nv-cancelar').textContent = '◀ Cerrar';
   // Que se pueda seguir llegando al despacho o al crédito, aunque ya no
   // esté el botón 🔗 de la lista: solo se ofrece si de verdad hay algo
-  $('#btn-nv-solo-seguir').hidden = !(creditoDeNota(nota) || despachoDeNota(nota.id));
+  // Se nombra lo que de verdad va a abrir —el crédito manda, igual que en
+  // seguirNota()—, y así el botón también entra en el ancho de la columna.
+  const seguir = $('#btn-nv-solo-seguir');
+  if (creditoDeNota(nota)) { seguir.hidden = false; seguir.textContent = '🔗 Ver crédito'; }
+  else if (despachoDeNota(nota.id)) { seguir.hidden = false; seguir.textContent = '🔗 Ver despacho'; }
+  else seguir.hidden = true;
 }
 
 /* ---- Buscador de cliente de la nota ---- */

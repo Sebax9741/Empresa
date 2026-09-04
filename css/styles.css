@@ -3285,7 +3285,21 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .nv-volver:hover { background: rgba(255, 255, 255, 0.2); }
 .nv-volver:disabled { opacity: 0.4; cursor: not-allowed; }
 .nv-volver:disabled:hover { background: rgba(255, 255, 255, 0.1); }
-.nv-cab-nav { display: flex; gap: 0.4rem; align-self: flex-start; }
+/* Pegado a las salidas de la derecha, no repartido por el espacio que sobre:
+   así cae siempre en el mismo sitio, sin importar cuánto ocupen el número,
+   la fecha o el nombre del vendedor de la nota que se esté viendo. */
+.nv-cab-nav { display: flex; gap: 0.4rem; align-self: flex-start; margin-left: auto; }
+/* Los dos botones de salida en columna. "stretch" les da a los dos el ancho
+   del más largo ("◀ Volver a la lista"), así el bloque mide lo mismo esté o
+   no el atajo al crédito y "Anterior / Siguiente" no se corre de sitio. */
+.nv-cab-salidas {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  align-self: flex-start;
+}
+.nv-cab-salidas .nv-volver { align-self: stretch; text-align: center; }
 
 /* Paneles del formulario */
 .nv-panel {
@@ -3427,6 +3441,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 @media (max-width: 900px) {
   .nv-bloque .field-row { grid-template-columns: 1fr; }
   .nv-cab { flex-direction: column; align-items: flex-start; gap: 0.8rem; }
+  .nv-cab-nav { margin-left: 0; }   /* en columna ya no hay derecha a la que pegarse */
   .nv-cifras { width: 100%; }
   .sec-buscar { width: 100%; }
 }

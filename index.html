@@ -1591,10 +1591,13 @@
           <button type="button" id="btn-nv-anterior" class="nv-volver" title="Un número anterior">◀ Anterior</button>
           <button type="button" id="btn-nv-siguiente" class="nv-volver" title="Un número siguiente">Siguiente ▶</button>
         </div>
-        <!-- Solo en la vista de solo lectura, y solo si hay algo que ver:
-             el despacho o el crédito que salió de esta nota. -->
-        <button type="button" id="btn-nv-solo-seguir" class="nv-volver" hidden>🔗 Ver despacho o crédito</button>
-        <button type="button" id="btn-nv-volver" class="nv-volver">◀ Volver a la lista</button>
+        <!-- Las dos salidas, una debajo de la otra y del mismo ancho, para que
+             "Anterior / Siguiente" quede siempre en el mismo sitio, haya o no
+             atajo al despacho o al crédito (que solo sale en solo lectura). -->
+        <div class="nv-cab-salidas">
+          <button type="button" id="btn-nv-volver" class="nv-volver">◀ Volver a la lista</button>
+          <button type="button" id="btn-nv-solo-seguir" class="nv-volver" hidden>🔗 Ver crédito</button>
+        </div>
       </div>
 
       <!-- Cliente y condición de pago: van juntos porque se llenan juntos, al
