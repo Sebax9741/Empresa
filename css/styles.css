@@ -56,8 +56,9 @@
   --side-text: #aab7c8;
   --side-activo: #e0714a;
 
-  --radius: 16px;
-  --radius-sm: 11px;
+  --radius: 20px;      /* tarjetas, ventanas y paneles */
+  --radius-sm: 13px;   /* campos, botones y menús */
+  --radius-chip: 10px; /* chips y etiquetas: redondeados, no óvalos */
   --shadow: 0 1px 2px rgba(20, 32, 50, 0.04), 0 6px 20px rgba(20, 32, 50, 0.06);
   --shadow-lg: 0 14px 50px rgba(20, 32, 50, 0.16);
   --font: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -208,7 +209,7 @@ body {
   font-weight: 700;
   font-size: 0.85rem;
   padding: 0.3rem 0.6rem 0.3rem 0.3rem;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
@@ -239,7 +240,7 @@ body {
   max-width: min(92vw, 340px);
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 13px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 12px 34px rgba(20, 32, 50, 0.15), 0 2px 6px rgba(20, 32, 50, 0.07);
   padding: 0.3rem;
   z-index: 60;
@@ -300,7 +301,7 @@ body {
   font-weight: 700;
   font-size: 0.82rem;
   padding: 0.44rem 0.8rem;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s var(--ease), color 0.15s var(--ease);
@@ -386,7 +387,7 @@ body {
   flex-shrink: 0;
   background: var(--accent-light); color: var(--accent);
   font-size: 0.72rem; font-weight: 700;
-  padding: 0.22rem 0.6rem; border-radius: 999px;
+  padding: 0.22rem 0.6rem; border-radius: var(--radius-chip);
 }
 .chart { width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -408,7 +409,7 @@ body {
   pointer-events: none;
   background: #1f2a37;
   color: #fff;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 0.5rem 0.7rem;
   font-size: 0.78rem;
   line-height: 1.3;
@@ -463,7 +464,7 @@ body {
 .barras { display: flex; flex-direction: column; gap: 0.2rem; }
 .barra-fila {
   display: grid; grid-template-columns: 8.5rem 1fr auto; align-items: center; gap: 0.7rem;
-  padding: 0.2rem 0.35rem; margin: 0 -0.35rem; border-radius: 8px;
+  padding: 0.2rem 0.35rem; margin: 0 -0.35rem; border-radius: 10px;
   transition: background 0.15s var(--ease);
 }
 .barra-et { font-size: 0.82rem; color: var(--muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -584,7 +585,7 @@ body {
 .hoja-auto-dias { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.3rem 0 0.9rem; }
 .hoja-dia {
   display: inline-flex; align-items: center; gap: 0.35rem;
-  border: 1px solid var(--border); border-radius: 999px;
+  border: 1px solid var(--border); border-radius: var(--radius-chip);
   padding: 0.32rem 0.72rem; cursor: pointer; font-weight: 600; font-size: 0.9rem;
   user-select: none; transition: background .15s, border-color .15s, color .15s;
 }
@@ -659,7 +660,7 @@ body {
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.8);
   border: 1px solid currentColor;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 0.25rem 0.75rem;
   font-size: 0.82rem;
   font-weight: 700;
@@ -947,7 +948,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   width: 44px;
   height: 44px;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   border: 1px solid var(--border);
   transition: transform 0.12s, box-shadow 0.15s;
@@ -963,7 +964,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   align-items: center;
   gap: 0.25rem;
   padding: 0.22rem 0.6rem;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   font-size: 0.76rem;
   font-weight: 600;
   white-space: nowrap;
@@ -1187,7 +1188,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.6rem;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 0.92rem;
 }
@@ -1200,7 +1201,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-weight: 600;
   color: var(--primary-dark);
   background: var(--primary-light);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 0.08rem 0.5rem;
 }
 .combo-op.activa .combo-zona { background: var(--card); }
@@ -1239,7 +1240,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   background: var(--primary-light);
   color: var(--primary-dark);
   padding: 0.08rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   font-size: 0.74rem;
   font-weight: 600;
 }
@@ -1260,7 +1261,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-weight: 600;
   font-size: 0.82rem;
   padding: 0.28rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -1281,7 +1282,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .foto-preview {
   max-width: 100%;
   max-height: 220px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--border);
 }
 
@@ -1372,7 +1373,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   gap: 0.5rem;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 0.45rem 0.6rem;
   font-size: 0.9rem;
 }
@@ -1419,7 +1420,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   gap: 0.3rem;
   background: var(--bg-tint);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 0.15rem 0.55rem;
   font-size: 0.78rem;
   white-space: nowrap;
@@ -1433,7 +1434,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   background: var(--primary-light);
   color: var(--primary-dark);
   padding: 0.1rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   margin-top: 0.2rem;
 }
 
@@ -1487,7 +1488,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .auth-error {
   background: var(--danger-light);
   color: var(--danger);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 0.6rem;
   font-size: 0.88rem;
   margin: 0 0 0.8rem;
@@ -1542,7 +1543,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid currentColor;
   color: inherit;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 0.25rem 0.7rem;
   font-size: 0.8rem;
   font-weight: 700;
@@ -1647,7 +1648,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   .usr-perms, .usuario-perms { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .u-seccion {
-  border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--border); border-radius: 10px;
   margin: 0; padding: 0.4rem 0.6rem 0.5rem; min-width: 0;
   break-inside: avoid;
 }
@@ -1726,7 +1727,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-variant-numeric: tabular-nums;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
 }
 .cob-usuarios th,
@@ -1760,7 +1761,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 /* Igual que en Créditos: sin overflow, el desplazamiento es el de la página,
    para que la fila de títulos pueda quedarse pegada arriba de la pantalla.
    El corrimiento lateral solo se activa (.tabla-corre) si la tabla no entra. */
-.cob-tabla-wrap { border: 1px solid var(--border); border-radius: 8px; }
+.cob-tabla-wrap { border: 1px solid var(--border); border-radius: 10px; }
 .cob-tabla-wrap.tabla-corre { overflow-x: auto; }
 .cob-tabla { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .cob-tabla th, .cob-tabla td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
@@ -1849,7 +1850,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 .cob-vacio { text-align: center; color: var(--gray); padding: 1.2rem; }
 
-.pago-tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+.pago-tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: var(--radius-chip); font-size: 0.75rem; font-weight: 700; }
 .pago-efectivo { background: var(--ok-light); color: var(--ok); }
 .pago-yape { background: #ede9fe; color: #7c3aed; }
 .pago-bcp { background: #dbeafe; color: #1d4ed8; }
@@ -1870,7 +1871,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   color: #f2f2ec;
   border: 1px solid var(--border);
   padding: 0.7rem 1.2rem;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   font-size: 0.9rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 100;
@@ -2265,7 +2266,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-size: 0.8rem;
   font-weight: 700;
   padding: 0.3rem 0.6rem;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
 }
 .cob-estado-sin-crear { background: #fef3c7; color: #92400e; }
 .cob-estado-abierta { background: #dcfce7; color: #166534; }
@@ -2673,7 +2674,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .desp-notas-lista { display: flex; flex-direction: column; gap: 0.35rem; max-height: 26rem; overflow-y: auto; }
 .desp-nota {
   display: flex; align-items: flex-start; gap: 0.55rem; cursor: pointer;
-  padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 10px;
   background: var(--card); border-left: 3px solid var(--gray);
 }
 /* Barra para devolver pedidos a "Por despachar" */
@@ -2737,7 +2738,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 
 /* El resumen de las notas que salen juntas, dentro del formulario */
 .desp-lote-resumen {
-  border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--border); border-radius: 10px;
   background: var(--bg-tint); padding: 0.7rem; margin-bottom: 0.8rem;
 }
 .desp-lote-tit { margin: 0 0 0.45rem; font-weight: 700; font-size: 0.9rem; }
@@ -2757,7 +2758,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .desp-resumen-monto { margin-top: 0.4rem; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
 
 /* Tabla de despachos (escritorio), clasificada como los créditos */
-.desp-tabla-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+.desp-tabla-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
 /* Dentro del tablero la tabla comparte el ancho con el panel de la izquierda:
    se aprieta un poco la letra y el relleno para que quepan las siete columnas
    sin tener que arrastrarla de lado. */
@@ -2809,7 +2810,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   display: inline-block;
   font-size: 0.74rem;
   font-weight: 700;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 0.14rem 0.55rem;
   background: var(--bg-tint);
   color: var(--muted);
@@ -2842,7 +2843,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   align-items: center;
   gap: 0.4rem;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 0.35rem 0.7rem;
   cursor: pointer;
   font-size: 0.9rem;
@@ -2935,7 +2936,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .chip {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 0.32rem 0.85rem;
   font-size: 0.82rem;
   font-weight: 600;
@@ -3036,7 +3037,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   text-transform: uppercase;
   color: var(--muted);
   background: var(--bg-tint);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 0.05rem 0.45rem;
 }
 .prod-tabla .col-um small { display: block; color: var(--muted); font-size: 0.72rem; }
@@ -3058,7 +3059,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 .cat-lbl { width: 1.7rem; height: 1.7rem; font-size: 0.9rem; }
 .cliente-cat { width: 1.35rem; height: 1.35rem; font-size: 0.78rem; }
@@ -3087,7 +3088,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .kdx-vistas { display: flex; gap: 0.3rem; margin-bottom: 0.8rem; }
 .kdx-vista {
   border: 1px solid var(--border); background: var(--card); color: var(--muted);
-  border-radius: 999px; padding: 0.35rem 0.9rem; font: inherit; font-size: 0.85rem;
+  border-radius: var(--radius-chip); padding: 0.35rem 0.9rem; font: inherit; font-size: 0.85rem;
   font-weight: 700; cursor: pointer;
 }
 .kdx-vista:hover { border-color: var(--primary); color: var(--primary-dark); }
@@ -3143,7 +3144,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   display: inline-block;
   font-size: 0.76rem;
   font-weight: 700;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 0.12rem 0.55rem;
   white-space: nowrap;
 }
@@ -3213,7 +3214,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   padding: 0.45rem 0.55rem;
   border: none;
   background: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   text-align: left;
   font: inherit;
@@ -3301,7 +3302,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   color: #fff;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 0.15rem 0.4rem;
   cursor: pointer;
 }
@@ -3323,7 +3324,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   color: #fff;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 0 0.4rem;
   -moz-appearance: textfield;
 }
@@ -3368,7 +3369,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   align-self: flex-start;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 8px;
+  border-radius: 10px;
   color: #fff;
   font: inherit;
   font-size: 0.8rem;
@@ -3455,7 +3456,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .nv-ag-cant { width: 7rem; }
 .nv-permiso {
   display: inline-flex; align-items: center; gap: 0.45rem;
-  background: var(--bg-tint); border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg-tint); border: 1px solid var(--border); border-radius: var(--radius-chip);
   padding: 0.32rem 0.8rem; font-size: 0.82rem; font-weight: 600; cursor: pointer;
   margin-left: auto;
 }
@@ -3489,7 +3490,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .nv-fila-bonif .nv-neto strong { color: var(--muted); }
 .nv-etq-bonif {
   display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.4rem;
-  border-radius: 999px; background: var(--ok); color: #fff;
+  border-radius: var(--radius-chip); background: var(--ok); color: #fff;
   font-size: 0.64rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
 }
 .nv-items [data-nv-bonif][aria-pressed="true"] { background: var(--ok); border-color: var(--ok); }
@@ -3584,7 +3585,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   font-style: normal;
   font-size: 0.9rem;
   font-weight: 800;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 /* El kardex ya no se escribe a mano: aquí se explica de dónde sale cada fila */
