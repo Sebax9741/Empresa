@@ -21,11 +21,27 @@ const { chromium } = require('playwright-core');
     fondo: getComputedStyle(document.body).backgroundColor,
     texto: getComputedStyle(document.body).color,
     barra: (document.querySelector('meta[name=theme-color]') || {}).content,
-    boton: (document.getElementById('tema-texto') || {}).textContent,
+    boton: (document.getElementById('btn-tema') || {}).title,
+    // Cómo está dibujado el icono ahora mismo
+    rayos: (() => {
+      const r = document.querySelector('.tema-rayos');
+      if (!r) return null;
+      const cs = getComputedStyle(r);
+      return { opacidad: Number(cs.opacity), transformado: cs.transform !== 'none' };
+    })(),
   }));
 
   const inicial = await estado();
   ok('Arranca en claro cuando el sistema está en claro', inicial.tema === 'claro', JSON.stringify(inicial));
+  ok('El botón está en la barra de arriba, a la vista, sin abrir ningún menú',
+    await p.evaluate(() => {
+      const b = document.getElementById('btn-tema');
+      if (!b || !b.offsetParent) return false;
+      const r = b.getBoundingClientRect();
+      // Que se vea de verdad en ese punto, no solo que exista
+      const encima = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return r.top < 120 && !!encima && b.contains(encima);
+    }));
 
   // Pasar por las tres opciones
   const pulsar = async () => {
@@ -33,21 +49,33 @@ const { chromium } = require('playwright-core');
     await p.waitForTimeout(250);
     return estado();
   };
-  const a = await pulsar();
-  ok('Primer toque: queda en claro fijo', a.guardado === 'claro' && a.tema === 'claro'
-    && /clara/i.test(a.boton), JSON.stringify(a));
-  const o = await pulsar();
-  ok('Segundo toque: oscuro', o.guardado === 'oscuro' && o.tema === 'oscuro'
-    && /oscura/i.test(o.boton), JSON.stringify(o));
-  const auto = await pulsar();
-  ok('Tercer toque: vuelve a automático', auto.guardado === 'auto'
-    && /autom/i.test(auto.boton), JSON.stringify(auto));
+  const osc = await pulsar();
+  ok('Un toque desde claro: se va a oscuro y queda guardado',
+    osc.guardado === 'oscuro' && osc.tema === 'oscuro', JSON.stringify(osc));
+  ok('Y el botón ya ofrece el camino de vuelta', /claro/i.test(osc.boton), osc.boton);
 
-  // Que en oscuro los colores cambien de verdad
+  const vuelta = await pulsar();
+  ok('Otro toque y vuelve a claro', vuelta.guardado === 'claro' && vuelta.tema === 'claro',
+    JSON.stringify(vuelta));
+
+  // ── El icono se transforma, no se cambia por otro ──
+  const rayosClaro = vuelta.rayos;
   await p.evaluate(() => document.getElementById('btn-tema').click());
-  await p.evaluate(() => document.getElementById('btn-tema').click());
-  await p.waitForTimeout(300);
-  const osc = await estado();
+  await p.waitForTimeout(600);
+  const osc2 = await estado();
+  // Con margen a propósito: se mide mientras el icono se está moviendo, así
+  // que pedir un 1 y un 0 exactos sería pedir que la animación no exista
+  ok('En claro los rayos del sol se ven, y en oscuro se recogen',
+    rayosClaro.opacidad > 0.9 && osc2.rayos.opacidad < 0.1,
+    `claro ${rayosClaro.opacidad.toFixed(2)} → oscuro ${osc2.rayos.opacidad.toFixed(2)}`);
+  const muerde = await p.evaluate(() => {
+    const m = document.querySelector('.tema-muerde');
+    return { transform: getComputedStyle(m).transform, transicion: getComputedStyle(m).transitionDuration };
+  });
+  ok('El mordisco que hace la luna entra de verdad, y con animación',
+    /matrix/.test(muerde.transform) && parseFloat(muerde.transicion) > 0, JSON.stringify(muerde));
+  ok('Es un solo dibujo que se dobla, no dos que se cambian',
+    (await p.evaluate(() => document.querySelectorAll('#btn-tema svg').length)) === 1);
   const claroFondo = inicial.fondo;
   ok('En oscuro el fondo es oscuro y el texto claro',
     osc.fondo !== claroFondo && /rgb\((1?\d|[0-4]\d)/.test(osc.fondo), `${claroFondo} → ${osc.fondo}`);

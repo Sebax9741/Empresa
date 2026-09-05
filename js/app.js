@@ -5026,19 +5026,24 @@ function cerrarMenuUsuario() {
    data-tema="claro" o "oscuro" escrito. Así la paleta oscura se define una
    sola vez en la hoja de estilos. La misma cuenta la echa el guion de arranque
    que hay en el <head>, para que no haya fogonazo blanco al abrir. */
-const TEMAS = {
-  auto:   { icono: '🌗', texto: 'Apariencia: automática' },
-  claro:  { icono: '☀️', texto: 'Apariencia: clara' },
-  oscuro: { icono: '🌙', texto: 'Apariencia: oscura' },
-};
+const TEMAS = ['auto', 'claro', 'oscuro'];
 
 function temaElegido() {
-  try { return TEMAS[localStorage.getItem('tema')] ? localStorage.getItem('tema') : 'auto'; }
-  catch (e) { return 'auto'; }
+  try {
+    const g = localStorage.getItem('tema');
+    return TEMAS.includes(g) ? g : 'auto';
+  } catch (e) { return 'auto'; }
+}
+
+/* Qué se está viendo AHORA MISMO, que no es lo mismo que lo elegido: en
+   "auto" depende de lo que tenga puesto el equipo. Es lo que mira el botón
+   para saber a qué lado tiene que saltar. */
+function temaEnPantalla() {
+  return document.documentElement.dataset.tema === 'oscuro' ? 'oscuro' : 'claro';
 }
 
 function aplicarTema(quiere) {
-  if (!TEMAS[quiere]) quiere = 'auto';
+  if (!TEMAS.includes(quiere)) quiere = 'auto';
   try { localStorage.setItem('tema', quiere); } catch (e) { /* ventana privada */ }
   const oscuro = quiere === 'oscuro' || (quiere === 'auto'
     && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -5051,10 +5056,14 @@ function aplicarTema(quiere) {
 }
 
 function pintarBotonTema() {
-  const t = TEMAS[temaElegido()];
-  const icono = $('#tema-icono'), texto = $('#tema-texto');
-  if (icono) icono.textContent = t.icono;
-  if (texto) texto.textContent = t.texto;
+  const b = $('#btn-tema');
+  if (!b) return;
+  // Lo que dice el botón es a DÓNDE va, no dónde está: es lo que se espera de
+  // un interruptor, y de paso el dibujo ya enseña dónde estamos
+  const aOscuro = temaEnPantalla() === 'claro';
+  b.title = aOscuro ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro';
+  b.setAttribute('aria-label', b.title);
+  b.setAttribute('aria-pressed', aOscuro ? 'false' : 'true');
 }
 
 /* ---- Tooltip de los gráficos del Dashboard (dona, barras, línea) ----
@@ -10532,10 +10541,10 @@ function inicializarEventos() {
     cerrarMenuUsuario();
     mostrarSeccion('settings');
   });
-  $('#btn-tema').addEventListener('click', () => {
-    const orden = ['auto', 'claro', 'oscuro'];
-    aplicarTema(orden[(orden.indexOf(temaElegido()) + 1) % orden.length]);
-  });
+  // Un toque y al otro lado. Se guarda "claro" u "oscuro" a propósito: en
+  // cuanto alguien toca el botón ya no quiere que decida el equipo por él.
+  $('#btn-tema').addEventListener('click', () =>
+    aplicarTema(temaEnPantalla() === 'claro' ? 'oscuro' : 'claro'));
   // Si está en automático y el sistema cambia de día a noche, la app le sigue
   window.matchMedia('(prefers-color-scheme: dark)')
     .addEventListener('change', () => { if (temaElegido() === 'auto') aplicarTema('auto'); });

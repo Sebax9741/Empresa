@@ -4054,3 +4054,59 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 @media (prefers-reduced-motion: reduce) {
   .esqueleto { animation: none; }
 }
+
+/* ══════════ El botón de claro / oscuro ══════════
+   Un solo dibujo que se dobla: el sol encoge, se le mete un mordisco por la
+   derecha hasta dejarlo en luna, y los rayos se recogen girando. No son dos
+   iconos que se cambian —eso sería un parpadeo—, es el mismo trazo moviéndose,
+   que es lo que deja claro que son dos caras de una misma cosa.
+
+   Todo se mueve con transform y opacity, las dos únicas cosas que el navegador
+   puede animar sin rehacer la página. En una tablet vieja la diferencia entre
+   esto y animar cx/cy es ir suave o ir a tirones. */
+.btn-tema {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.btn-tema:hover { background: var(--bg-tint); color: var(--text); }
+.btn-tema:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+.tema-ico { width: 21px; height: 21px; overflow: visible; }
+.tema-astro { fill: currentColor; transition: transform 0.42s var(--ease); transform-origin: center; }
+.tema-muerde { transition: transform 0.42s var(--ease); }
+.tema-rayos {
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  transform-origin: center;
+  transition: transform 0.42s var(--ease), opacity 0.28s var(--ease);
+}
+
+/* En oscuro: el astro crece un poco, el mordisco entra y los rayos se van
+   girando hacia dentro (no desaparecen de golpe: se recogen) */
+:root[data-tema="oscuro"] .tema-astro { transform: scale(1.14); }
+:root[data-tema="oscuro"] .tema-muerde { transform: translateX(-8.5px); }
+:root[data-tema="oscuro"] .tema-rayos { transform: rotate(-45deg) scale(0.4); opacity: 0; }
+
+/* Con las animaciones desactivadas, el icono cambia y ya */
+@media (prefers-reduced-motion: reduce) {
+  .tema-astro, .tema-muerde, .tema-rayos { transition: none; }
+}
+
+/* En el teléfono la barra de arriba va muy justa: el botón se estrecha */
+@media (max-width: 700px) {
+  .btn-tema { width: 34px; height: 34px; }
+  .tema-ico { width: 19px; height: 19px; }
+}
