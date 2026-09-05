@@ -15,14 +15,20 @@
   <link rel="stylesheet" href="css/styles.css">
   <!-- El tema se decide aquí arriba, antes de que se pinte nada. Si esperara
        a que cargue js/app.js, quien lo tenga en oscuro vería un fogonazo
-       blanco de página entera en cada arranque. -->
+       blanco de página entera en cada arranque.
+       La app arranca SIEMPRE en claro: el oscuro solo aparece si alguien lo
+       pidió con el botón. No se mira lo que tenga puesto el equipo, porque un
+       teléfono en modo noche no significa que quien lo lleva quiera trabajar
+       la hoja de cobranza en oscuro. -->
   <script>
     (function () {
       try {
-        var quiere = localStorage.getItem('tema') || 'auto';
-        var oscuro = quiere === 'oscuro' || (quiere === 'auto'
-          && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var oscuro = localStorage.getItem('tema') === 'oscuro';
         document.documentElement.dataset.tema = oscuro ? 'oscuro' : 'claro';
+        // La franja de arriba del teléfono se tiñe ya, o al abrir en oscuro
+        // queda una banda blanca encima de una app oscura
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta && oscuro) meta.setAttribute('content', '#121821');
       } catch (e) { /* sin localStorage (ventana privada): se queda en claro */ }
     })();
   </script>

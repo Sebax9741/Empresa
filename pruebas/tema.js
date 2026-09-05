@@ -1,7 +1,7 @@
 const { chromium } = require('playwright-core');
 
-/* Modo claro / oscuro: tres opciones, se recuerda en el equipo y se aplica
-   antes de pintar (nada de fogonazo blanco al abrir). */
+/* Modo claro / oscuro: dos posiciones, arranca SIEMPRE en claro, se recuerda
+   en el equipo y se aplica antes de pintar (nada de fogonazo al abrir). */
 (async () => {
   const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block' });
@@ -32,7 +32,8 @@ const { chromium } = require('playwright-core');
   }));
 
   const inicial = await estado();
-  ok('Arranca en claro cuando el sistema está en claro', inicial.tema === 'claro', JSON.stringify(inicial));
+  ok('Arranca en claro y sin nada guardado todavía',
+    inicial.tema === 'claro' && !inicial.guardado, JSON.stringify(inicial));
   ok('El botón está en la barra de arriba, a la vista, sin abrir ningún menú',
     await p.evaluate(() => {
       const b = document.getElementById('btn-tema');
@@ -43,7 +44,7 @@ const { chromium } = require('playwright-core');
       return r.top < 120 && !!encima && b.contains(encima);
     }));
 
-  // Pasar por las tres opciones
+  // Ir y volver con el botón
   const pulsar = async () => {
     await p.evaluate(() => document.getElementById('btn-tema').click());
     await p.waitForTimeout(250);
@@ -84,8 +85,14 @@ const { chromium } = require('playwright-core');
   // Que se recuerde al recargar, y sin fogonazo: el atributo ya está puesto
   // antes de que corra js/app.js
   await p.reload();
-  const antesDeApp = await p.evaluate(() => document.documentElement.dataset.tema);
-  ok('Al recargar ya viene en oscuro desde el primer momento', antesDeApp === 'oscuro', antesDeApp);
+  const antesDeApp = await p.evaluate(() => ({
+    tema: document.documentElement.dataset.tema,
+    barra: document.querySelector('meta[name=theme-color]').content,
+  }));
+  ok('Al recargar ya viene en oscuro desde el primer momento',
+    antesDeApp.tema === 'oscuro', JSON.stringify(antesDeApp));
+  ok('Y la franja del teléfono también, sin esperar a que cargue la app',
+    antesDeApp.barra === '#121821', antesDeApp.barra);
 
   // Que ningún fondo claro se cuele en modo oscuro
   await p.waitForTimeout(1300);
@@ -108,7 +115,8 @@ const { chromium } = require('playwright-core');
 
   await p.screenshot({ path: 'pruebas/tema-oscuro.png', clip: { x: 0, y: 0, width: 1400, height: 700 } });
 
-  // Y que el sistema en oscuro mande cuando está en automático
+  // Lo que tenga puesto el equipo NO manda: quien abre la app por primera vez
+  // en un teléfono en modo noche tiene que verla clara, como siempre
   const ctx2 = await b.newContext({ viewport: { width: 1200, height: 800 },
     serviceWorkers: 'block', colorScheme: 'dark' });
   const p2 = await ctx2.newPage();
@@ -116,8 +124,23 @@ const { chromium } = require('playwright-core');
     contentType: 'application/javascript', body: 'window.FIREBASE_CONFIG = { apiKey: "X" };' }));
   await p2.goto('http://localhost:8099/index.html');
   await p2.waitForTimeout(1200);
-  ok('En automático, si el sistema está en oscuro la app también',
-    (await p2.evaluate(() => document.documentElement.dataset.tema)) === 'oscuro');
+  const conEquipoOscuro = await p2.evaluate(() => document.documentElement.dataset.tema);
+  ok('Con el equipo en modo noche, la app sigue arrancando clara',
+    conEquipoOscuro === 'claro', conEquipoOscuro);
+
+  // Y al revés: quien eligió oscuro lo conserva aunque su equipo esté claro
+  const ctx3 = await b.newContext({ viewport: { width: 1200, height: 800 },
+    serviceWorkers: 'block', colorScheme: 'light' });
+  const p3 = await ctx3.newPage();
+  await p3.route('**/firebase-config.js', r => r.fulfill({
+    contentType: 'application/javascript', body: 'window.FIREBASE_CONFIG = { apiKey: "X" };' }));
+  await p3.goto('http://localhost:8099/index.html');
+  await p3.evaluate(() => localStorage.setItem('tema', 'oscuro'));
+  await p3.reload();
+  await p3.waitForTimeout(900);
+  const elegidoOscuro = await p3.evaluate(() => document.documentElement.dataset.tema);
+  ok('Lo elegido a mano se respeta aunque el equipo esté en claro',
+    elegidoOscuro === 'oscuro', elegidoOscuro);
 
   console.log(errs.length ? `\nerrores de JS: ${errs.slice(0, 3).join(' | ')}` : '\nerrores de JS: ninguno');
   await b.close();

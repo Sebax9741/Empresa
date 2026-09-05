@@ -5017,36 +5017,29 @@ function cerrarMenuUsuario() {
 }
 
 /* ====== Modo claro / oscuro ======
-   Tres opciones: automático (lo que diga el teléfono o la computadora),
-   siempre claro y siempre oscuro. Lo elegido se guarda en el propio equipo,
-   no en la cuenta: la misma persona puede querer oscuro en su tablet de la
-   calle y claro en la computadora de la oficina.
+   Dos posiciones, y la de fábrica es SIEMPRE la clara: el oscuro solo aparece
+   si alguien lo pidió tocando el botón. No se consulta lo que tenga puesto el
+   equipo, porque un teléfono en modo noche no quiere decir que quien lo lleva
+   quiera la hoja de cobranza en oscuro; y si la app cambiara de aspecto sola,
+   quien la usa creería que se estropeó.
 
-   El "automático" se resuelve AQUÍ, no en el CSS: la página siempre acaba con
-   data-tema="claro" o "oscuro" escrito. Así la paleta oscura se define una
-   sola vez en la hoja de estilos. La misma cuenta la echa el guion de arranque
-   que hay en el <head>, para que no haya fogonazo blanco al abrir. */
-const TEMAS = ['auto', 'claro', 'oscuro'];
+   Lo elegido se guarda en el propio equipo, no en la cuenta: la misma persona
+   puede querer oscuro en su tablet de la calle y claro en la computadora de la
+   oficina.
 
-function temaElegido() {
-  try {
-    const g = localStorage.getItem('tema');
-    return TEMAS.includes(g) ? g : 'auto';
-  } catch (e) { return 'auto'; }
-}
-
-/* Qué se está viendo AHORA MISMO, que no es lo mismo que lo elegido: en
-   "auto" depende de lo que tenga puesto el equipo. Es lo que mira el botón
-   para saber a qué lado tiene que saltar. */
+   La página siempre acaba con data-tema="claro" u "oscuro" escrito, así la
+   paleta oscura se define una sola vez en la hoja de estilos. La misma cuenta
+   la echa el guion de arranque que hay en el <head>, para que no haya fogonazo
+   blanco al abrir. */
+/* Qué se está viendo AHORA MISMO. Es lo que mira el botón para saber a qué
+   lado tiene que saltar. */
 function temaEnPantalla() {
   return document.documentElement.dataset.tema === 'oscuro' ? 'oscuro' : 'claro';
 }
 
 function aplicarTema(quiere) {
-  if (!TEMAS.includes(quiere)) quiere = 'auto';
-  try { localStorage.setItem('tema', quiere); } catch (e) { /* ventana privada */ }
-  const oscuro = quiere === 'oscuro' || (quiere === 'auto'
-    && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const oscuro = quiere === 'oscuro';
+  try { localStorage.setItem('tema', oscuro ? 'oscuro' : 'claro'); } catch (e) { /* ventana privada */ }
   document.documentElement.dataset.tema = oscuro ? 'oscuro' : 'claro';
   // La barra del navegador en el teléfono también se tiñe, o queda una franja
   // blanca encima de una app oscura
@@ -10541,13 +10534,10 @@ function inicializarEventos() {
     cerrarMenuUsuario();
     mostrarSeccion('settings');
   });
-  // Un toque y al otro lado. Se guarda "claro" u "oscuro" a propósito: en
-  // cuanto alguien toca el botón ya no quiere que decida el equipo por él.
+  // Un toque y al otro lado. Es lo único que cambia el tema: la app no se
+  // oscurece sola porque el equipo se ponga en modo noche.
   $('#btn-tema').addEventListener('click', () =>
     aplicarTema(temaEnPantalla() === 'claro' ? 'oscuro' : 'claro'));
-  // Si está en automático y el sistema cambia de día a noche, la app le sigue
-  window.matchMedia('(prefers-color-scheme: dark)')
-    .addEventListener('change', () => { if (temaElegido() === 'auto') aplicarTema('auto'); });
   pintarBotonTema();
   // Cerrar el menú al tocar fuera o con Escape
   document.addEventListener('click', ev => {
