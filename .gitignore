@@ -13,8 +13,17 @@ android-keys/
 *.keystore
 *.jks
 
-# Capturas y guiones de prueba que se generan al revisar la app
+# Borrador: lo que se prueba de paso y no vale la pena guardar
 scratchpad/
+
+# Las pruebas (pruebas/*.js) SÍ van al repositorio: son la red de seguridad
+# de quien venga después. Lo que no va es lo que ellas escupen al correr.
+pruebas/*.png
+pruebas/*.jpg
+pruebas/*.pdf
+pruebas/*.html
+pruebas/*.xlsx
+pruebas/*.out
 
 # Credenciales
 *service-account*.json
