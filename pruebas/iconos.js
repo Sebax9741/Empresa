@@ -123,8 +123,10 @@ const { chromium } = require('playwright-core');
     acciones.info && acciones.info.src && /2139/.test(acciones.info.src), JSON.stringify(acciones.info));
   ok('El de editar también', acciones.editar && /270f/.test(acciones.editar.src || ''), JSON.stringify(acciones.editar));
   ok('Y el de quitar', acciones.borrar && /1f5d1/.test(acciones.borrar.src || ''), JSON.stringify(acciones.borrar));
+  // Con la escala compacta mide 16 px: sigue siendo mayor que los iconos de
+  // texto (14 px), pero ya no infla la fila de acciones a zoom 100 %.
   ok('En esos botones el icono va más grande',
-    acciones.info.ancho >= 18, acciones.info.ancho + 'px');
+    acciones.info.ancho >= 16, acciones.info.ancho + 'px');
 
   // ── 4) Lo que se dibuja después también se cambia ──
   await p.evaluate(() => document.querySelector('[data-info]').click());

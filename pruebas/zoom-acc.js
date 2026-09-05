@@ -152,8 +152,10 @@ const { chromium } = require('playwright-core');
     acciones.info && acciones.info.src && /2139/.test(acciones.info.src), JSON.stringify(acciones.info));
   ok('El de editar también', acciones.editar && /270f/.test(acciones.editar.src || ''), JSON.stringify(acciones.editar));
   ok('Y el de quitar', acciones.borrar && /1f5d1/.test(acciones.borrar.src || ''), JSON.stringify(acciones.borrar));
+  // Con la escala compacta mide 16 px: sigue siendo mayor que los iconos de
+  // texto (14 px), pero ya no infla la fila de acciones a zoom 100 %.
   ok('En esos botones el icono va más grande',
-    acciones.info.ancho >= 18, acciones.info.ancho + 'px');
+    acciones.info.ancho >= 16, acciones.info.ancho + 'px');
 
   // ── 4) Lo que se dibuja después también se cambia ──
   await p.evaluate(() => document.querySelector('[data-info]').click());
@@ -204,12 +206,16 @@ const { chromium } = require('playwright-core');
 
   await p.evaluate(() => document.getElementById('nav-dashboard').click());
   await p.waitForTimeout(700);
-  const kpis = await p.$$eval('.kpi-ico img.emo', is => is.map(i => ({
-    chip: i.getAttribute('src').includes('/chip/'), px: Math.round(i.getBoundingClientRect().width) })));
-  ok('Las tarjetas del Dashboard llevan el icono suelto (el recuadro ya lo pone la tarjeta)',
-    kpis.length > 0 && kpis.every(k => !k.chip), kpis.length + ' tarjetas');
-  ok('Y dentro de su recuadro el icono se ve, no nada en la caja',
-    kpis.every(k => k.px === 22), [...new Set(kpis.map(k => k.px))].join('/') + 'px');
+  const kpis = await p.$$eval('.kpi-ico .dash-icono-trazo', is => is.map(i => ({
+    px: Math.round(i.getBoundingClientRect().width), trazos: i.querySelectorAll('path, rect, circle').length })));
+  ok('Las tarjetas del Dashboard llevan los nuevos iconos sobrios de trazo',
+    kpis.length === 6 && kpis.every(k => k.trazos > 0), kpis.length + ' tarjetas');
+  ok('Y esos iconos son compactos, como los del panel de Shopify',
+    kpis.every(k => k.px === 18), [...new Set(kpis.map(k => k.px))].join('/') + 'px');
+  const iconosBarras = await p.$$eval('.barra-et .dash-icono-trazo', is => is.map(i =>
+    Math.round(i.getBoundingClientRect().width)));
+  ok('Los gráficos del Dashboard tampoco vuelven a usar emojis',
+    iconosBarras.length > 0 && iconosBarras.every(px => px === 13), iconosBarras.length + ' iconos de trazo');
 
   // En ningún otro sitio debe colarse la versión con recuadro
   const chipSueltos = await p.evaluate(() => [...document.querySelectorAll('img.emo')]

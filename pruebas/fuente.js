@@ -20,11 +20,22 @@ const { chromium } = require('playwright-core');
     await document.fonts.ready;
     return [...document.fonts].map(f => `${f.family} ${f.weight} ${f.status}`);
   });
-  ok('La tipografía queda cargada', cargadas.some(f => /Figtree/.test(f) && /loaded/.test(f)),
+  ok('La tipografía queda cargada', cargadas.some(f => /Inter/.test(f) && /loaded/.test(f)),
     JSON.stringify(cargadas));
   ok('Ningún archivo de fuente falló', !fallos.length, fallos.join(' '));
   ok('El cuerpo la está usando',
-    /Figtree/.test(await p.evaluate(() => getComputedStyle(document.body).fontFamily)));
+    /Inter/.test(await p.evaluate(() => getComputedStyle(document.body).fontFamily)));
+
+  const escala = await p.evaluate(() => ({
+    raiz: getComputedStyle(document.documentElement).fontSize,
+    cuerpo: getComputedStyle(document.body).fontSize,
+    boton: getComputedStyle(document.getElementById('btn-filtro-limpiar')).fontSize,
+    campo: getComputedStyle(document.querySelector('.input')).fontSize,
+  }));
+  ok('La escala de escritorio es compacta a zoom 100 %',
+    escala.raiz === '14px' && escala.cuerpo === '14px'
+      && parseFloat(escala.boton) <= 13 && parseFloat(escala.campo) <= 13.5,
+    JSON.stringify(escala));
 
   // Acentos y ñ: se mide un texto con y sin ellos para ver que no caiga al respaldo
   await p.evaluate(() => document.getElementById('nav-clientes').click());

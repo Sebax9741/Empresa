@@ -24,9 +24,9 @@
                  U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* El Dashboard usa Inter porque es la tipografía que carga actualmente el
-   administrador de Shopify. Se guarda dentro de la app para que conserve la
-   misma lectura sin conexión y no dependa de un servidor ajeno. */
+/* Inter da a todo el sistema la lectura compacta del administrador de Shopify.
+   Se guarda dentro de la app para conservar el aspecto sin conexión y no
+   depender de un servidor ajeno. */
 @font-face {
   font-family: "Inter";
   src: url("fonts/Inter-Variable.woff2") format("woff2");
@@ -73,7 +73,7 @@
   --radius-chip: 10px; /* chips y etiquetas: redondeados, no óvalos */
   --shadow: 0 1px 2px rgba(20, 32, 50, 0.04), 0 6px 20px rgba(20, 32, 50, 0.06);
   --shadow-lg: 0 14px 50px rgba(20, 32, 50, 0.16);
-  --font: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* Ritmo de las animaciones */
   --ease: cubic-bezier(0.22, 0.75, 0.3, 1);
@@ -140,7 +140,14 @@
 /* El atributo hidden siempre oculta, aunque el elemento tenga display propio */
 [hidden] { display: none !important; }
 
-html { -webkit-text-size-adjust: 100%; }
+/* La escala de 14 px compacta de verdad la interfaz a zoom 100 %: todos los
+   componentes que usan rem reducen su tamaño de forma coherente. En teléfonos
+   vuelve a 16 px para que los campos no provoquen zoom automático y sigan
+   siendo cómodos de tocar. */
+html {
+  font-size: 14px;
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
   margin: 0;
@@ -170,9 +177,9 @@ body {
 }
 
 .header-inner {
-  max-width: 1500px;
+  max-width: none;
   margin: 0 auto;
-  padding: 0.7rem 1.5rem;
+  padding: 0.55rem 1rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -378,9 +385,6 @@ body {
 
 /* ====== Dashboard ====== */
 #view-dashboard {
-  /* Inter va primero para que el Dashboard no cambie de aspecto según el
-     sistema operativo; las demás quedan como respaldo mientras carga. */
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 13px;
   letter-spacing: 0;
 }
@@ -393,8 +397,8 @@ body {
   align-items: flex-end; justify-content: space-between;
   margin: 0 0 0.5rem;
 }
-.dash-titulo { font-size: 1.25rem; font-weight: 650; line-height: 1.2; letter-spacing: -0.015em; margin: 0; }
-.dash-sub { color: var(--muted); font-size: 0.75rem; font-weight: 450; margin: 0.1rem 0 0; }
+.dash-titulo { font-size: 20px; font-weight: 650; line-height: 1.2; letter-spacing: -0.015em; margin: 0; }
+.dash-sub { color: var(--muted); font-size: 12px; font-weight: 450; margin: 0.1rem 0 0; }
 
 /* Tarjetas de indicadores: 6 en una fila en escritorio, como en la referencia */
 .kpis {
@@ -415,16 +419,16 @@ body {
 }
 .kpi-et {
   display: block;
-  font-size: 0.75rem; font-weight: 600; letter-spacing: 0;
+  font-size: 12px; font-weight: 600; letter-spacing: 0;
   color: var(--muted);
 }
 .kpi-val {
   display: block; margin-top: 0.08rem;
-  font-size: 1.25rem; font-weight: 650; letter-spacing: -0.015em;
+  font-size: 20px; font-weight: 650; letter-spacing: -0.015em;
   font-variant-numeric: tabular-nums; line-height: 1.1;
   color: var(--kpi, var(--text));
 }
-.kpi-pie { display: block; margin-top: 0.06rem; font-size: 0.6875rem; font-weight: 400; color: var(--gray); }
+.kpi-pie { display: block; margin-top: 0.06rem; font-size: 11px; font-weight: 400; color: var(--gray); }
 .kpi-ico {
   flex-shrink: 0;
   width: 24px; height: 24px;
@@ -472,26 +476,26 @@ body {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 0.5rem; margin-bottom: 0.4rem;
 }
-.panel-titulo { font-size: 0.8125rem; font-weight: 650; margin: 0; letter-spacing: 0; }
+.panel-titulo { font-size: 13px; font-weight: 650; margin: 0; letter-spacing: 0; }
 .panel-titulo-icono { display: inline-flex; align-items: center; gap: 0.3rem; }
 .panel-titulo-icono .dash-icono-trazo { width: 14px; height: 14px; }
-.panel-sub { font-size: 0.6875rem; font-weight: 400; color: var(--muted); margin: 0.05rem 0 0; }
+.panel-sub { font-size: 11px; font-weight: 400; color: var(--muted); margin: 0.05rem 0 0; }
 .panel-chip {
   flex-shrink: 0;
   background: var(--accent-light); color: var(--accent);
-  font-size: 0.6875rem; font-weight: 600;
+  font-size: 11px; font-weight: 600;
   padding: 0.18rem 0.45rem; border-radius: 8px;
 }
 .chart { width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
-.chart-vacio { color: var(--gray); font-size: 0.75rem; text-align: center; padding: 0.9rem 0; }
+.chart-vacio { color: var(--gray); font-size: 12px; text-align: center; padding: 0.9rem 0; }
 /* La dona no necesita estirarse a todo el ancho de su columna en pantallas
    grandes: se centra y se limita, para que no se vea más grande que la línea */
 .chart-dona { max-width: 165px; margin: 0 auto; }
 
 /* Leyenda de los gráficos */
 .leyenda { display: flex; flex-wrap: wrap; gap: 0.25rem 0.6rem; margin-top: 0.4rem; }
-.leyenda-item { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.6875rem; color: var(--muted); }
+.leyenda-item { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 11px; color: var(--muted); }
 .leyenda-punto { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .leyenda-val { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 
@@ -531,17 +535,18 @@ body {
 }
 .dash-fila-ico .dash-icono-trazo { width: 15px; height: 15px; }
 .dash-fila-txt { flex: 1; min-width: 0; }
-.dash-fila-nom { font-weight: 600; font-size: 0.8125rem; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dash-fila-meta { font-size: 0.6875rem; font-weight: 400; color: var(--muted); }
-.dash-fila-monto { font-weight: 650; font-size: 0.8125rem; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.dash-vacio { color: var(--gray); font-size: 0.75rem; padding: 0.75rem 0; text-align: center; display: flex; justify-content: center; align-items: center; gap: 0.35rem; }
+.dash-fila-nom { font-weight: 600; font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-fila-meta { font-size: 11px; font-weight: 400; color: var(--muted); }
+.dash-fila-monto { font-weight: 650; font-size: 13px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.dash-vacio { color: var(--gray); font-size: 12px; padding: 0.75rem 0; text-align: center; display: flex; justify-content: center; align-items: center; gap: 0.35rem; }
 
 @media (max-width: 640px) {
+  html { font-size: 16px; }
   #view-dashboard.container { padding: 0.55rem 0.65rem 0.8rem; }
-  .dash-titulo { font-size: 1.125rem; }
+  .dash-titulo { font-size: 18px; }
   .kpis { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 0.45rem; }
   .kpi { padding: 0.38rem 0.5rem; }
-  .kpi-val { font-size: 1.125rem; }
+  .kpi-val { font-size: 18px; }
   .kpi-ico { width: 22px; height: 22px; }
   .dash-grid { grid-template-columns: 1fr; }
 }
@@ -563,12 +568,12 @@ body {
   padding: 0.12rem 0.3rem; margin: 0 -0.3rem; border-radius: 8px;
   transition: background 0.15s var(--ease);
 }
-.barra-et { display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: var(--muted); font-weight: 600; overflow: hidden; white-space: nowrap; }
+.barra-et { display: flex; align-items: center; gap: 0.25rem; font-size: 12px; color: var(--muted); font-weight: 600; overflow: hidden; white-space: nowrap; }
 .barra-et > span { overflow: hidden; text-overflow: ellipsis; }
 .barra-et .dash-icono-trazo { width: 13px; height: 13px; flex-shrink: 0; }
 .barra-pista { background: var(--bg-tint); border-radius: 999px; height: 8px; overflow: hidden; }
 .barra-valor { display: block; height: 100%; border-radius: 999px; background: var(--c); width: var(--w); }
-.barra-num { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 3.25rem; text-align: right; }
+.barra-num { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 3.25rem; text-align: right; }
 
 @media (max-width: 480px) {
   .barra-fila { grid-template-columns: 6.5rem 1fr auto; gap: 0.5rem; }
@@ -645,16 +650,16 @@ body {
 
 /* ====== Layout ====== */
 .container {
-  max-width: 1500px;
+  max-width: none;
   margin: 0 auto;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1rem;
 }
 
 /* ====== Secciones (apartados como página, ya no ventanas flotantes) ====== */
 .vista {
-  max-width: 1500px;
-  margin: 1rem auto 2rem;
-  padding: 1.5rem 1.8rem;
+  max-width: none;
+  margin: 0.75rem 1rem 1.5rem;
+  padding: 1.1rem 1.25rem;
   background: var(--card);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -664,7 +669,7 @@ body {
 .vista.modal-usuarios,
 .vista.modal-clientes,
 .vista.modal-despachos,
-.vista.modal-cobranza { width: auto; max-width: 1500px; }
+.vista.modal-cobranza { width: auto; max-width: none; }
 /* Encabezado de cada sección con una línea divisoria sutil */
 .vista > h2,
 .vista > form > h2 {
@@ -682,6 +687,12 @@ body {
 .vista > h2 { margin-top: 0; }
 @media (max-width: 640px) {
   .vista { margin: 0.5rem auto 1.5rem; padding: 1rem; border-radius: var(--radius-sm); }
+}
+
+/* El cambio es de la interfaz, no de los documentos: las boletas, hojas y
+   reportes impresos conservan la escala con la que fueron diseñados. */
+@media print {
+  html { font-size: 16px; }
 }
 /* Item activo del panel lateral: relleno claro + contorno tenue "estás aquí" */
 .nav-item.activo {
@@ -3034,7 +3045,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
    ══════════════════════════════════════════════════════════════════ */
 
 .vista.modal-productos,
-#view-productos, #view-kardex, #view-ventas { width: auto; max-width: 1500px; }
+#view-productos, #view-kardex, #view-ventas { width: auto; max-width: none; }
 
 /* Cabecera común de las secciones nuevas: título a la izquierda, buscador y
    botones a la derecha, y en pantallas justas se apilan sin romperse. */
