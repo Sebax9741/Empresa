@@ -27,7 +27,6 @@ const { chromium } = require('playwright-core');
   await p.waitForTimeout(350);
   await p.fill('#cli-nombre', 'BODEGA LA ESQUINA');
   await p.selectOption('#cli-zona', 'CIUDAD');
-  await p.selectOption('#cli-categoria', 'A');
   await p.fill('#cli-direccion', 'JR. LIMA 123');
   await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
   await p.waitForTimeout(700);
@@ -38,7 +37,7 @@ const { chromium } = require('playwright-core');
   await p.waitForTimeout(350);
   await p.fill('#prod-nombre', 'HARINA ITALIANA X50KG');
   await p.selectOption('#prod-presentacion', 'saco').catch(() => {});
-  for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, '130');
+  await p.fill('#prod-precio-a', '130');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(600);
   // La mercadería entra por su sección: el botón 📥 de Productos ya no existe
@@ -212,35 +211,62 @@ const { chromium } = require('playwright-core');
   });
   ok('Y la nota queda marcada "a crédito"', /crédito/i.test(trasCredito), trasCredito);
 
-  const enlazado = await p.evaluate(() => {
-    const f = document.querySelector('#nv-body tr');
-    f.querySelector('[data-seguir-nota]').click();
-    return null;
+  /* Del listado al crédito son dos pasos, no uno: el ℹ️ abre la nota entera en
+     solo lectura y desde ahí el atajo 🔗 lleva al crédito que salió de ella.
+     Antes había un 🔗 directo en la fila (`data-seguir-nota`), y esta parte se
+     quedó buscándolo cuando se cambió. */
+  await p.evaluate(() => document.querySelector('#nv-body tr [data-nota-info]').click());
+  await p.waitForTimeout(900);
+  const atajo = await p.evaluate(() => {
+    const b = document.getElementById('btn-nv-solo-seguir');
+    return { hay: !!b && !b.hidden, texto: b ? b.textContent.trim() : '' };
   });
+  ok('La nota en solo lectura ofrece el atajo a su crédito', atajo.hay, atajo.texto);
+  await p.evaluate(() => document.getElementById('btn-nv-solo-seguir').click());
   await p.waitForTimeout(900);
   const fichaAbierta = await p.evaluate(() => {
     const m = document.getElementById('modal-info');
     return { abierta: m && m.open, texto: m ? m.textContent.replace(/\s+/g, ' ').slice(0, 120) : '' };
   });
-  ok('El botón 🔗 abre el crédito que salió de esa nota',
+  ok('Y ese atajo abre el crédito que salió de esa nota',
     fichaAbierta.abierta && /4181/.test(fichaAbierta.texto), fichaAbierta.texto.slice(0, 70));
   await p.evaluate(() => { const b = document.getElementById('btn-info-cerrar'); if (b) b.click(); });
   await p.waitForTimeout(400);
+  await p.evaluate(() => document.getElementById('nav-ventas').click());
+  await p.waitForTimeout(600);
 
-  // ── 6) La nota que ya es crédito NO se borra: se anula ──
+  /* ── 6) La nota que ya es crédito NO se borra ni se modifica: se anula ──
+     Borrarla haría desaparecer una venta que el cliente tiene firmada en la
+     mano; modificarla dejaría al crédito diciendo un importe que la nota ya no
+     dice. Lo único que queda es anularla, que deja constancia.
+     (Esta comprobación pedía además un botón de editar. Estaba mal: la app lo
+     quita a propósito en cuanto la nota es crédito. Llevaba tiempo sin
+     ejecutarse porque justo antes había otra rota que cortaba la prueba.) */
   const sinBorrar = await p.evaluate(() => ({
     borrar: !!document.querySelector('[data-borrar-nota]'),
     anular: !!document.querySelector('[data-anular-nota]'),
     editar: !!document.querySelector('[data-editar-nota]'),
   }));
-  ok('Ya no hay botón de borrar: hay anular y editar',
-    !sinBorrar.borrar && sinBorrar.anular && sinBorrar.editar, JSON.stringify(sinBorrar));
+  ok('Una nota que ya es crédito solo se puede anular: ni borrar ni modificar',
+    !sinBorrar.borrar && sinBorrar.anular && !sinBorrar.editar, JSON.stringify(sinBorrar));
 
   // ── 7) Anular una nota devuelve el stock y la deja de constancia ──
   await p.evaluate(() => document.getElementById('nav-ventas').click());
   await p.waitForTimeout(500);
   await p.evaluate(() => document.getElementById('btn-nv-nueva').click());
   await p.waitForTimeout(700);
+  /* Se viene de mirar una nota en solo lectura, que apaga el formulario entero.
+     Al abrir una nueva tiene que volver a estar vivo: si no, el vendedor ve la
+     pantalla correcta pero no puede escribir ni guardar, y no hay manera de
+     salir de ahí sin recargar la app. */
+  const descongelado = await p.evaluate(() => ({
+    cliente: !document.getElementById('nv-cliente-buscar').disabled,
+    producto: !document.getElementById('nv-buscar-producto').disabled,
+    agregar: !document.getElementById('btn-nv-agregar').hidden,
+    guardar: !document.getElementById('btn-nv-guardar').hidden,
+  }));
+  ok('Tras mirar una nota, la nota nueva vuelve a poder escribirse y guardarse',
+    Object.values(descongelado).every(Boolean), JSON.stringify(descongelado));
   await p.fill('#nv-cliente-buscar', 'BODEGA');
   await p.waitForTimeout(450);
   await p.evaluate(() => document.querySelector('[data-nv-cliente]').click());
@@ -262,8 +288,14 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('nav-productos').click());
   await p.waitForTimeout(700);
   // El stock es la 7.ª columna: código, nombre, U.M., precio A, B, C, stock
-  const leerStock = () => p.evaluate(() =>
-    Number(document.querySelector('#prod-body tr td:nth-child(7)').textContent.trim()));
+  // La columna se busca por su título, no por su número: contarlas a mano es
+  // lo que rompió esto al añadir la columna del flete.
+  const leerStock = () => p.evaluate(() => {
+    const cabeceras = [...document.querySelectorAll('#prod-tabla thead th')];
+    const i = cabeceras.findIndex(th => /stock/i.test(th.textContent));
+    const fila = document.querySelector('#prod-body tr');
+    return fila && i >= 0 ? Number(fila.cells[i].textContent.trim()) : NaN;
+  });
   const antesDeAnular = await leerStock();
 
   await p.evaluate(() => document.getElementById('nav-ventas').click());

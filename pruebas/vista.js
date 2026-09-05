@@ -34,7 +34,6 @@ const { chromium } = require('playwright-core');
   await p.fill('#cli-nombre', 'DINA RESTAURANTE');
   await p.fill('#cli-direccion', 'JR. LORETO 456').catch(() => {});
   await p.selectOption('#cli-zona', '3 DE MAYO');
-  await p.selectOption('#cli-categoria', 'C');
   await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
   await p.waitForTimeout(800);
 
@@ -43,7 +42,7 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
   await p.waitForTimeout(350);
   await p.fill('#prod-nombre', 'ACEITE SOYA 20BOTX900ML');
-  for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, '182');
+  await p.fill('#prod-precio-a', '182');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(700);
 

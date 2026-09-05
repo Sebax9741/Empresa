@@ -21,7 +21,6 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('btn-cli-registrar').click());
   await p.waitForTimeout(350);
   await p.fill('#cli-nombre', 'ELVA');
-  await p.selectOption('#cli-categoria', 'A');
   await p.selectOption('#cli-zona', 'PADRE ALDAMIZ');
   await p.fill('#cli-ruc', '02541654654');
   await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
@@ -34,8 +33,6 @@ const { chromium } = require('playwright-core');
   await p.fill('#prod-nombre', 'HARINA ITALIANA X50KG');
   await p.selectOption('#prod-presentacion', 'saco');
   await p.fill('#prod-precio-a', '128');
-  await p.fill('#prod-precio-b', '132');
-  await p.fill('#prod-precio-c', '136');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(600);
 

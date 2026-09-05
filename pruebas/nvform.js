@@ -15,19 +15,20 @@ const { chromium } = require('playwright-core');
   const ok = (t, c, x = '') => console.log(`${c ? '✅' : '❌'} ${t}${x ? ' — ' + x : ''}`);
 
   // Clientes en tres zonas distintas, una por serie
+  // El de la PAMPA paga flete: allí hay que llevar la mercadería en camión
   const clientes = [
-    ['DISTRIBUIDORA CIUDAD SAC', 'CIUDAD', 'A'],
-    ['BODEGA LABERINTO', 'LABERINTO', 'B'],
-    ['MINIMARKET PAMPA', 'PAMPA', 'C'],
+    ['DISTRIBUIDORA CIUDAD SAC', 'CIUDAD', false],
+    ['BODEGA LABERINTO', 'LABERINTO', false],
+    ['MINIMARKET PAMPA', 'PAMPA', true],
   ];
   await p.evaluate(() => document.getElementById('nav-clientes').click());
   await p.waitForTimeout(400);
-  for (const [nom, zona, cat] of clientes) {
+  for (const [nom, zona, flete] of clientes) {
     await p.evaluate(() => document.getElementById('btn-cli-registrar').click());
     await p.waitForTimeout(350);
     await p.fill('#cli-nombre', nom);
     await p.selectOption('#cli-zona', zona);
-    await p.selectOption('#cli-categoria', cat);
+    if (flete) await p.check('#cli-flete');
     await p.fill('#cli-direccion', 'AV. ERNESTO RIVERO 546 - ' + zona);
     await p.fill('#cli-ruc', '20529068806');
     await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
@@ -46,7 +47,7 @@ const { chromium } = require('playwright-core');
     await p.waitForTimeout(300);
     await p.fill('#prod-nombre', nom);
     await p.selectOption('#prod-presentacion', pres).catch(() => {});
-    for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, precio);
+    await p.fill('#prod-precio-a', precio);
     await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
     await p.waitForTimeout(550);
   }
@@ -112,17 +113,23 @@ const { chromium } = require('playwright-core');
   s = await serie();
   ok('La serie se puede cambiar a mano', s.serie === '0001' && /mano/i.test(s.pista), JSON.stringify(s));
 
-  // ── Categoría, zona y ubicación a la vista ──
+  // ── Condiciones de venta, zona y ubicación a la vista ──
+  const fichaDe = async nombre => {
+    await elegir(nombre);
+    return p.evaluate(() => ({
+      flete: !document.getElementById('nv-ficha-cat').hidden,
+      zona: document.getElementById('nv-fc-zona').textContent.trim(),
+      dir: document.getElementById('nv-fc-direccion').textContent.trim(),
+      visible: !document.getElementById('nv-ficha').hidden,
+    }));
+  };
+  const ficha = await fichaDe('DISTRIBUIDORA CIUDAD');
+  ok('Muestra la zona y la ubicación del cliente',
+    ficha.visible && ficha.zona === 'CIUDAD' && /RIVERO/.test(ficha.dir), JSON.stringify(ficha));
+  ok('Al de la ciudad no le sale marca de flete', !ficha.flete);
+  const fichaPampa = await fichaDe('MINIMARKET PAMPA');
+  ok('Y al de la pampa sí, que a ese hay que llevárselo en camión', fichaPampa.flete);
   await elegir('DISTRIBUIDORA CIUDAD');
-  const ficha = await p.evaluate(() => ({
-    cat: document.getElementById('nv-ficha-cat').textContent.trim(),
-    zona: document.getElementById('nv-fc-zona').textContent.trim(),
-    dir: document.getElementById('nv-fc-direccion').textContent.trim(),
-    visible: !document.getElementById('nv-ficha').hidden,
-  }));
-  ok('Muestra la categoría de precio, la zona y la ubicación',
-    ficha.visible && ficha.cat === 'A' && ficha.zona === 'CIUDAD' && /RIVERO/.test(ficha.dir),
-    JSON.stringify(ficha));
 
   // ── El producto se busca escribiendo ──
   await p.fill('#nv-buscar-producto', 'soya aceite');

@@ -137,8 +137,6 @@ async function limpiarEmuladores() {
   await p.waitForTimeout(400);
   await p.fill('#prod-nombre', 'ARROZ DE PRUEBA');
   await p.fill('#prod-precio-a', '100');
-  await p.fill('#prod-precio-b', '100');
-  await p.fill('#prod-precio-c', '100');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(2200);
   ok('El producto se guarda en la nube', (await p.$$eval('#prod-body tr', r => r.length)) === 1);

@@ -80,9 +80,21 @@ service cloud.firestore {
       // Borrar un cliente es distinto de registrarlo o corregirlo: se lleva por
       // delante su ficha y su historial, así que va con permiso aparte
       // ("Borrar clientes"), que por defecto no lleva nadie.
+      //
+      // El LÍMITE DE CRÉDITOS es aparte: cortarle el fiado a un cliente —o
+      // levantárselo— es una decisión del dueño, no del vendedor que está
+      // delante del mostrador aguantando la insistencia. La app ya le pone el
+      // campo en gris a quien no manda, pero eso es comodidad, no seguridad:
+      // aquí se comprueba que el valor no cambie salvo que lo cambie un
+      // administrador. Al crear un cliente, quien no manda solo puede dejarlo
+      // sin límite.
+      function limiteDe(datos) { return datos.get('limiteCreditos', 0); }
       match /clientes/{docId} {
         allow read: if esMiembro();
-        allow create, update: if permiso('clientes') || permiso('crear');
+        allow create: if (permiso('clientes') || permiso('crear'))
+                      && (esAdmin() || limiteDe(request.resource.data) == 0);
+        allow update: if (permiso('clientes') || permiso('crear'))
+                      && (esAdmin() || limiteDe(request.resource.data) == limiteDe(resource.data));
         allow delete: if esAdmin() || permiso('clientesBorrar');
       }
 

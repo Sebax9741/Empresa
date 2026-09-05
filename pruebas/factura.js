@@ -28,8 +28,12 @@ const { chromium } = require('playwright-core');
   };
   const stock = async nombre => p.evaluate(n => {
     document.getElementById('nav-productos').click();
+    // La columna de stock se busca por su título y no por su número: contarlas
+    // a mano es lo que las rompió al añadir la del flete.
+    const iStock = [...document.querySelectorAll('#prod-tabla thead th')]
+      .findIndex(th => /stock/i.test(th.textContent));
     const fila = [...document.querySelectorAll('#prod-body tr')].find(t => t.textContent.includes(n));
-    return fila ? fila.querySelectorAll('td')[6].textContent.trim().replace(' ⚠️', '') : '';
+    return fila ? fila.cells[iStock].textContent.trim().replace(' ⚠️', '') : '';
   }, nombre);
   const irAIngresos = async () => {
     await p.evaluate(() => document.getElementById('nav-ingresos').click());
@@ -59,7 +63,7 @@ const { chromium } = require('playwright-core');
     await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
     await p.waitForTimeout(400);
     await p.fill('#prod-nombre', n);
-    for (const l of ['a', 'b', 'c']) await p.fill(`#prod-precio-${l}`, a);
+    await p.fill('#prod-precio-a', a);
     await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
     await p.waitForTimeout(700);
   }

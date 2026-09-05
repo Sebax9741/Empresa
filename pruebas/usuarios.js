@@ -137,7 +137,6 @@ const CORREO = 'astro@ejemplo.com', CLAVE = 'clave-larga-123';
   await p.waitForTimeout(400);
   await p.fill('#cli-nombre', 'CLIENTE DE PRUEBA');
   await p.selectOption('#cli-zona', 'PADRE ALDAMIZ');
-  await p.selectOption('#cli-categoria', 'B');
   await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
   await p.waitForTimeout(2000);
   ok('El administrador sí ve el botón de borrar cliente',

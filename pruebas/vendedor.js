@@ -40,8 +40,12 @@ async function limpiar() {
   };
   const stock = async nombre => p.evaluate(n => {
     document.getElementById('nav-productos').click();
+    // La columna de stock se busca por su título y no por su número: contarlas
+    // a mano es lo que las rompió al añadir la del flete.
+    const iStock = [...document.querySelectorAll('#prod-tabla thead th')]
+      .findIndex(th => /stock/i.test(th.textContent));
     const fila = [...document.querySelectorAll('#prod-body tr')].find(t => t.textContent.includes(n));
-    return fila ? fila.querySelectorAll('td')[6].textContent.trim().replace(' ⚠️', '') : '';
+    return fila ? fila.cells[iStock].textContent.trim().replace(' ⚠️', '') : '';
   }, nombre);
   // El aviso que salta cuando la base de datos rechaza una escritura
   const rechazado = () => p.evaluate(() => {
@@ -49,6 +53,24 @@ async function limpiar() {
     return (!t.hidden && /rechazó el cambio/i.test(t.textContent)) ? t.textContent.trim() : '';
   });
 
+  /* Un puente para poder intentar una escritura a mano contra las reglas de
+     verdad. Del programa solo `DB` está expuesto, así que se le pega al final
+     de js/app.js mientras se sirve: es un módulo, y lo pegado corre dentro de
+     su mismo ámbito. La app que se publica no lleva nada de esto. */
+  await p.route('**/js/app.js', async r => {
+    const cuerpo = await (await r.fetch()).text();
+    await r.fulfill({ contentType: 'application/javascript', body: cuerpo + `
+;window.__reglas = {
+  async escribirCliente(cambios) {
+    const c = { ...clientes[0], ...cambios };
+    try {
+      await fb.setDoc(fb.doc(fb.db, 'usuarios', ownerUid, 'clientes', c.id), c);
+      return 'aceptado';
+    } catch (e) { return 'rechazado: ' + (e.code || e.message); }
+  },
+  get limiteActual() { return clientes[0] ? (clientes[0].limiteCreditos || 0) : null; },
+};` });
+  });
   await p.goto('http://localhost:8099/index.html?emulador');
   await p.waitForTimeout(1800);
   await entrar(CORREO, CLAVE);
@@ -60,7 +82,7 @@ async function limpiar() {
   await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
   await p.waitForTimeout(500);
   await p.fill('#prod-nombre', 'HARINA ITALIANA X50KG');
-  for (const l of ['a', 'b', 'c']) await p.fill(`#prod-precio-${l}`, '100');
+  await p.fill('#prod-precio-a', '100');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(900);
 
@@ -215,6 +237,38 @@ async function limpiar() {
   await p.waitForTimeout(1200);
   ok('Con el permiso dado, la casilla 🔓 Modificar precios ya aparece',
     !await p.evaluate(() => document.querySelector('.nv-permiso').hidden));
+
+  /* ── El límite de créditos es del dueño, y no solo de boquilla ──
+     Cortarle el fiado a un cliente —o levantárselo— lo decide quien manda, no
+     el vendedor que está delante del mostrador aguantando la insistencia. La
+     app le pone el campo en gris, pero eso es comodidad: lo que de verdad
+     tiene que impedirlo son las reglas de la base de datos. Aquí se comprueba
+     saltándose la pantalla: se intenta la escritura a pelo. */
+  await p.evaluate(() => document.getElementById('nav-clientes').click());
+  await p.waitForTimeout(1200);
+  await p.evaluate(() => document.querySelector('[data-editar-cliente]').click());
+  await p.waitForTimeout(800);
+  const campo = await p.evaluate(() => {
+    const el = document.getElementById('cli-limite');
+    return { soloLectura: el.readOnly, aviso: el.title };
+  });
+  ok('Al vendedor el campo del límite le sale bloqueado',
+    campo.soloLectura && /administrador/i.test(campo.aviso), JSON.stringify(campo));
+  await p.evaluate(() => document.getElementById('btn-cli-cancelar').click());
+  await p.waitForTimeout(500);
+
+  const intento = await p.evaluate(() => window.__reglas.escribirCliente({ limiteCreditos: 99 }));
+  ok('Y si se salta la pantalla, la base de datos se lo rechaza igual',
+    /rechazado/.test(intento), intento);
+  ok('El límite del cliente queda como estaba',
+    await p.evaluate(() => window.__reglas.limiteActual) !== 99,
+    String(await p.evaluate(() => window.__reglas.limiteActual)));
+  // Y que el rechazo sea POR EL LÍMITE, no porque no pueda tocar clientes:
+  // si no, esta comprobación pasaría en verde aunque la regla no existiera.
+  const sinTocarElLimite = await p.evaluate(() =>
+    window.__reglas.escribirCliente({ telefono: '987 111 222' }));
+  ok('Pero lo demás del cliente sí lo puede corregir: la regla cierra el límite, no la ficha',
+    sinTocarElLimite === 'aceptado', sinTocarElLimite);
 
   ok('Sin errores de JavaScript', errs.length === 0, errs.slice(0, 3).join(' | '));
   await b.close();

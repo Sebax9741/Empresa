@@ -3201,6 +3201,86 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .prod-precios .field-row { grid-template-columns: 1fr 1fr 1fr; }
 .prod-precios-ayuda { display: block; color: var(--muted); font-size: 0.78rem; margin-bottom: 0.6rem; }
 
+/* ---- Escala de precios por cantidad ----
+   Rejilla de tres columnas con la cabecera una sola vez arriba: es la forma de
+   la hoja de papel en la que se apuntan, y así los tres precios se leen en
+   columna y se comparan de un vistazo. */
+.prod-escala { display: grid; gap: 0.35rem; margin-bottom: 0.55rem; }
+.prod-escala-cab,
+.prod-escala-fila {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 1.2fr) 1fr 1fr;
+  gap: 0.5rem;
+  align-items: center;
+}
+.prod-escala-cab > span {
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted);
+}
+.prod-escala-cab small {
+  display: block; text-transform: none; letter-spacing: 0;
+  font-weight: 500; font-size: 0.68rem; color: var(--gray);
+}
+.prod-escala-et { display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; font-weight: 600; }
+.prod-escala-fila .input { margin: 0; }
+/* La cantidad del precio base no se puede cambiar: siempre empieza en 1. Se
+   enseña igual, en su columna, para que la escala se lea entera de arriba
+   abajo en vez de tener un hueco justo en la primera fila. */
+.prod-escala-fijo {
+  display: grid; place-items: center;
+  padding: 0.5rem; border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted); font-weight: 700;
+}
+.prec-lbl {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; flex: none;
+  border-radius: 10px; font-weight: 800; font-size: 0.85rem;
+}
+.prec-A { background: var(--primary-light); color: var(--primary-dark); }
+.prec-B { background: var(--amber-light); color: var(--warning); }
+.prec-C { background: var(--ok-light); color: var(--ok); }
+
+.prod-flete { margin-bottom: 0.6rem; }
+.prod-flete .input { max-width: 12rem; }
+
+/* Lo que se acaba de escribir, cobrado. Tres cuadros con números sueltos no se
+   entienden hasta que se ven aplicados a una venta. */
+.prod-simulacion:empty { display: none; }
+.prod-simulacion {
+  background: var(--bg-tint);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  margin: 0 0 0.7rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.prod-simulacion strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+.prod-aviso-pasar {
+  background: var(--amber-light);
+  color: var(--warning);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  margin: 0 0 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* En la tabla del catálogo: la cantidad a la que empieza cada precio va debajo
+   del importe, en pequeño, porque un precio sin su cantidad no dice nada. */
+.prod-tabla .col-precio small,
+.prod-tabla td.col-num small {
+  display: block; font-weight: 500;
+  font-size: 0.68rem; color: var(--gray);
+}
+.prod-precio-vacio { color: var(--gray); }
+/* Los precios del modelo anterior se enseñan apagados: un 126 significa cosas
+   distintas en cada modelo, y así no se confunde con un precio por cantidad. */
+.prod-precio-viejo { color: var(--gray); font-style: italic; }
+.prod-con-flete { color: var(--azul); font-weight: 700; }
+
 /* Etiquetas de categoría: una letra que se reconoce de un vistazo */
 .cat-lbl, .cliente-cat, .nv-cat {
   display: inline-flex;
@@ -3214,6 +3294,53 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .cat-A { background: var(--ok-light); color: var(--ok); }
 .cat-B { background: var(--amber-light); color: var(--warning); }
 .cat-C { background: var(--primary-light); color: var(--primary-dark); }
+
+/* ---- Condiciones de venta del cliente ----
+   Dos marcas en la propia lista: si paga camión y cuánto fiado le queda. Son
+   las dos cosas de una ficha que cambian lo que se le puede vender, y mirarlas
+   abriendo cliente por cliente no es forma. */
+.cliente-etq {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  padding: 0.1rem 0.42rem;
+  border-radius: var(--radius-chip);
+  font-size: 0.7rem; font-weight: 700;
+  white-space: nowrap;
+}
+.cliente-etq-flete { background: var(--azul-light); color: var(--azul); }
+.cliente-etq-limite { background: var(--bg-tint); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Al tope: en rojo, porque a este ya no se le puede fiar */
+.cliente-etq-tope { background: var(--danger-light); color: var(--danger); font-variant-numeric: tabular-nums; }
+
+.cli-condiciones {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.9rem 0.3rem;
+  margin: 0 0 0.85rem;
+}
+.cli-condiciones legend { font-size: 0.8rem; font-weight: 700; color: var(--muted); padding: 0 0.35rem; }
+
+/* El aviso de que a este cliente ya no se le puede fiar. Va en la cabecera de
+   la nota, en cuanto se le elige: enterarse después de meterle quince
+   productos es hacer trabajar para nada a quien está de cara al cliente. */
+.nv-aviso-tope {
+  background: var(--danger-light);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.nv-aviso-salida { color: var(--muted); font-weight: 600; }
+
+/* Por qué esta línea cuesta esto: el escalón que entró, lo que falta para el
+   siguiente, el flete incluido. */
+.nv-precio-escalon {
+  display: block;
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
 
 /* ---- Kardex ---- */
 .kdx-filtros {
@@ -3581,6 +3708,14 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   width: 2.2rem; height: 2.2rem; flex: none;
   display: grid; place-items: center;
   border-radius: 10px; font-size: 1.15rem; font-weight: 800;
+}
+/* La marca de flete lleva texto, no una letra suelta: tiene que ensancharse */
+.nv-cat-flete {
+  width: auto; height: auto; flex: none;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.75rem; font-weight: 700;
+  background: var(--azul-light); color: var(--azul);
+  white-space: nowrap;
 }
 .nv-dato { display: flex; flex-direction: column; gap: 0.05rem; min-width: 0; }
 .nv-dato > span {

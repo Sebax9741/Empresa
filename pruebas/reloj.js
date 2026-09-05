@@ -25,38 +25,39 @@ const { chromium } = require('playwright-core');
   ok('Y no queda el emoji 💳 en la cabecera', !cab.texto.includes('💳'));
 
   // ── El reloj está en la cabecera, al lado de la cuenta ──
+  /* Esta parte medía el reloj contra el botón "＋ Nuevo crédito", que se quitó
+     al dejar de poder crear créditos sueltos. Ahora se mide contra lo que sí
+     tiene al lado: el botón de claro/oscuro, que es lo último antes del reloj. */
   const sitio = await p.evaluate(() => {
     const reloj = document.getElementById('reloj');
     const r = reloj.getBoundingClientRect();
-    const nuevo = document.getElementById('btn-new').getBoundingClientRect();
+    const tema = document.getElementById('btn-tema').getBoundingClientRect();
     return {
       enCabecera: !!reloj.closest('.app-header'),
       // pegado a la cuenta: el reloj es lo que va justo antes del chip de usuario
       antesDeLaCuenta: reloj.nextElementSibling && reloj.nextElementSibling.id === 'usuario-chip',
       pegadoAlBorde: window.innerWidth - r.right < 40,
-      trasNuevoCredito: r.left >= nuevo.right - 1,
+      trasElBotonDeTema: r.left >= tema.right - 1,
       centrado: Math.abs((r.left + r.right) / 2 - window.innerWidth / 2) < 80,
     };
   });
   ok('El reloj vive en la barra superior', sitio.enCabecera);
   ok('Va al lado del botón de la cuenta, no al centro',
-    sitio.antesDeLaCuenta && sitio.trasNuevoCredito && !sitio.centrado, JSON.stringify(sitio));
+    sitio.antesDeLaCuenta && sitio.trasElBotonDeTema && !sitio.centrado, JSON.stringify(sitio));
 
-  // El botón "＋ Nuevo crédito" solo sale en Créditos: no debe correr el reloj
-  const conBoton = await p.evaluate(() => {
-    document.getElementById('nav-inicio').click();
-    document.getElementById('btn-new').hidden = false;   // como en la nube, con permiso de crear
-    const r = document.getElementById('reloj').getBoundingClientRect();
-    const n = document.getElementById('btn-new').getBoundingClientRect();
-    return { reloj: Math.round(r.left), boton: Math.round(n.width) };
-  });
+  /* Los botones de la cabecera cambian según la sección. El reloj no puede
+     bailar con ellos: si se corre a cada paso, la hora se lee como si la
+     pantalla estuviera fallando. */
+  const izquierdaDelReloj = async () => p.evaluate(() =>
+    Math.round(document.getElementById('reloj').getBoundingClientRect().left));
+  await p.evaluate(() => document.getElementById('nav-inicio').click());
+  await p.waitForTimeout(300);
+  const enCreditos = await izquierdaDelReloj();
   await p.evaluate(() => document.getElementById('nav-dashboard').click());
   await p.waitForTimeout(300);
-  const sinBoton = await p.evaluate(() =>
-    Math.round(document.getElementById('reloj').getBoundingClientRect().left));
-  ok('Aparecer "＋ Nuevo crédito" no corre el reloj',
-    conBoton.reloj === sinBoton && conBoton.boton > 50,
-    `con botón ${conBoton.reloj}px = sin botón ${sinBoton}px (botón de ${conBoton.boton}px)`);
+  const enDashboard = await izquierdaDelReloj();
+  ok('Cambiar de sección no corre el reloj de sitio',
+    enCreditos === enDashboard, `Créditos ${enCreditos}px = Dashboard ${enDashboard}px`);
 
   // ── Marca la hora y avanza ──
   const t1 = await p.textContent('#reloj-hora');

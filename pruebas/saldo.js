@@ -37,7 +37,7 @@ const { chromium } = require('playwright-core');
     await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
     await p.waitForTimeout(350);
     await p.fill('#prod-nombre', nombre);
-    for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, String(precio));
+    await p.fill('#prod-precio-a', String(precio));
     await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
     await p.waitForTimeout(600);
   };
@@ -52,7 +52,7 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
   await p.waitForTimeout(350);
   await p.fill('#prod-nombre', 'DESCONTINUADO YA NO SE VENDE');
-  for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, '20');
+  await p.fill('#prod-precio-a', '20');
   await p.evaluate(() => document.getElementById('prod-activo').click());   // lo destilda
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(600);

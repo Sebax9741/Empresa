@@ -64,7 +64,6 @@ const PANTALLAS = [
     await p.waitForTimeout(350);
     await p.fill('#cli-nombre', 'Teresa');
     await p.selectOption('#cli-zona', 'MILAGROS');
-    await p.selectOption('#cli-categoria', 'B');
     await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
     await p.waitForTimeout(800);
 
@@ -73,7 +72,7 @@ const PANTALLAS = [
     await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
     await p.waitForTimeout(350);
     await p.fill('#prod-nombre', 'PROD ANCHO');
-    for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, '2760');
+    await p.fill('#prod-precio-a', '2760');
     await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
     await p.waitForTimeout(600);
     await p.evaluate(() => document.getElementById('nav-ingresos').click());

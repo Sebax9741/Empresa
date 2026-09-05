@@ -112,8 +112,6 @@ const { chromium } = require('playwright-core');
   await p.waitForTimeout(400);
   await p.fill('#prod-nombre', 'HARINA ITALIANA X50KG');
   await p.fill('#prod-precio-a', '128');
-  await p.fill('#prod-precio-b', '132');
-  await p.fill('#prod-precio-c', '136');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(700);
 
@@ -165,7 +163,14 @@ const { chromium } = require('playwright-core');
 
   await p.evaluate(() => document.getElementById('nav-productos').click());
   await p.waitForTimeout(500);
-  const stock = await p.$$eval('#prod-body tr', r => r.length ? r[0].cells[6].textContent.trim() : '');
+  // La columna se busca por su título y no por su número: contarlas a mano es
+  // lo que rompió esta prueba al añadir la del flete.
+  const stock = await p.evaluate(() => {
+    const cabeceras = [...document.querySelectorAll('#prod-tabla thead th')];
+    const i = cabeceras.findIndex(th => /stock/i.test(th.textContent));
+    const fila = document.querySelector('#prod-body tr');
+    return fila && i >= 0 ? fila.cells[i].textContent.trim() : '';
+  });
   ok('El stock vuelve a 0 al anular', /^0/.test(stock), stock);
 
   await p.screenshot({ path: 'pruebas/nav-grupos.png' });

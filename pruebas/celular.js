@@ -45,7 +45,7 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
   await p.waitForTimeout(600);
   await p.fill('#prod-nombre', 'HARINA ITALIANA X50KG');
-  for (const l of ['a', 'b', 'c']) await p.fill(`#prod-precio-${l}`, '100');
+  await p.fill('#prod-precio-a', '100');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(900);
 

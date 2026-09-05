@@ -22,8 +22,6 @@ const { chromium } = require('playwright-core');
     await p.fill('#prod-nombre', nombre);
     await p.selectOption('#prod-presentacion', pres);
     await p.fill('#prod-precio-a', String(a));
-    await p.fill('#prod-precio-b', String(a + 3));
-    await p.fill('#prod-precio-c', String(a + 6));
     await p.fill('#prod-stockmin', '5');
     await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
     await p.waitForTimeout(500);
@@ -104,14 +102,22 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('btn-ing-agregar').click());
   await p.waitForTimeout(400);
 
-  const lista = await p.$$eval('#ing-lista-body tr', r => r.map(x => ({
-    cod: x.cells[0].textContent.trim(),
-    nombre: x.cells[1].textContent.trim(),
-    um: x.cells[2].textContent.trim(),
-    cant: x.cells[3].querySelector('input').value,
-    actual: x.cells[4].textContent.trim(),
-    result: x.cells[5].textContent.trim(),
-  })));
+  /* Cada columna se busca por su título. Antes se contaban a mano y estaban
+     todas corridas un puesto desde que la tabla ganó la columna "Ítem": la
+     prueba se caía aquí y todo lo que venía detrás no llegaba a ejecutarse. */
+  const lista = await p.evaluate(() => {
+    const cab = [...document.querySelectorAll('#ing-lista-tabla thead th')]
+      .map(th => th.textContent.trim().toLowerCase());
+    const col = (fila, titulo) => fila.cells[cab.indexOf(titulo)];
+    return [...document.querySelectorAll('#ing-lista-body tr')].map(f => ({
+      cod: col(f, 'código').textContent.trim(),
+      nombre: col(f, 'producto').textContent.trim(),
+      um: col(f, 'u.m.').textContent.trim(),
+      cant: col(f, 'cantidad').querySelector('input').value,
+      actual: col(f, 'stock actual').textContent.trim(),
+      result: col(f, 'stock resultante').textContent.trim(),
+    }));
+  });
   ok('Los tres productos quedan en la lista', lista.length === 3, JSON.stringify(lista.map(l => `${l.nombre} x${l.cant}`)));
   ok('Cada línea muestra el stock que quedará',
     lista[0].actual === '0' && lista[0].result === '50' && lista[1].result === '30' && lista[2].result === '12');
@@ -130,8 +136,12 @@ const { chromium } = require('playwright-core');
   await p.fill('#ing-cantidad', '10');
   await p.evaluate(() => document.getElementById('btn-ing-agregar').click());
   await p.waitForTimeout(400);
-  const trasRepetir = await p.$$eval('#ing-lista-body tr', r => ({
-    filas: r.length, harina: r[0].cells[3].querySelector('input').value }));
+  const trasRepetir = await p.evaluate(() => {
+    const i = [...document.querySelectorAll('#ing-lista-tabla thead th')]
+      .findIndex(th => /^cantidad$/i.test(th.textContent.trim()));
+    const filas = [...document.querySelectorAll('#ing-lista-body tr')];
+    return { filas: filas.length, harina: filas[0].cells[i].querySelector('input').value };
+  });
   ok('Repetir un producto suma a su línea, no la duplica',
     trasRepetir.filas === 3 && trasRepetir.harina === '60', JSON.stringify(trasRepetir));
 
@@ -171,7 +181,12 @@ const { chromium } = require('playwright-core');
   // ── 6) El stock de los productos subió ──
   await p.evaluate(() => document.getElementById('nav-productos').click());
   await p.waitForTimeout(500);
-  const stocks = await p.$$eval('#prod-body tr', r => r.map(x => x.cells[1].textContent.trim() + '=' + x.cells[6].textContent.trim()));
+  const stocks = await p.evaluate(() => {
+    const i = [...document.querySelectorAll('#prod-tabla thead th')]
+      .findIndex(th => /stock/i.test(th.textContent));
+    return [...document.querySelectorAll('#prod-body tr')]
+      .map(x => x.cells[1].textContent.trim() + '=' + x.cells[i].textContent.trim());
+  });
   ok('El stock de cada producto quedó actualizado',
     stocks.some(s => /HARINA.*=60/.test(s)) && stocks.some(s => /ACEITE.*=30/.test(s)) && stocks.some(s => /LAVA.*=12/.test(s)),
     stocks.join(' | '));

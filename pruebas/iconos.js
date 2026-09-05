@@ -62,7 +62,6 @@ const { chromium } = require('playwright-core');
   await p.waitForTimeout(400);
   await p.fill('#cli-nombre', 'Teresa');
   await p.selectOption('#cli-zona', 'MILAGROS');
-  await p.selectOption('#cli-categoria', 'B');
   await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
   await p.waitForTimeout(900);
   // El crédito nace de una nota de venta: producto, ingreso y la nota
@@ -71,7 +70,7 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
   await p.waitForTimeout(350);
   await p.fill('#prod-nombre', 'PROD ICONOS');
-  for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, '2760');
+  await p.fill('#prod-precio-a', '2760');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(600);
   await p.evaluate(() => document.getElementById('nav-ingresos').click());

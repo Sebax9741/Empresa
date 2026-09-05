@@ -23,8 +23,6 @@ const { chromium } = require('playwright-core');
     await p.waitForTimeout(350);
     await p.fill('#prod-nombre', n);
     await p.fill('#prod-precio-a', a);
-    await p.fill('#prod-precio-b', a);
-    await p.fill('#prod-precio-c', a);
     await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
     await p.waitForTimeout(600);
   }

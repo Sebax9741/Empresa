@@ -24,7 +24,6 @@ const { chromium } = require('playwright-core');
   await p.waitForTimeout(350);
   await p.fill('#cli-nombre', 'BODEGA LA ESQUINA');
   await p.selectOption('#cli-zona', 'CIUDAD');
-  await p.selectOption('#cli-categoria', 'A');
   await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
   await p.waitForTimeout(700);
 
@@ -34,7 +33,7 @@ const { chromium } = require('playwright-core');
   await p.waitForTimeout(350);
   await p.fill('#prod-nombre', 'HARINA ITALIANA X50KG');
   await p.selectOption('#prod-presentacion', 'saco').catch(() => {});
-  for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, '130');
+  await p.fill('#prod-precio-a', '130');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(600);
   // La mercadería entra por su sección: el botón 📥 de Productos ya no existe

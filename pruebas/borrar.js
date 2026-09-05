@@ -50,7 +50,6 @@ const { chromium } = require('playwright-core');
   await p.waitForTimeout(350);
   await p.fill('#cli-nombre', 'BODEGA LA ESQUINA');
   await p.selectOption('#cli-zona', 'CIUDAD');
-  await p.selectOption('#cli-categoria', 'A');
   await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
   await p.waitForTimeout(800);
 
@@ -59,7 +58,7 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
   await p.waitForTimeout(350);
   await p.fill('#prod-nombre', 'HARINA ITALIANA X50KG');
-  for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, '100');
+  await p.fill('#prod-precio-a', '100');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(700);
 
@@ -79,8 +78,12 @@ const { chromium } = require('playwright-core');
   const stock = () => p.evaluate(async () => {
     document.getElementById('nav-productos').click();
     await new Promise(r => setTimeout(r, 450));
+    // La columna de stock se busca por su título y no por su número: contarlas
+    // a mano es lo que las rompió al añadir la del flete.
+    const iStock = [...document.querySelectorAll('#prod-tabla thead th')]
+      .findIndex(th => /stock/i.test(th.textContent));
     const f = document.querySelector('#prod-body tr');
-    return f ? f.querySelector('td:nth-child(7)').textContent.trim() : '';
+    return f ? f.cells[iStock].textContent.trim() : '';
   });
 
   // ── Una nota de venta de 10 sacos: S/ 1000 ──

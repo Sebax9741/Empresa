@@ -127,18 +127,81 @@ async function limpiar() {
   await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
   await p.waitForTimeout(1400);
 
-  await p.evaluate(() => document.getElementById('nav-inicio').click());
-  await p.waitForTimeout(900);
-  await p.evaluate(() => document.getElementById('btn-new').click());
-  await p.waitForTimeout(1000);
-  await p.fill('#f-boleta', '7001');
-  await p.fill('#f-cliente-buscar', 'BODEGA');
+  /* Hace falta un crédito para tener algo que cobrar. Un crédito ya no se crea
+     a mano —no queda ningún botón para eso—: nace de una nota de venta que sale
+     a reparto y vuelve firmada, así que hay que recorrer el camino entero.
+     Esta parte llevaba tiempo buscando el botón "＋ Nuevo crédito", que se
+     quitó hace ya; no se notaba porque sin el emulador de Firebase la prueba ni
+     siquiera arrancaba. */
+  await p.evaluate(() => document.getElementById('nav-productos').click());
   await p.waitForTimeout(700);
-  await p.click('#cliente-sugerencias li[data-id]').catch(() => {});
+  await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
   await p.waitForTimeout(500);
-  await p.fill('#f-monto', '900');
-  await p.evaluate(() => document.getElementById('btn-guardar').click());
+  await p.fill('#prod-nombre', 'HARINA X50KG');
+  await p.fill('#prod-precio-a', '90');
+  await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
+  await p.waitForTimeout(1200);
+
+  await p.evaluate(() => document.getElementById('nav-ingresos').click());
+  await p.waitForTimeout(900);
+  await p.fill('#ing-buscar', 'HARINA');
+  await p.waitForTimeout(600);
+  await p.evaluate(() => document.querySelector('[data-ing-elegir]').click());
+  await p.waitForTimeout(400);
+  await p.fill('#ing-cantidad', '60');
+  await p.evaluate(() => document.getElementById('btn-ing-agregar').click());
+  await p.waitForTimeout(400);
+  await p.fill('#ing-doc-numero', 'F1');
+  await p.evaluate(() => document.getElementById('btn-ing-guardar').click());
+  await p.waitForTimeout(1600);
+
+  await p.evaluate(() => document.getElementById('nav-ventas').click());
+  await p.waitForTimeout(900);
+  await p.evaluate(() => document.getElementById('btn-nv-nueva').click());
+  await p.waitForTimeout(1000);
+  await p.fill('#nv-cliente-buscar', 'BODEGA');
+  await p.waitForTimeout(600);
+  await p.evaluate(() => document.querySelector('[data-nv-cliente]').click());
+  await p.waitForTimeout(400);
+  await p.fill('#nv-buscar-producto', 'HARINA');
+  await p.waitForTimeout(600);
+  await p.evaluate(() => document.querySelector('[data-nv-prod]').click());
+  await p.waitForTimeout(400);
+  await p.fill('#nv-cantidad', '10');
+  await p.evaluate(() => document.getElementById('btn-nv-agregar').click());
+  await p.waitForTimeout(600);
+  await p.evaluate(() => document.getElementById('btn-nv-guardar').click());
+  await p.waitForTimeout(2200);
+
+  await p.evaluate(() => document.getElementById('nav-despachos').click());
+  await p.waitForTimeout(1200);
+  await p.evaluate(() => document.getElementById('btn-desp-repartidores').click());
+  await p.waitForTimeout(700);
+  await p.fill('#rep-nombre', 'LUIS PEREZ');
+  await p.evaluate(() => document.querySelector('#rep-form button[type=submit]').click());
+  await p.waitForTimeout(1200);
+  await p.evaluate(() => document.querySelector('#desp-notas-lista [data-elegir-nota]').click());
+  await p.waitForTimeout(600);
+  await p.evaluate(() => document.getElementById('btn-desp-pasar').click());
+  await p.waitForTimeout(1000);
+  await p.evaluate(() => {
+    const c = document.querySelector('#desp-repartidores-check input');
+    if (c) c.click();
+    document.querySelector('#desp-form button[type=submit]').click();
+  });
   await p.waitForTimeout(2000);
+  await p.evaluate(() => {
+    const fila = document.querySelector('.desp-fila, .despacho-card');
+    if (fila) fila.click();
+  });
+  await p.waitForTimeout(1200);
+  await p.evaluate(() => {
+    const btn = document.getElementById('btn-desp-a-credito');
+    if (btn) btn.click();
+  });
+  await p.waitForTimeout(1400);
+  await p.evaluate(() => document.getElementById('btn-guardar').click());
+  await p.waitForTimeout(2200);
 
   await p.evaluate(() => document.getElementById('nav-cobranza').click());
   await p.waitForTimeout(1600);
@@ -151,9 +214,14 @@ async function limpiar() {
     detalle: document.getElementById('cob-estado-detalle').textContent.replace(/\s+/g, ' ').trim(),
     reabrir: !document.getElementById('btn-hoja-reabrir').hidden,
   }));
-  ok('La hoja queda cerrada, y lo dice claro',
-    /Cerrada/i.test(cerrada.badge) && /no entra ni sale/i.test(cerrada.detalle),
-    cerrada.detalle.slice(0, 90));
+  // El detalle dice QUIÉN la cerró, no solo que está cerrada: una hoja cerrada
+  // sin nombre detrás no sirve para preguntarle a nadie.
+  // (Antes se buscaba aquí la frase "no entra ni sale", que ya no está en la
+  // app. Llevaba tiempo sin verse porque sin el emulador de Firebase esta
+  // prueba ni arrancaba.)
+  ok('La hoja queda cerrada, y queda anotado quién la cerró',
+    /Cerrada/i.test(cerrada.badge) && /Cerrada por \S+@/.test(cerrada.detalle),
+    cerrada.detalle.slice(0, 110));
   ok('Y aparece el botón de reabrirla, que es la única puerta', cerrada.reabrir);
 
   await p.evaluate(() => document.getElementById('nav-inicio').click());

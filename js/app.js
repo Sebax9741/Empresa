@@ -173,9 +173,33 @@ function metodoLabel(m) { return METODOS[m] || METODOS.efectivo; }
 
 function abonosDe(c) { return Array.isArray(c.abonos) ? c.abonos : []; }
 
-/* ====== Categorías de precio ======
-   Cada cliente tiene una categoría (A, B o C) y cada producto tiene un precio
-   para cada una. Al armar la nota de venta, el precio sale de cruzar las dos. */
+/* ====== Cómo se decide el precio de una venta ======
+
+   ANTES: el precio lo decidía QUIÉN compraba. Cada cliente llevaba una
+   categoría (A mayorista, B intermedio, C menudeo) y cada producto tenía un
+   precio para cada una.
+
+   AHORA: el precio lo decide CUÁNTO se compra, más el transporte. Cada
+   producto lleva:
+     · un precio base, el de comprar poco;
+     · hasta dos escalones por cantidad: «desde 10 sacos, 125» y «desde 50, 124»;
+     · un cargo de flete en soles por unidad, que se le suma solo a los clientes
+       marcados para ello. Llevar la mercadería a la PAMPA cuesta camión; a un
+       cliente de la CIUDAD no hay por qué cobrárselo.
+
+   LOS DOS MODELOS CONVIVEN, y es a propósito. Un producto pasa al nuevo cuando
+   alguien lo abre y le graba su precio base; hasta entonces sigue cobrando
+   exactamente lo de siempre. Así se puede ir pasando el catálogo producto por
+   producto sin que ningún precio se mueva un solo día sin que alguien lo haya
+   escrito. `usaPreciosPorCantidad()` es lo que distingue uno de otro.
+
+   Lo que NUNCA se recalcula es una venta ya hecha: cada línea de la nota se
+   guarda con su precio y su importe dentro de la propia nota, y el crédito con
+   su monto. Cambiar el catálogo hoy no mueve ni un céntimo de lo emitido ayer. */
+
+/* Categorías del modelo viejo. Se quedan porque los productos sin configurar
+   todavía cobran por ellas, y porque las notas ya emitidas guardan la que
+   tenían. En la ficha del cliente ya no se elige ni se enseña. */
 const CATEGORIAS = {
   A: { nombre: 'A', detalle: 'Mayorista' },
   B: { nombre: 'B', detalle: 'Intermedio' },
@@ -184,6 +208,58 @@ const CATEGORIAS = {
 function categoriaDe(cliente) {
   const c = String((cliente && cliente.categoria) || '').toUpperCase();
   return CATEGORIAS[c] ? c : 'C';   // sin categoría, se cobra el precio de menudeo
+}
+
+/* Un producto está en el modelo nuevo en cuanto tiene precio base grabado. Se
+   mira el precio y no una casilla aparte porque una casilla se puede quedar
+   marcada sin precio detrás, y eso vendería a cero. */
+function usaPreciosPorCantidad(p) {
+  return !!p && p.precioBase !== undefined && p.precioBase !== null
+    && p.precioBase !== '' && Number.isFinite(Number(p.precioBase));
+}
+
+/* Los escalones ordenados de menos a más cantidad. Se limpian aquí y no al
+   guardar porque también llegan de la nube y de equipos viejos. */
+function escalonesDe(p) {
+  return (Array.isArray(p && p.escalones) ? p.escalones : [])
+    .map(e => ({ desde: Math.floor(Number(e.desde) || 0), precio: Number(e.precio) }))
+    .filter(e => e.desde > 1 && Number.isFinite(e.precio) && e.precio >= 0)
+    .sort((a, b) => a.desde - b.desde);
+}
+
+/* El escalón que le toca a una cantidad, o null si va al precio base. Gana el
+   de cantidad más alta que la venta alcance: pidiendo 60 con escalones de 10 y
+   50, manda el de 50. */
+function escalonQueAplica(p, cantidad) {
+  const q = Math.floor(Number(cantidad) || 0);
+  let elegido = null;
+  for (const e of escalonesDe(p)) if (q >= e.desde) elegido = e;
+  return elegido;
+}
+
+function fleteDe(p) {
+  const f = Number(p && p.flete);
+  return Number.isFinite(f) && f > 0 ? f : 0;
+}
+
+/* Al cliente se le cobra el camión solo si alguien lo marcó en su ficha */
+function clientePagaFlete(cliente) {
+  return !!(cliente && cliente.aplicaFlete);
+}
+
+/* EL precio de una línea de venta: el del escalón que le toque por cantidad,
+   más el flete si el cliente lo paga. Es el único sitio donde se decide un
+   precio, para que la nota, el buscador y la lista no puedan discrepar. */
+function precioDeVenta(producto, cantidad, cliente) {
+  if (!producto) return 0;
+  let base;
+  if (usaPreciosPorCantidad(producto)) {
+    const esc = escalonQueAplica(producto, cantidad);
+    base = esc ? esc.precio : Number(producto.precioBase) || 0;
+  } else {
+    base = precioDe(producto, categoriaDe(cliente));   // todavía en el modelo viejo
+  }
+  return base + (clientePagaFlete(cliente) ? fleteDe(producto) : 0);
 }
 
 /* Presentaciones y su abreviatura para la columna U.M. de la nota impresa */
@@ -3375,6 +3451,42 @@ function clientePorNombre(nombre) {
 
 function creditosDeCliente(id) { return creditos.filter(c => c.clienteId === id); }
 
+/* ====== Límite de créditos sin pagar ======
+   Cada cliente puede llevar su tope: «a este no le fío más de tres a la vez».
+   Al llegar a ese número no se le puede emitir otra nota A CRÉDITO. Al contado
+   sí, porque quien paga en el acto no aumenta lo que debe — bloquear eso sería
+   negarse a cobrar dinero.
+
+   Vacío o cero = sin límite, que es como quedan los 202 clientes que ya están
+   registrados: nadie se encuentra con la app cerrada de un día para otro. */
+
+/* Cuántos créditos tiene abiertos, o sea sin terminar de pagar. Se puede pedir
+   que no cuente uno: al modificar una nota, su propio crédito ya existe y si no
+   se descuenta, una nota que hoy se puede guardar dejaría de poder guardarse
+   solo por abrirla y volver a grabarla. */
+function creditosSinPagarDe(clienteId, exceptoCreditoId = '') {
+  return creditosDeCliente(clienteId)
+    .filter(c => c.id !== exceptoCreditoId && estadoEfectivo(c) !== 'pagado');
+}
+
+/* El tope del cliente. 0 significa sin tope, no «cero créditos»: si no, dejar
+   el campo en blanco por descuido cerraría al cliente entero. */
+function limiteCreditosDe(cliente) {
+  const n = Math.floor(Number(cliente && cliente.limiteCreditos) || 0);
+  return n > 0 ? n : 0;
+}
+
+/* Si este cliente ya no admite otra nota a crédito, devuelve por qué. Devuelve
+   null cuando sí se puede, para poder escribir `const no = ...; if (no) ...`. */
+function topeDeCreditoAlcanzado(cliente, exceptoCreditoId = '') {
+  if (!cliente) return null;
+  const tope = limiteCreditosDe(cliente);
+  if (!tope) return null;
+  const abiertos = creditosSinPagarDe(cliente.id, exceptoCreditoId).length;
+  if (abiertos < tope) return null;
+  return { tope, abiertos };
+}
+
 /* ---- Buscador de clientes del formulario de créditos ----
    Se escribe el nombre y va sugiriendo los clientes que coinciden.
    El id del cliente elegido queda guardado en el campo oculto #f-cliente. */
@@ -3516,11 +3628,27 @@ function limpiarFormCliente() {
   $('#cli-form').reset();
   $('#cli-id').value = '';
   $('#cli-codigo').value = siguienteCodigoCliente();
-  // Sin categoría elegida se cobra el precio de menudeo: nunca se cobra de
-  // menos por descuido, y si el cliente es mayorista se le cambia a mano.
-  $('#cli-categoria').value = 'C';
+  $('#cli-limite').value = '';
+  $('#cli-flete').checked = false;
+  candarDelLimiteDeCreditos();
   $('#cli-form-title').textContent = 'Registrar cliente';
   $('#btn-cli-guardar').textContent = '💾 Guardar cliente';
+}
+
+/* Cortarle el fiado a un cliente es una decisión del dueño, no del vendedor
+   que está delante del mostrador aguantando la insistencia. Al que no manda se
+   le enseña el número —tiene que saber por qué no le deja emitir— pero no lo
+   toca. Esto es comodidad, no seguridad: quien blinda de verdad el dato es
+   firestore.rules. */
+function candarDelLimiteDeCreditos() {
+  const campo = $('#cli-limite');
+  if (!campo) return;
+  const manda = mandaComoAdmin();
+  campo.readOnly = !manda;
+  campo.title = manda ? '' : 'Solo el administrador puede cambiarlo';
+  $('#cli-limite-ayuda').textContent = manda
+    ? 'Al llegar a este número de créditos sin pagar, no se le podrán emitir más notas a crédito.'
+    : 'Lo pone el administrador. Al llegar a ese número de créditos sin pagar, no se le pueden emitir más notas a crédito.';
 }
 
 function renderClientes() {
@@ -3548,21 +3676,54 @@ function renderClientes() {
   }
 
   const permitido = puede('clientes');
+  /* Los créditos se cuentan de una sola pasada. Antes se recorría la lista
+     entera de créditos por CADA cliente para saber cuántos tenía; con 200
+     clientes y miles de créditos eso es medio millón de comparaciones cada vez
+     que se abre la sección, y en una tablet se nota. */
+  const cuenta = new Map();
+  for (const cr of creditos) {
+    const v = cuenta.get(cr.clienteId) || { total: 0, sinPagar: 0 };
+    v.total++;
+    if (estadoEfectivo(cr) !== 'pagado') v.sinPagar++;
+    cuenta.set(cr.clienteId, v);
+  }
   cont.innerHTML = lista.map(c => {
-    const nPedidos = creditosDeCliente(c.id).length;
+    const suyos = cuenta.get(c.id) || { total: 0, sinPagar: 0 };
+    const nPedidos = suyos.total;
     const extra = [
       c.ruc ? `🆔 ${escapeHtml(c.ruc)}` : '',
       c.direccion ? `🏠 ${escapeHtml(c.direccion)}` : '',
       c.telefono ? `📞 ${escapeHtml(c.telefono)}` : '',
       c.notas ? escapeHtml(c.notas) : '',
     ].filter(Boolean).join(' · ');
-    const cat = categoriaDe(c);
+    // Las dos condiciones de venta se enseñan en la propia lista: son las que
+    // hacen que a un cliente se le cobre distinto o no se le pueda vender, y
+    // preguntárselo abriendo la ficha de uno en uno no es forma.
+    const tope = limiteCreditosDe(c);
+    const abiertos = suyos.sinPagar;
+    const insignias = [
+      clientePagaFlete(c)
+        ? '<span class="cliente-etq cliente-etq-flete" title="Se le suma el cargo de flete de cada producto">🚚 flete</span>'
+        : '',
+      // Al tope se dice con palabras y no con «2/2»: al lado va el total de
+      // créditos del cliente, y dos cuentas distintas pegadas se leen como una
+      // sola mal escrita. Con cupo todavía sí van los números, que ahí lo que
+      // se quiere saber es cuánto queda.
+      tope
+        ? (abiertos >= tope
+          ? `<span class="cliente-etq cliente-etq-tope"
+               title="Tiene ${abiertos} sin pagar y su límite es ${tope}: no se le pueden emitir más notas a crédito"
+             >🚫 sin cupo</span>`
+          : `<span class="cliente-etq cliente-etq-limite" title="Créditos sin pagar sobre su límite"
+             >${abiertos} de ${tope}</span>`)
+        : '',
+    ].filter(Boolean).join('');
     return `
       <div class="cliente-item">
         <div class="cliente-datos">
           ${c.codigo ? `<span class="cliente-codigo">${escapeHtml(c.codigo)}</span>` : ''}
           <strong>${escapeHtml(c.nombre)}</strong>
-          <span class="cliente-cat cat-${cat}" title="Categoría de precio: ${CATEGORIAS[cat].detalle}">${cat}</span>
+          ${insignias}
           <span class="cliente-zona">${c.zona ? escapeHtml(c.zona) : 'sin zona'}</span>
           <span class="cliente-meta">${nPedidos} crédito${nPedidos === 1 ? '' : 's'}${extra ? ' · ' + extra : ''}</span>
         </div>
@@ -3581,7 +3742,9 @@ function editarClienteForm(id) {
   $('#cli-id').value = cli.id;
   $('#cli-codigo').value = cli.codigo || '';
   $('#cli-nombre').value = cli.nombre;
-  $('#cli-categoria').value = categoriaDe(cli);
+  $('#cli-limite').value = limiteCreditosDe(cli) || '';
+  $('#cli-flete').checked = clientePagaFlete(cli);
+  candarDelLimiteDeCreditos();
   $('#cli-ruc').value = cli.ruc || '';
   $('#cli-zona').value = cli.zona || '';
   $('#cli-direccion').value = cli.direccion || '';
@@ -3622,8 +3785,17 @@ async function guardarClienteForm(ev) {
     codigo,
     nombre,
     zona,
-    // Categoría de precio: decide qué precio del producto se cobra en la nota
-    categoria: $('#cli-categoria').value || 'C',
+    // La categoría de precio ya no se elige, pero la que tuviera se conserva:
+    // los productos que todavía no han pasado al modelo nuevo siguen cobrando
+    // por ella, y borrarla aquí les cambiaría el precio de golpe.
+    categoria: anterior ? categoriaDe(anterior) : 'C',
+    // A este cliente hay que llevarle la mercadería en camión
+    aplicaFlete: $('#cli-flete').checked,
+    // Cuántos créditos sin pagar aguanta antes de cortarle el fiado (0 = sin
+    // límite). Al que no manda no se le deja tocarlo: se conserva el que había.
+    limiteCreditos: mandaComoAdmin()
+      ? Math.max(0, Math.floor(Number($('#cli-limite').value) || 0))
+      : (anterior ? limiteCreditosDe(anterior) : 0),
     ruc: $('#cli-ruc').value.trim(),
     direccion: $('#cli-direccion').value.trim(),
     telefono: $('#cli-telefono').value.trim(),
@@ -6936,6 +7108,33 @@ function abrirProductos() {
   mostrarSeccion('productos');
 }
 
+/* Las cuatro celdas de precio de la tabla del catálogo. Un producto del modelo
+   nuevo enseña cada precio con la cantidad a la que empieza a valer; uno que
+   todavía no se ha pasado enseña sus tres precios viejos marcados, porque un
+   126 significa cosas distintas en cada modelo y de otro modo no habría manera
+   de saber cuál se está mirando. */
+function celdasDePrecio(p) {
+  if (!usaPreciosPorCantidad(p)) {
+    return `
+      <td class="col-num prod-precio-viejo" title="Precio de mayorista, del modelo anterior">${soles(p.precioA)}</td>
+      <td class="col-num prod-precio-viejo" title="Precio intermedio, del modelo anterior">${soles(p.precioB)}</td>
+      <td class="col-num prod-precio-viejo" title="Precio de menudeo, del modelo anterior">${soles(p.precioC)}</td>
+      <td class="col-num prod-precio-viejo">—</td>`;
+  }
+  const esc = escalonesDe(p);
+  const celda = i => {
+    const e = esc[i];
+    if (!e) return '<td class="col-num prod-precio-vacio">—</td>';
+    return `<td class="col-num">${soles(e.precio)}<small>desde ${e.desde}</small></td>`;
+  };
+  const flete = fleteDe(p);
+  return `
+    <td class="col-num">${soles(p.precioBase)}<small>desde 1</small></td>
+    ${celda(0)}
+    ${celda(1)}
+    <td class="col-num ${flete ? 'prod-con-flete' : 'prod-precio-vacio'}">${flete ? soles(flete) : '—'}</td>`;
+}
+
 function renderProductos() {
   const cuerpo = $('#prod-body');
   if (!cuerpo) return;
@@ -6946,10 +7145,15 @@ function renderProductos() {
     : productos;
 
   const bajos = productos.filter(p => p.activo !== false && stockDe(p.id) <= (Number(p.stockMin) || 0));
+  // Los que siguen cobrando por la categoría vieja del cliente. Se cuentan a la
+  // vista para que se sepa cuánto falta de pasar, en vez de tener que abrirlos
+  // uno a uno para averiguarlo.
+  const sinPasar = productos.filter(p => !usaPreciosPorCantidad(p));
   $('#prod-chips').innerHTML = [
     `<span class="chip">🛒 ${productos.length} producto${productos.length === 1 ? '' : 's'}</span>`,
     `<span class="chip">✅ ${productosActivos().length} activo${productosActivos().length === 1 ? '' : 's'}</span>`,
     bajos.length ? `<span class="chip chip-alerta">⚠️ ${bajos.length} con stock bajo</span>` : '',
+    sinPasar.length ? `<span class="chip chip-aviso" title="Siguen cobrando el precio de siempre hasta que los abras y les grabes los precios nuevos">📝 ${sinPasar.length} sin pasar a precios por cantidad</span>` : '',
   ].filter(Boolean).join('');
 
   $('#prod-vacio').hidden = !!lista.length;
@@ -6972,9 +7176,7 @@ function renderProductos() {
       <td class="col-cod"><code>${escapeHtml(p.codigo || '—')}</code></td>
       <td class="prod-nombre">${escapeHtml(p.nombre)}${p.activo === false ? ' <span class="prod-etq">inactivo</span>' : ''}</td>
       <td class="col-um">${PRESENTACIONES[presentacionDe(p)].nombre} <small>${umDe(p)}</small></td>
-      <td class="col-num">${soles(p.precioA)}</td>
-      <td class="col-num">${soles(p.precioB)}</td>
-      <td class="col-num">${soles(p.precioC)}</td>
+      ${celdasDePrecio(p)}
       <td class="col-num ${bajo ? 'prod-stock-bajo' : ''}" title="${bajo ? `Stock mínimo: ${min}` : ''}">${stock}${bajo ? ' ⚠️' : ''}</td>
       <td class="col-acc">${permitido ? `
         <button type="button" class="btn btn-secondary btn-small" data-editar-producto="${escapeHtml(p.id)}" title="Editar (pide tu código)">✏️</button>
@@ -6995,6 +7197,61 @@ async function editarProductoConClave(id) {
   abrirFormProducto(p);
 }
 
+/* Deja el formulario con los precios del producto.
+
+   Con un producto que todavía no se ha pasado, el precio base viene puesto con
+   su precio de MENUDEO. Es el más alto de los tres, y de los tres es el único
+   que no puede cobrar de menos por descuido: si el modelo nuevo arrancara con
+   el de mayorista, guardar sin mirar le regalaría el precio de mayorista a
+   todo el mundo. Es una propuesta, no una decisión: hasta que no se le dé a
+   guardar, ese producto sigue cobrando exactamente lo de siempre. */
+function llenarPreciosDelForm(producto) {
+  const esc = producto ? escalonesDe(producto) : [];
+  const nuevo = producto && usaPreciosPorCantidad(producto);
+  $('#prod-precio-a').value = producto
+    ? (nuevo ? producto.precioBase : (producto.precioC ?? ''))
+    : '';
+  $('#prod-desde-b').value = esc[0] ? esc[0].desde : '';
+  $('#prod-precio-b').value = esc[0] ? esc[0].precio : '';
+  $('#prod-desde-c').value = esc[1] ? esc[1].desde : '';
+  $('#prod-precio-c').value = esc[1] ? esc[1].precio : '';
+  $('#prod-flete').value = producto && fleteDe(producto) ? fleteDe(producto) : '';
+  $('#prod-aviso-pasar').hidden = !(producto && !nuevo);
+  pintarSimulacionPrecios();
+}
+
+/* Enseña con números lo que se acaba de escribir: «1 saco 127.00 · desde 10,
+   125.00 · con flete 135.00». Una escala de precios escrita en tres cuadros
+   sueltos no se entiende hasta que se ve cobrada. */
+function pintarSimulacionPrecios() {
+  const caja = $('#prod-simulacion');
+  if (!caja) return;
+  const falso = leerPreciosDelForm();
+  if (!falso || !usaPreciosPorCantidad(falso)) { caja.textContent = ''; return; }
+  const partes = [`1 → ${soles(falso.precioBase)}`];
+  for (const e of escalonesDe(falso)) partes.push(`desde ${e.desde} → ${soles(e.precio)}`);
+  const flete = fleteDe(falso);
+  caja.innerHTML = `Así quedaría: <strong>${partes.join(' · ')}</strong>`
+    + (flete ? `<br>A quien pague flete, <strong>${soles(flete)} más por unidad</strong>: `
+        + `1 → ${soles(Number(falso.precioBase) + flete)}` : '');
+}
+
+/* Lee los cuadros de precio y devuelve un producto de mentira con la misma
+   forma que uno de verdad, para poder pasárselo a las mismas funciones que
+   deciden el precio en la venta. Devuelve null si el precio base no vale. */
+function leerPreciosDelForm() {
+  const base = Number($('#prod-precio-a').value);
+  if ($('#prod-precio-a').value === '' || !Number.isFinite(base) || base < 0) return null;
+  const escalones = [];
+  for (const l of ['b', 'c']) {
+    const desde = Number($(`#prod-desde-${l}`).value);
+    const precio = Number($(`#prod-precio-${l}`).value);
+    if ($(`#prod-desde-${l}`).value === '' && $(`#prod-precio-${l}`).value === '') continue;
+    escalones.push({ desde, precio });
+  }
+  return { precioBase: base, escalones, flete: Number($('#prod-flete').value) || 0 };
+}
+
 function abrirFormProducto(producto = null) {
   if (!puede('productosEditar')) { toast('🔒 No tienes permiso para gestionar productos'); return; }
   $('#prod-form').reset();
@@ -7003,9 +7260,7 @@ function abrirFormProducto(producto = null) {
   $('#prod-nombre').value = producto ? producto.nombre : '';
   $('#prod-presentacion').value = producto ? presentacionDe(producto) : 'unidad';
   $('#prod-stockmin').value = producto ? (Number(producto.stockMin) || 0) : 0;
-  $('#prod-precio-a').value = producto ? (producto.precioA ?? '') : '';
-  $('#prod-precio-b').value = producto ? (producto.precioB ?? '') : '';
-  $('#prod-precio-c').value = producto ? (producto.precioC ?? '') : '';
+  llenarPreciosDelForm(producto);
   $('#prod-activo').checked = producto ? producto.activo !== false : true;
   // El stock nunca se pone aquí: nace en cero y se carga desde
   // 📥 Ingreso de productos, para que nunca haya un stock que nadie pueda explicar.
@@ -7028,15 +7283,60 @@ async function guardarProductoForm(ev) {
   const repetido = codigoProductoRepetido(codigo, id);
   if (repetido) { toast(`⚠️ El código ${codigo} ya es de "${repetido.nombre}"`); return; }
 
-  const precios = ['a', 'b', 'c'].map(l => Number($(`#prod-precio-${l}`).value));
-  if (precios.some(p => !Number.isFinite(p) || p < 0)) { toast('⚠️ Revisa los tres precios'); return; }
+  const base = Number($('#prod-precio-a').value);
+  if ($('#prod-precio-a').value === '' || !Number.isFinite(base) || base < 0) {
+    toast('⚠️ Escribe el precio base');
+    $('#prod-precio-a').focus();
+    return;
+  }
+
+  /* Un escalón a medias —«desde 10» sin precio, o un precio sin cantidad— no se
+     puede guardar callando: el que lo escribió cree que dejó un precio puesto y
+     la venta seguiría cobrando el base sin decir nada. */
+  const escalones = [];
+  for (const [letra, nombreEsc] of [['b', 'B'], ['c', 'C']]) {
+    const textoDesde = $(`#prod-desde-${letra}`).value.trim();
+    const textoPrecio = $(`#prod-precio-${letra}`).value.trim();
+    if (!textoDesde && !textoPrecio) continue;
+    const desde = Math.floor(Number(textoDesde));
+    const precio = Number(textoPrecio);
+    if (!textoDesde || !Number.isInteger(desde) || desde < 2) {
+      toast(`⚠️ En el precio ${nombreEsc}, escribe desde cuántas unidades se aplica (2 o más)`);
+      $(`#prod-desde-${letra}`).focus();
+      return;
+    }
+    if (!textoPrecio || !Number.isFinite(precio) || precio < 0) {
+      toast(`⚠️ Falta el precio ${nombreEsc}`);
+      $(`#prod-precio-${letra}`).focus();
+      return;
+    }
+    if (escalones.some(e => e.desde === desde)) {
+      toast(`⚠️ Los precios B y C no pueden empezar en la misma cantidad (${desde})`);
+      $(`#prod-desde-${letra}`).focus();
+      return;
+    }
+    escalones.push({ desde, precio });
+  }
+  escalones.sort((a, b) => a.desde - b.desde);
+
+  const flete = Number($('#prod-flete').value) || 0;
+  if (flete < 0) { toast('⚠️ El cargo de flete no puede ser negativo'); return; }
 
   const producto = {
     id: id || nuevoId(),
     codigo,
     nombre,
     presentacion: $('#prod-presentacion').value,
-    precioA: precios[0], precioB: precios[1], precioC: precios[2],
+    // Precios por cantidad: el base desde 1 unidad, y hasta dos escalones
+    precioBase: base,
+    escalones,
+    flete,
+    // Los tres precios del modelo viejo se conservan tal cual estaban. No se
+    // usan más en cuanto hay precioBase, pero son el registro de a cuánto se
+    // vendía antes, y borrarlos haría imposible entender una nota vieja.
+    precioA: anterior ? anterior.precioA : base,
+    precioB: anterior ? anterior.precioB : base,
+    precioC: anterior ? anterior.precioC : base,
     stockMin: Number($('#prod-stockmin').value) || 0,
     activo: $('#prod-activo').checked,
     creado: anterior ? anterior.creado : Date.now(),
@@ -8533,7 +8833,6 @@ function renderVentas() {
   }
 
   cuerpo.innerHTML = lista.map(n => {
-    const cat = String(n.categoria || 'C').toUpperCase();
     const estado = estadoDeNota(n);
     const est = ESTADOS_NOTA[estado] || ESTADOS_NOTA.pendiente;
     const anulada = estado === 'anulada';
@@ -8543,7 +8842,7 @@ function renderVentas() {
       <td class="nv-num"><strong>${escapeHtml(numeroCorto(n.numero))}</strong></td>
       <td>${formatoFecha(n.fecha)}<small>${escapeHtml(n.hora || '')}</small></td>
       <td>${escapeHtml(n.clienteNombre || '—')}${motivo}</td>
-      <td class="col-um"><span class="cliente-cat cat-${cat}">${cat}</span></td>
+      <td class="col-um">${n.conFlete ? '<span class="cliente-etq cliente-etq-flete" title="Esta venta llevó cargo de flete">🚚</span>' : ''}</td>
       <td>${escapeHtml(n.zona || '—')}</td>
       <td><span class="ped-chip ${est.clase}">${est.etiqueta}</span></td>
       <td class="col-num">${(n.items || []).length}</td>
@@ -8611,6 +8910,11 @@ function abrirNuevaNota(base = null, editandoId = '', soloLectura = false) {
   }
   nvSoloLectura = soloLectura;
   $('#btn-nv-solo-seguir').hidden = true;   // se decide más abajo si aplica
+  // Se descongela SIEMPRE antes de nada. Sin esto, mirar una nota vieja dejaba
+  // el formulario bloqueado para el resto de la sesión: al darle a "Nueva nota"
+  // salía la pantalla correcta pero con los campos muertos y sin botón de
+  // guardar, y no había forma de volver a vender sin recargar la app.
+  descongelarFormularioNota();
   llenarSelectoresProducto();
   nvEditandoId = editandoId;
   nvItems = base ? (base.items || []).map(it => ({ ...it })) : [];
@@ -8626,7 +8930,7 @@ function abrirNuevaNota(base = null, editandoId = '', soloLectura = false) {
   nvProponerFechaPago();
   $('#nv-descuento').value = 0;
   // Tocar el precio a mano es un permiso aparte: a quien no lo tenga ni se le
-  // ofrece, y vende siempre con el precio de la categoría del cliente.
+  // ofrece, y vende siempre con el precio que salga de la escala del producto.
   $('#nv-permitir-precios').checked = false;
   $('.nv-permiso').hidden = !puede('preciosEditar');
   /* La serie, el número y la fecha de emisión son el talonario: cambiarlos a
@@ -8645,12 +8949,35 @@ function abrirNuevaNota(base = null, editandoId = '', soloLectura = false) {
   $('#nv-fecha').title = porQue;
   $('#nv-cantidad').value = '';
   limpiarBuscadorNota();
-  nvSeleccionarCliente(base ? (base.clienteId || '') : '');
+  // Con `false`: una nota que ya existe se abre con SUS precios, los del papel
+  // que firmó el cliente, no con los que tenga el catálogo hoy.
+  nvSeleccionarCliente(base ? (base.clienteId || '') : '', !base);
   actualizarNavEntreNotas();
   if (soloLectura) aplicarSoloLecturaNota(base);
   mostrarVistaVenta('form');
   renderNotaItems();
   window.scrollTo(0, 0);
+}
+
+/* CAMPOS_NOTA_CONGELABLES: los que se apagan al mirar una nota en solo lectura.
+   La lista está una sola vez y la usan las dos funciones: si se apaga algo que
+   luego nadie enciende, el formulario se queda muerto. */
+const CAMPOS_NOTA_CONGELABLES = ['nv-serie', 'nv-correlativo', 'nv-fecha', 'nv-cliente-buscar',
+  'nv-condicion', 'nv-fpago', 'nv-buscar-producto', 'nv-cantidad', 'nv-permitir-precios', 'nv-descuento'];
+
+/* Lo contrario de aplicarSoloLecturaNota(): devuelve el formulario a un estado
+   en el que se puede escribir. Lo que dependa del permiso de quien entró (la
+   serie, la fecha) se vuelve a decidir un poco más abajo, en abrirNuevaNota. */
+function descongelarFormularioNota() {
+  CAMPOS_NOTA_CONGELABLES.forEach(id => {
+    const el = $('#' + id);
+    if (el) { el.disabled = false; el.readOnly = false; }
+  });
+  $('#btn-nv-cliente-nuevo').hidden = false;
+  $('#btn-nv-agregar').hidden = false;
+  $('#btn-nv-guardar').hidden = false;
+  $('#btn-nv-guardar-imprimir').hidden = false;
+  $('#btn-nv-cancelar').textContent = 'Cancelar';
 }
 
 /* Deja el mismo formulario congelado: nada que tocar, nada que guardar. Se
@@ -8662,8 +8989,7 @@ function aplicarSoloLecturaNota(nota) {
   // Anterior/Siguiente se queda: se sigue pudiendo pasar de una nota a la
   // vecina estando aquí, no solo estando en "Modificando" (los deja listos
   // actualizarNavEntreNotas(), que ya se llamó más arriba).
-  ['nv-serie', 'nv-correlativo', 'nv-fecha', 'nv-cliente-buscar', 'nv-condicion', 'nv-fpago',
-    'nv-buscar-producto', 'nv-cantidad', 'nv-permitir-precios', 'nv-descuento'].forEach(id => {
+  CAMPOS_NOTA_CONGELABLES.forEach(id => {
     const el = $('#' + id);
     if (el) el.disabled = true;
   });
@@ -8697,10 +9023,13 @@ function nvRenderSugerencias(texto) {
   }
   nvComboIndice = -1;
   caja.innerHTML = encontrados.map((c, i) => {
-    const cat = categoriaDe(c);
+    // Se avisa aquí, en la propia lista, de a quién no se le puede fiar: el
+    // vendedor lo ve antes de elegirlo, no después de armarle la nota entera.
+    const lleno = topeDeCreditoAlcanzado(c);
     return `<button type="button" class="combo-item" data-nv-cliente="${escapeHtml(c.id)}" data-i="${i}">
-      <span class="cliente-cat cat-${cat}">${cat}</span>
       <span class="combo-nombre">${escapeHtml(c.nombre)}</span>
+      ${clientePagaFlete(c) ? '<span class="cliente-etq cliente-etq-flete">🚚</span>' : ''}
+      ${lleno ? '<span class="cliente-etq cliente-etq-tope">sin cupo</span>' : ''}
       <small>${escapeHtml(c.codigo || '')} ${c.zona ? '· ' + escapeHtml(c.zona) : ''}</small>
     </button>`;
   }).join('');
@@ -8713,7 +9042,7 @@ function nvCerrarSugerencias() {
   nvComboIndice = -1;
 }
 
-function nvSeleccionarCliente(id) {
+function nvSeleccionarCliente(id, reponer = true) {
   nvClienteId = id || '';
   $('#nv-cliente-id').value = nvClienteId;
   nvCerrarSugerencias();
@@ -8722,11 +9051,13 @@ function nvSeleccionarCliente(id) {
   $('#nv-ficha').hidden = !cli;
   $('#nv-sin-cliente').hidden = !!cli;
   if (cli) {
-    const cat = categoriaDe(cli);
+    // Lo que este cliente tiene de particular al venderle: si paga camión y si
+    // le queda cupo para fiarle. Va arriba del todo porque son las dos cosas
+    // que cambian lo que se puede hacer en esta pantalla.
     const insignia = $('#nv-ficha-cat');
-    insignia.textContent = cat;
-    insignia.className = `nv-cat cat-${cat}`;
-    insignia.title = `Categoría de precio ${cat} · ${CATEGORIAS[cat].detalle}`;
+    insignia.hidden = !clientePagaFlete(cli);
+    insignia.textContent = '🚚 flete';
+    insignia.title = 'A cada producto se le suma su cargo de flete';
     $('#nv-fc-nombre').textContent = cli.nombre;
     $('#nv-fc-codigo').textContent = cli.codigo || '—';
     $('#nv-fc-zona').textContent = cli.zona || '—';
@@ -8743,23 +9074,55 @@ function nvSeleccionarCliente(id) {
   } else {
     $('#nv-serie-pista').textContent = 'La serie se elige sola según la zona';
   }
-  // Al cambiar de cliente cambia la categoría: se repone el precio de lista de
-  // las líneas que nadie tocó a mano (las editadas se respetan).
-  reponerPreciosDeLista();
+  avisarDelTopeDeCredito(cli);
+  // Al cambiar de cliente puede cambiar el precio (paga flete o no): se repone
+  // el de lista en las líneas que nadie tocó a mano.
+  if (reponer) reponerPreciosDeLista();
   renderNotaItems();
 }
 
-function categoriaActual() {
-  const cli = nvClienteId ? clientePorId(nvClienteId) : null;
-  return cli ? categoriaDe(cli) : 'C';
+/* Avisa en cuanto se elige el cliente, no al final. Enterarse de que no se le
+   puede fiar después de haberle metido quince productos a la nota es hacer
+   trabajar para nada a quien está de cara al cliente. */
+function avisarDelTopeDeCredito(cli) {
+  const caja = $('#nv-aviso-tope');
+  if (!caja) return;
+  const alContado = $('#nv-condicion') && $('#nv-condicion').value === 'contado';
+  const lleno = cli && !alContado ? topeDeCreditoAlcanzado(cli, creditoDeNotaEnEdicion()) : null;
+  caja.hidden = !lleno;
+  if (!lleno) return;
+  caja.innerHTML = `🚫 <strong>${escapeHtml(cli.nombre)}</strong> tiene `
+    + `<strong>${lleno.abiertos} crédito${lleno.abiertos === 1 ? '' : 's'} sin pagar</strong>`
+    + ` y su límite es ${lleno.tope}. No se le puede emitir otra nota a crédito hasta que cobre.`
+    + ' <span class="nv-aviso-salida">Al contado sí se puede.</span>';
 }
 
+/* El crédito de la nota que se está modificando, si la hay: ese ya está contado
+   en la deuda del cliente y no puede contar dos veces contra su propio tope. */
+function creditoDeNotaEnEdicion() {
+  if (!nvEditandoId) return '';
+  const n = notas.find(x => x.id === nvEditandoId);
+  const c = n ? creditoDeNota(n) : null;
+  return c ? c.id : '';
+}
+
+function clienteDeLaNota() {
+  return nvClienteId ? clientePorId(nvClienteId) : null;
+}
+
+/* Vuelve a poner el precio de lista en las líneas que nadie tocó a mano. Ahora
+   el precio depende de la cantidad de cada línea, así que hay que rehacerlo
+   línea por línea y no una vez para toda la nota.
+
+   OJO: esto NO se llama al abrir una nota que ya existe. Una nota emitida se
+   mira con los precios con los que se emitió, no con los de hoy; si no, el
+   papel firmado por el cliente y la pantalla dirían cosas distintas. */
 function reponerPreciosDeLista() {
-  const cat = categoriaActual();
+  const cli = clienteDeLaNota();
   for (const it of nvItems) {
     if (it.precioEditado) continue;
     const p = productoPorId(it.productoId);
-    if (p) it.precio = precioDe(p, cat);
+    if (p) it.precio = precioDeVenta(p, it.cantidad, cli);
   }
 }
 
@@ -8810,6 +9173,10 @@ function agregarItemNota() {
   const yaEsta = nvItems.find(it => it.productoId === id && !it.bonificacion);
   if (yaEsta) {
     yaEsta.cantidad = (Number(yaEsta.cantidad) || 0) + cantidad;
+    // Al sumarse puede haber cruzado un escalón: pedir 6 y luego 6 más son 12,
+    // y a 12 le toca el precio de «desde 10». Si no se repusiera aquí, salir
+    // más barato dependería de si se escribieron de una vez o en dos veces.
+    if (!yaEsta.precioEditado) yaEsta.precio = precioDeVenta(p, yaEsta.cantidad, clienteDeLaNota());
   } else {
     nvItems.push({
       productoId: p.id,
@@ -8817,7 +9184,7 @@ function agregarItemNota() {
       descripcion: p.nombre,
       um: umDe(p),
       cantidad,
-      precio: precioDe(p, categoriaActual()),
+      precio: precioDeVenta(p, cantidad, clienteDeLaNota()),
       precioEditado: false,
     });
   }
@@ -8834,6 +9201,26 @@ function cuentaDeLinea(it) {
   const importe = (Number(it.cantidad) || 0) * (Number(it.precio) || 0);
   const dsctoBonif = it.bonificacion ? importe : 0;
   return { importe, dsctoBonif, neto: importe - dsctoBonif };
+}
+
+/* Por qué esta línea cuesta lo que cuesta. Sin esto, el precio de un producto
+   cambia solo al escribir otra cantidad y parece un fallo; con esto se lee que
+   entró un escalón. También avisa de lo que falta para el siguiente, que es la
+   pregunta que hace el cliente al otro lado del mostrador. */
+function explicacionDelPrecio(producto, it) {
+  if (!producto || !usaPreciosPorCantidad(producto)) return '';
+  const partes = [];
+  const cantidad = Math.floor(Number(it.cantidad) || 0);
+  const aplicado = escalonQueAplica(producto, cantidad);
+  if (aplicado) partes.push(`precio por ${aplicado.desde} o más`);
+  const siguiente = escalonesDe(producto).find(e => e.desde > cantidad);
+  if (siguiente) {
+    partes.push(`con ${siguiente.desde - cantidad} más, a ${soles(siguiente.precio)}`);
+  }
+  if (clientePagaFlete(clienteDeLaNota()) && fleteDe(producto)) {
+    partes.push(`incluye ${soles(fleteDe(producto))} de flete`);
+  }
+  return partes.length ? `<small class="nv-precio-escalon">${escapeHtml(partes.join(' · '))}</small>` : '';
 }
 
 function renderNotaItems() {
@@ -8863,7 +9250,7 @@ function renderNotaItems() {
       <td>${escapeHtml(it.descripcion || '')}
         ${it.bonificacion ? '<span class="nv-etq-bonif">Bonificación</span>' : ''}
         ${falta ? `<small class="nv-sin-stock">⚠️ solo hay ${stock} en almacén</small>` : ''}
-        ${it.precioEditado ? '<small class="nv-precio-tocado">precio modificado a mano</small>' : ''}</td>
+        ${it.precioEditado ? '<small class="nv-precio-tocado">precio modificado a mano</small>' : explicacionDelPrecio(p, it)}</td>
       ${celdaCant}
       <td class="col-um">${escapeHtml(it.um || '')}</td>
       ${celdaPrecio}
@@ -8905,6 +9292,24 @@ function armarNota() {
   const cli = nvClienteId ? clientePorId(nvClienteId) : null;
   if (!cli) { toast('⚠️ Elige el cliente de la nota'); $('#nv-cliente-buscar').focus(); return null; }
   if (!nvItems.length) { toast('⚠️ Agrega al menos un producto'); return null; }
+
+  /* El tope de créditos del cliente. Se comprueba aquí, en el sitio por el que
+     pasa toda nota antes de grabarse, y no solo al elegir el cliente: entre una
+     cosa y la otra pudo entrar un crédito desde otra tablet.
+
+     Solo frena las de CRÉDITO. Al contado el cliente paga en el acto y no
+     aumenta lo que debe; negarse a cobrarle sería el negocio al revés. */
+  if ($('#nv-condicion').value === 'credito') {
+    const lleno = topeDeCreditoAlcanzado(cli, creditoDeNotaEnEdicion());
+    if (lleno) {
+      alert(`No se le puede emitir otra nota a crédito a ${cli.nombre}.\n\n`
+        + `Tiene ${lleno.abiertos} crédito${lleno.abiertos === 1 ? '' : 's'} sin pagar `
+        + `y su límite es ${lleno.tope}.\n\n`
+        + 'Se puede hacer al contado, o cobrarle antes lo que debe. '
+        + 'Para subirle el límite, el administrador lo cambia en su ficha de cliente.');
+      return null;
+    }
+  }
   const { subtotal, bonificacion, descuento, total } = recalcularTotalesNota();
   const previa = nvEditandoId ? notas.find(x => x.id === nvEditandoId) : null;
   return {
@@ -8919,7 +9324,13 @@ function armarNota() {
     clienteRuc: cli.ruc || '',
     clienteDireccion: cli.direccion || '',
     clienteTelefono: cli.telefono || '',
+    // Del modelo viejo; se sigue anotando porque las notas emitidas la llevan y
+    // los productos sin pasar todavía cobran por ella.
     categoria: categoriaDe(cli),
+    // Si esta venta llevó cargo de camión. Se guarda EN LA NOTA y no se mira en
+    // la ficha del cliente al consultarla: si mañana se le quita el flete, la
+    // nota de hoy tiene que seguir explicando por qué se cobró lo que se cobró.
+    conFlete: clientePagaFlete(cli),
     zona: cli.zona || '',
     condicion: $('#nv-condicion').value,
     fechaPago: $('#nv-fpago').value || '',
@@ -9850,6 +10261,9 @@ function inicializarEventos() {
   $('#btn-prod-nuevo').addEventListener('click', () => abrirFormProducto());
   $('#btn-prod-cancelar').addEventListener('click', () => $('#modal-producto').close());
   $('#prod-form').addEventListener('submit', guardarProductoForm);
+  // La escala se entiende viéndola cobrada, así que se recalcula mientras se
+  // escribe en cualquiera de los cinco cuadros
+  $('.prod-precios').addEventListener('input', pintarSimulacionPrecios);
   $('#prod-buscar').addEventListener('input', renderProductos);
   $('#prod-body').addEventListener('click', ev => {
     const editar = ev.target.closest('[data-editar-producto]');
@@ -10128,14 +10542,22 @@ function inicializarEventos() {
       const it = nvItems[Number(cant.dataset.nvCant)];
       // Sin decimales: no se vende medio saco. Se recorta al entero de abajo
       // en vez de rechazarlo, para no pelearse con quien está escribiendo.
-      if (it) { it.cantidad = Math.max(0, Math.floor(Number(cant.value) || 0)); renderNotaItems(); }
+      if (it) {
+        it.cantidad = Math.max(0, Math.floor(Number(cant.value) || 0));
+        // El precio depende de la cantidad: cambiarla puede meter la línea en
+        // otro escalón, y el precio tiene que seguirla al momento. Un precio
+        // puesto a mano manda sobre la lista y no se toca.
+        const p = productoPorId(it.productoId);
+        if (p && !it.precioEditado) it.precio = precioDeVenta(p, it.cantidad, clienteDeLaNota());
+        renderNotaItems();
+      }
     } else if (precio) {
       const it = nvItems[Number(precio.dataset.nvPrecio)];
       if (!it) return;
       const nuevo = Number(precio.value) || 0;
       const p = productoPorId(it.productoId);
       it.precio = nuevo;
-      it.precioEditado = !!p && nuevo !== precioDe(p, categoriaActual());
+      it.precioEditado = !!p && nuevo !== precioDeVenta(p, it.cantidad, clienteDeLaNota());
       // Se recalcula solo el total: redibujar entero quitaría el foco del campo
       recalcularTotalesNota();
       const fila = precio.closest('tr');
@@ -10176,7 +10598,12 @@ function inicializarEventos() {
     nvNumero = armarNumeroNota(nvSerieElegida(), nvCorrelativoEscrito());
     nvAvisarNumero();
   });
-  $('#nv-condicion').addEventListener('change', nvProponerFechaPago);
+  $('#nv-condicion').addEventListener('change', () => {
+    nvProponerFechaPago();
+    // Pasar a CONTADO es la salida cuando el cliente llegó a su tope: el aviso
+    // de "no se le puede fiar" tiene que desaparecer en cuanto se toma.
+    avisarDelTopeDeCredito(clienteDeLaNota());
+  });
   $('#btn-nv-guardar').addEventListener('click', () => guardarNota(false));
   $('#btn-nv-guardar-imprimir').addEventListener('click', () => guardarNota(true));
 
@@ -10662,6 +11089,14 @@ async function iniciarLocal() {
   llenarSelectClientes();
   renderClientes();
   llenarSelectoresProducto();
+  // Las tablas del almacén también, que `render()` no las toca. Sin esto, en
+  // modo local (sin cuenta en la nube) Productos, Kardex, Ingresos y Ventas se
+  // abrían vacíos hasta que algo las repintara: en la nube no se notaba porque
+  // las repinta la primera respuesta del servidor.
+  renderProductos();
+  renderKardex();
+  renderIngresos();
+  renderVentas();
   await cargarMiniaturas();
   render();
   // Recién ahora se sabe que es local (sin restricciones): se corrige el

@@ -62,7 +62,6 @@ const { chromium } = require('playwright-core');
   await p.waitForTimeout(400);
   await p.fill('#cli-nombre', 'Teresa');
   await p.selectOption('#cli-zona', 'MILAGROS');
-  await p.selectOption('#cli-categoria', 'B');
   await p.evaluate(() => document.getElementById('btn-cli-guardar').click());
   await p.waitForTimeout(900);
   // Un crédito ya no se crea a mano: nace de una nota de venta que sale a
@@ -72,7 +71,7 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
   await p.waitForTimeout(400);
   await p.fill('#prod-nombre', 'HARINA X50KG');
-  for (const c of ['a', 'b', 'c']) await p.fill(`#prod-precio-${c}`, '100');
+  await p.fill('#prod-precio-a', '100');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(700);
   await p.evaluate(() => document.getElementById('nav-ingresos').click());

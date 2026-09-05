@@ -23,8 +23,12 @@ const { chromium } = require('playwright-core');
 
   const stock = async () => p.evaluate(() => {
     document.getElementById('nav-productos').click();
+    // La columna de stock se busca por su título y no por su número: contarlas
+    // a mano es lo que las rompió al añadir la del flete.
+    const iStock = [...document.querySelectorAll('#prod-tabla thead th')]
+      .findIndex(th => /stock/i.test(th.textContent));
     const fila = document.querySelector('#prod-body tr');
-    return fila ? fila.querySelectorAll('td')[6].textContent.trim().replace(' ⚠️', '') : '';
+    return fila ? fila.cells[iStock].textContent.trim().replace(' ⚠️', '') : '';
   });
   const irA = async (id, ms = 900) => {
     await p.evaluate(x => document.getElementById(x).click(), id);
@@ -36,7 +40,7 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('btn-prod-nuevo').click());
   await p.waitForTimeout(500);
   await p.fill('#prod-nombre', 'HARINA ITALIANA X50KG');
-  for (const l of ['a', 'b', 'c']) await p.fill(`#prod-precio-${l}`, '100');
+  await p.fill('#prod-precio-a', '100');
   await p.evaluate(() => document.querySelector('#prod-form button[type=submit]').click());
   await p.waitForTimeout(800);
   await irA('nav-ingresos', 700);

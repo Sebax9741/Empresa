@@ -49,6 +49,28 @@ Una **venta al contado** también crea su crédito, pero nace ya pagado y con
 saldo cero, sin ningún abono inventado. Así ese dinero no se cuela en la hoja
 de cobranza del día, que es para lo que se sale a cobrar.
 
+**Cómo se decide un precio, que es lo otro que confunde:**
+
+El precio lo decide la **cantidad**, no quién compra. Cada producto lleva un
+precio base y hasta dos escalones («desde 10, 125»), más un cargo de flete en
+soles por unidad que se suma **solo** a los clientes marcados con `aplicaFlete`
+en su ficha. Todo eso lo resuelve `precioDeVenta()`, y es el **único** sitio
+donde se decide un precio: si hace falta uno en otra parte, se llama ahí.
+
+Antes el precio lo decidía la categoría A/B/C del cliente. Ese modelo **sigue
+vivo** para los productos que aún no se han pasado, y los dos conviven a
+propósito: un producto cambia de modelo el día que alguien le graba su precio
+base, no antes. `usaPreciosPorCantidad()` distingue uno de otro. Así se puede
+ir pasando el catálogo sin que ningún precio se mueva un solo día sin que
+alguien lo haya escrito.
+
+**Una venta ya emitida no se recalcula nunca.** Cada línea guarda su precio y
+su importe dentro de la propia nota, y el crédito su monto. Por eso
+`reponerPreciosDeLista()` **no** se llama al abrir una nota que ya existe (ver
+el tercer argumento de `nvSeleccionarCliente`): si se llamara, una nota vieja
+se vería con los precios de hoy y diría algo distinto del papel que el cliente
+tiene firmado en la mano.
+
 Los cobradores trabajan **en la calle, con tablet y muchas veces sin señal**.
 Todo tiene que funcionar sin internet y sincronizarse después.
 
@@ -142,6 +164,16 @@ de todo y cualquier cosa colgada del `body` queda detrás, invisible.
 **Un `<select>` obligatorio no se puede esconder con `display:none`**, o el
 navegador se queja de que no puede enfocar un campo inválido y el formulario
 no se envía. Por eso se esconde con `opacity: 0`.
+
+**La columna de una tabla no se cuenta a mano.** Varias pruebas leían el stock
+con `cells[6]`, y añadir una columna delante las rompió todas de golpe. Se
+busca por el título de la cabecera (`findIndex(th => /stock/i…)`).
+
+**El formulario de la nota se congela al mirar una nota vieja**
+(`aplicarSoloLecturaNota`). Todo lo que se apague ahí hay que encenderlo en
+`descongelarFormularioNota()`, que corre al abrir cualquier nota. Si se apaga
+algo y nadie lo enciende, el vendedor se queda sin poder vender hasta que
+recargue la app — y eso ya pasó una vez.
 
 ---
 

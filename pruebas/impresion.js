@@ -1,26 +1,88 @@
 const { chromium } = require('playwright-core');
-const fs = require('fs');
+const fs = require('fs');   // solo para releer los PDF que esta misma prueba genera
 
 /* La nota de venta se imprime en media hoja A4 usada en vertical (A5 de pie).
-   Se comprueba sobre el HTML que la app manda de verdad a la impresora. */
+   Se comprueba sobre el HTML que la app manda de verdad a la impresora.
+
+   Ese HTML se le pide a la propia app (`documentoDeNota`), no a un archivo
+   guardado a mano. Antes se leía de `pruebas/nota-impresa.html`, que no lo
+   genera ninguna prueba y está excluido del repositorio: quien clonara el
+   proyecto se encontraba con que esta prueba no arrancaba. */
 const MM = 3.779527;                    // 1 mm en píxeles CSS a 96 ppp
 const ANCHO_UTIL = 136 * MM;            // 148 − 6 − 6 de márgenes
 const ALTO_UTIL = 198 * MM;             // 210 − 6 − 6
 
+/* Una nota de mentira con la forma de una de verdad. `bonif` le añade una
+   línea regalada, que es lo que hace aparecer la séptima columna. */
+function notaDePrueba(bonif) {
+  const linea = (cod, desc, cant, precio, regalada) => {
+    const importe = regalada ? 0 : cant * precio;
+    return { productoId: cod, codigo: cod, descripcion: desc, um: 'SAC', cantidad: cant,
+      precio, importe: cant * precio, bonificacion: !!regalada,
+      dsctoBonif: regalada ? cant * precio : 0, neto: importe };
+  };
+  const items = [
+    linea('PR-0001', 'HARINA ITALIANA * 50 KG', 10, 125),
+    linea('PR-0002', 'ACEITE ISASOL *20 LT', 4, 144),
+    linea('PR-0004', 'ARROZ CARIJO 30*1KG', 6, 114),
+  ];
+  if (bonif) items.push(linea('PR-0003', 'AZUCAR RUBIA * 50 KG', 1, 120, true));
+  const subtotal = items.reduce((s, it) => s + it.importe, 0);
+  const bonificacion = items.reduce((s, it) => s + it.dsctoBonif, 0);
+  return {
+    id: 'n1', numero: '0001-00004181', serie: '0001', fecha: '2026-09-05', hora: '10:15 a. m.',
+    clienteNombre: 'BODEGA LA ESQUINA', clienteCodigo: 'C001', clienteRuc: '20512345678',
+    clienteDireccion: 'AV. ERNESTO RIVERO 546', clienteTelefono: '987 654 321',
+    zona: 'CIUDAD', condicion: 'credito', fechaPago: '2026-10-05', emitidaPor: 'dueño',
+    items, subtotal, bonificacion, descuento: 0, total: subtotal - bonificacion,
+    enLetras: 'DOS MIL VEINTISEIS CON 00/100 SOLES', creado: Date.now(),
+  };
+}
+
 (async () => {
-  const html = fs.readFileSync('pruebas/nota-impresa.html', 'utf8').replace(/<script>[\s\S]*?<\/script>/, '');
   const ok = (t, c, x = '') => console.log(`${c ? '✅' : '❌'} ${t}${x ? ' — ' + x : ''}`);
   const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: Math.round(ANCHO_UTIL), height: Math.round(ALTO_UTIL) } });
+
+  // Se le pide el documento a la app, en una pestaña aparte que luego se cierra
+  const generar = await (async () => {
+    const pa = await ctx.newPage();
+    await pa.route('**/firebase-config.js', r => r.fulfill({
+      contentType: 'application/javascript', body: 'window.FIREBASE_CONFIG = { apiKey: "X" };' }));
+    await pa.route('**/js/app.js', async r => {
+      const cuerpo = await (await r.fetch()).text();
+      await r.fulfill({ contentType: 'application/javascript',
+        body: cuerpo + '\n;window.__documentoDeNota = documentoDeNota;' });
+    });
+    await pa.goto('http://localhost:8099/index.html');
+    await pa.waitForTimeout(1300);
+    // El tercer argumento pide UNA sola copia. Para medir hace falta una: las
+    // dos juntas suman el doble de alto y nada cabría nunca en la hoja.
+    const hacer = async (nota, unaCopia) =>
+      (await pa.evaluate(([n, u]) => window.__documentoDeNota(n, false, u), [nota, unaCopia]))
+        .replace(/<script>[\s\S]*?<\/script>/, '');
+    const salida = {
+      simple: await hacer(notaDePrueba(false), true),
+      dobleCopia: await hacer(notaDePrueba(false), false),
+      conBonif: await hacer(notaDePrueba(true), true),
+    };
+    await pa.close();
+    return salida;
+  })();
+  const html = generar.simple;
+
   const p = await ctx.newPage();
 
   // ── 1) El tamaño de hoja que declara ──
   ok('Declara media hoja A4 en vertical', /@page\s*\{[^}]*size:\s*A5\s+portrait/.test(html),
     (html.match(/size:\s*A5[^;]*/) || [])[0]);
 
-  // Para medir se usa una sola copia: las dos juntas suman el doble de alto
+  /* Los documentos de medir ya vienen con una sola copia (se piden así), pero
+     las variantes que se arman más abajo recortando texto pueden traer las dos.
+     La primera copia lleva `class="copia copia-primera"`, así que no vale
+     partir por la cadena exacta `<div class="copia">`. */
   const unaSola = t => {
-    const partes = t.split('<div class="copia">');
+    const partes = t.split(/<div class="copia(?: copia-primera)?">/);
     return partes.length > 2 ? partes[0] + '<div class="copia">' + partes[1] : t;
   };
   async function medir(docCompleto) {
@@ -49,8 +111,9 @@ const ALTO_UTIL = 198 * MM;             // 210 − 6 − 6
   ok('El nombre largo del cliente no se parte en más de dos líneas',
     m.lineasNombre <= 2, m.lineasNombre + ' líneas');
 
-  // El PDF de verdad, con el tamaño y las copias que pide el propio documento
-  await p.setContent(html, { waitUntil: 'load' });
+  // El PDF de verdad, con el tamaño y las copias que pide el propio documento.
+  // Aquí sí va el de DOS copias: es lo que sale por la impresora.
+  await p.setContent(generar.dobleCopia, { waitUntil: 'load' });
   await p.emulateMedia({ media: 'print' });
   await p.pdf({ path: 'pruebas/nota.pdf', preferCSSPageSize: true, printBackground: true });
   const pdf = fs.readFileSync('pruebas/nota.pdf');
@@ -62,9 +125,11 @@ const ALTO_UTIL = 198 * MM;             // 210 − 6 − 6
   const paginas = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
   ok('Salen DOS copias: una para el negocio y otra para el cliente',
     paginas === 2, paginas + ' hoja(s)');
+  // Dos copias, y el salto de página SOLO entre ellas: si el salto fuera
+  // después de la segunda, saldría una media hoja en blanco detrás de cada nota
   ok('Y no arrastra una media hoja en blanco detrás',
-    (html.match(/class="copia"/g) || []).length === 2
-      && /\.copia:first-child \{ break-after: page/.test(html));
+    (generar.dobleCopia.match(/class="copia[ "]/g) || []).length === 2
+      && /\.copia-primera \{ break-after: page/.test(generar.dobleCopia));
 
   // ── 3) Lo que ya no debe salir impreso ──
   await p.setContent(unaSola(html), { waitUntil: 'load' });
@@ -130,7 +195,7 @@ const ALTO_UTIL = 198 * MM;             // 210 − 6 − 6
   await p.screenshot({ path: 'pruebas/nota-largo.png', fullPage: true });
 
   // ── 6) La columna de bonificación solo sale cuando hace falta ──
-  const conBonif = fs.readFileSync('pruebas/nota-bonif.html', 'utf8').replace(/<script>[\s\S]*?<\/script>/, '');
+  const conBonif = generar.conBonif;
   const cols = t => (unaSola(t).match(/<th[ >]/g) || []).length;
   ok('Una nota sin bonificación no gasta ancho en esa columna', cols(html) === 6, cols(html) + ' columnas');
   ok('Y una con bonificación sí la lleva', cols(conBonif) === 7 && /Dscto\. bonif\./.test(conBonif),

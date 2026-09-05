@@ -889,14 +889,22 @@
       <div class="field-row">
         <label class="field"><span>Zona *</span>
           <select id="cli-zona" class="input" required></select></label>
-        <label class="field"><span>Categoría de precio *</span>
-          <select id="cli-categoria" class="input" required>
-            <option value="A">A — Mayorista</option>
-            <option value="B">B — Intermedio</option>
-            <option value="C" selected>C — Menudeo</option>
-          </select>
-          <small>Decide qué precio se cobra en la nota de venta.</small></label>
+        <label class="field"><span>Límite de créditos <small>opcional</small></span>
+          <input type="number" id="cli-limite" class="input" min="0" step="1" placeholder="Sin límite">
+          <small id="cli-limite-ayuda">Al llegar a este número de créditos sin pagar, no se le podrán emitir más notas a crédito.</small></label>
       </div>
+
+      <!-- Condiciones de venta: lo que cambia el precio y lo que corta el fiado.
+           Van juntas y aparte de los datos de contacto porque son las dos cosas
+           de esta ficha que mueven dinero. -->
+      <fieldset class="cli-condiciones">
+        <legend>Condiciones de venta</legend>
+        <label class="field field-check">
+          <input type="checkbox" id="cli-flete">
+          <span>Se le cobra el cargo de flete
+            <small>a este cliente hay que llevarle la mercadería en camión: a cada producto se le suma su cargo</small></span>
+        </label>
+      </fieldset>
       <div class="field-row">
         <label class="field"><span>RUC / DNI <small>opcional</small></span>
           <input type="text" id="cli-ruc" class="input" inputmode="numeric" maxlength="15" placeholder="Ej: 20512345678"></label>
@@ -1196,9 +1204,10 @@
             <th class="col-cod">Código</th>
             <th>Producto</th>
             <th class="col-um">Presentación</th>
-            <th class="col-num col-precio">Precio A<small>Mayorista</small></th>
-            <th class="col-num col-precio">Precio B<small>Intermedio</small></th>
-            <th class="col-num col-precio">Precio C<small>Menudeo</small></th>
+            <th class="col-num col-precio">Precio A<small>base</small></th>
+            <th class="col-num col-precio">Precio B<small>por cantidad</small></th>
+            <th class="col-num col-precio">Precio C<small>por cantidad</small></th>
+            <th class="col-num col-precio">Flete<small>por unidad</small></th>
             <th class="col-num">Stock</th>
             <th class="col-acc">Acciones</th>
           </tr>
@@ -1237,20 +1246,54 @@
         <strong>📥 Ingreso de productos</strong> una vez guardado.
       </p>
 
+      <!-- Precios por cantidad. La cabecera "desde / precio" va una sola vez
+           arriba y las tres filas debajo, igual que la hoja de papel donde se
+           apuntan: así se lee en columna y se comparan los tres de un vistazo. -->
       <fieldset class="prod-precios">
-        <legend>Precios por categoría de cliente</legend>
-        <div class="field-row prod-fila-3">
-          <label class="field prod-precio">
-            <span><i class="cat-lbl cat-A">A</i> Mayorista</span>
-            <input type="number" id="prod-precio-a" class="input" min="0" step="0.01" required placeholder="0.00"></label>
-          <label class="field prod-precio">
-            <span><i class="cat-lbl cat-B">B</i> Intermedio</span>
-            <input type="number" id="prod-precio-b" class="input" min="0" step="0.01" required placeholder="0.00"></label>
-          <label class="field prod-precio">
-            <span><i class="cat-lbl cat-C">C</i> Menudeo</span>
-            <input type="number" id="prod-precio-c" class="input" min="0" step="0.01" required placeholder="0.00"></label>
+        <legend>Precios por cantidad</legend>
+        <p class="prod-aviso-pasar" id="prod-aviso-pasar" hidden>
+          📝 Este producto todavía cobra por la <strong>categoría del cliente</strong>, como antes.
+          El precio base viene puesto con su precio de menudeo. En cuanto guardes, pasará a
+          cobrarse <strong>por cantidad</strong>.
+        </p>
+        <div class="prod-escala">
+          <div class="prod-escala-cab">
+            <span></span>
+            <span>Desde <small>unidades</small></span>
+            <span>Precio <small>por unidad</small></span>
+          </div>
+          <div class="prod-escala-fila">
+            <span class="prod-escala-et"><i class="prec-lbl prec-A">A</i> Base</span>
+            <span class="prod-escala-fijo">1</span>
+            <input type="number" id="prod-precio-a" class="input" min="0" step="0.01" required placeholder="0.00"
+                   aria-label="Precio base, desde 1 unidad">
+          </div>
+          <div class="prod-escala-fila">
+            <span class="prod-escala-et"><i class="prec-lbl prec-B">B</i> Por cantidad</span>
+            <input type="number" id="prod-desde-b" class="input" min="2" step="1" placeholder="Ej: 10"
+                   aria-label="Desde cuántas unidades se aplica el precio B">
+            <input type="number" id="prod-precio-b" class="input" min="0" step="0.01" placeholder="0.00"
+                   aria-label="Precio B">
+          </div>
+          <div class="prod-escala-fila">
+            <span class="prod-escala-et"><i class="prec-lbl prec-C">C</i> Por cantidad</span>
+            <input type="number" id="prod-desde-c" class="input" min="2" step="1" placeholder="Ej: 50"
+                   aria-label="Desde cuántas unidades se aplica el precio C">
+            <input type="number" id="prod-precio-c" class="input" min="0" step="0.01" placeholder="0.00"
+                   aria-label="Precio C">
+          </div>
         </div>
-        <small class="prod-precios-ayuda">Al hacer una nota de venta se cobra el precio de la categoría que tenga el cliente.</small>
+        <small class="prod-precios-ayuda">Solo el precio base es obligatorio. Los otros dos son para vender más barato
+          por cantidad: déjalos vacíos si este producto no lo hace.</small>
+
+        <label class="field prod-flete">
+          <span>Cargo de flete <small>soles por unidad</small></span>
+          <input type="number" id="prod-flete" class="input" min="0" step="0.01" placeholder="0.00">
+          <small>Se le suma al precio, pero <strong>solo</strong> a los clientes marcados en su ficha
+            (los que hay que atender en camión).</small>
+        </label>
+
+        <p class="prod-simulacion" id="prod-simulacion" aria-live="polite"></p>
       </fieldset>
 
       <label class="field field-check">
@@ -1582,7 +1625,7 @@
               <th>N.º</th>
               <th>Emisión</th>
               <th>Cliente</th>
-              <th class="col-um">Cat.</th>
+              <th class="col-um" title="Ventas con cargo de flete">Flete</th>
               <th>Zona</th>
               <th>Estado</th>
               <th class="col-num">Ítems</th>
@@ -1665,10 +1708,11 @@
           <label class="field nv-cli-fpago"><span>F. de pago</span>
             <input type="date" id="nv-fpago" class="input"></label>
         </div>
-        <p class="nv-sin-cliente" id="nv-sin-cliente">Elige el cliente para ver su categoría de precio, su zona y su deuda.</p>
+        <p class="nv-sin-cliente" id="nv-sin-cliente">Elige el cliente para ver su zona, su deuda y sus condiciones de venta.</p>
+        <p class="nv-aviso-tope" id="nv-aviso-tope" hidden></p>
 
         <div class="nv-cli-datos" id="nv-ficha" hidden>
-          <span class="nv-cat" id="nv-ficha-cat" title="Categoría de precio">C</span>
+          <span class="nv-cat nv-cat-flete" id="nv-ficha-cat" hidden>🚚 flete</span>
           <div class="nv-dato nv-dato-ancho"><span>Cliente</span><strong id="nv-fc-nombre">—</strong></div>
           <div class="nv-dato"><span>Código</span><strong id="nv-fc-codigo">—</strong></div>
           <div class="nv-dato"><span>Zona</span><strong id="nv-fc-zona">—</strong></div>
