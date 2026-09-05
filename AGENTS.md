@@ -31,8 +31,23 @@ Nota de venta  →  Despacho (reparto)  →  Boleta firmada  →  Crédito  → 
 ```
 
 Una **nota de venta** y su **crédito** son la misma venta vista en dos
-momentos. La nota crea su crédito al nacer. Cambiar una cosa sin la otra deja
-la contabilidad mintiendo.
+momentos. Cambiar una cosa sin la otra deja la contabilidad mintiendo.
+
+**Cuándo nace el crédito, que es donde todo el mundo se equivoca:**
+
+```
+Nota guardada → crédito creado → despacho → ese MISMO crédito se completa
+```
+
+El crédito nace **al guardar la nota**, no cuando vuelve la boleta firmada
+(lo hace `crearCreditoDeLaNota()`, llamada desde `guardarNota()` cuando la
+nota es nueva). Al volver el reparto **no se crea otro**: se busca el que ya
+existe y se le añaden la foto de la boleta, las notas y el pago inicial.
+Quien crea que el crédito nace en el despacho acaba haciendo duplicados.
+
+Una **venta al contado** también crea su crédito, pero nace ya pagado y con
+saldo cero, sin ningún abono inventado. Así ese dinero no se cuela en la hoja
+de cobranza del día, que es para lo que se sale a cobrar.
 
 Los cobradores trabajan **en la calle, con tablet y muchas veces sin señal**.
 Todo tiene que funcionar sin internet y sincronizarse después.
