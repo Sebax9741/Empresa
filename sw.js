@@ -1,5 +1,5 @@
 /* Service worker: permite instalar la app y usarla sin internet */
-const CACHE = 'creditos-v146';
+const CACHE = 'creditos-v147';
 const ARCHIVOS = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const ARCHIVOS = [
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/lucide-LICENSE.txt',
 ];
 
 /* Los iconos en color. Van aparte porque no son críticos: si alguno fallara

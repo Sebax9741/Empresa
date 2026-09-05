@@ -46,7 +46,7 @@ const { chromium } = require('playwright-core');
     const estilo = selector => getComputedStyle(document.querySelector(selector));
     return {
       fuente: estilo('#view-dashboard').fontFamily,
-      interCargada: document.fonts.check('14px Inter'),
+      interCargada: document.fonts.check('13px Inter'),
       titulo: estilo('.dash-titulo').fontSize,
       indicador: estilo('.kpi-et').fontSize,
       panel: estilo('.panel-titulo').fontSize,
@@ -54,8 +54,24 @@ const { chromium } = require('playwright-core');
     };
   });
   ok('La escala tipográfica del Dashboard sigue la jerarquía de Shopify',
-    tipo.fuente.startsWith('Inter') && tipo.interCargada && tipo.titulo === '24px' && tipo.indicador === '13px' && tipo.panel === '14px' && tipo.mayusculas === 'none',
+    tipo.fuente.startsWith('Inter') && tipo.interCargada && tipo.titulo === '20px' && tipo.indicador === '12px' && tipo.panel === '13px' && tipo.mayusculas === 'none',
     JSON.stringify(tipo));
+
+  const densidad = await p.evaluate(() => {
+    const vista = document.getElementById('view-dashboard').getBoundingClientRect();
+    const indicador = document.querySelector('#dash-kpis .kpi').getBoundingClientRect();
+    return {
+      anchoVista: Math.round(vista.width),
+      anchoDisponible: window.innerWidth - Math.round(vista.left),
+      altoIndicador: Math.round(indicador.height),
+      iconosTrazo: document.querySelectorAll('#view-dashboard .dash-icono-trazo').length,
+      emojisIndicadores: /[💰📈⚠️📋✅📦]/u.test(document.getElementById('dash-kpis').textContent),
+    };
+  });
+  ok('A 100 % el Dashboard aprovecha el ancho y muestra indicadores compactos con iconos de trazo',
+    densidad.anchoVista >= densidad.anchoDisponible - 2 && densidad.altoIndicador <= 72
+      && densidad.iconosTrazo >= 8 && !densidad.emojisIndicadores,
+    JSON.stringify(densidad));
 
   const primeraKpi = await p.locator('#dash-kpis .kpi').first().boundingBox();
   await p.mouse.move(primeraKpi.x + primeraKpi.width / 2, primeraKpi.y + primeraKpi.height / 2);

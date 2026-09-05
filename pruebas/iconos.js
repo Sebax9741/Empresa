@@ -175,12 +175,12 @@ const { chromium } = require('playwright-core');
 
   await p.evaluate(() => document.getElementById('nav-dashboard').click());
   await p.waitForTimeout(700);
-  const kpis = await p.$$eval('.kpi-ico img.emo', is => is.map(i => ({
-    chip: i.getAttribute('src').includes('/chip/'), px: Math.round(i.getBoundingClientRect().width) })));
-  ok('Las tarjetas del Dashboard llevan el icono suelto (el recuadro ya lo pone la tarjeta)',
-    kpis.length > 0 && kpis.every(k => !k.chip), kpis.length + ' tarjetas');
-  ok('Y dentro de su recuadro el icono se ve, no nada en la caja',
-    kpis.every(k => k.px === 22), [...new Set(kpis.map(k => k.px))].join('/') + 'px');
+  const kpis = await p.$$eval('.kpi-ico .dash-icono-trazo', is => is.map(i => ({
+    px: Math.round(i.getBoundingClientRect().width), trazos: i.querySelectorAll('path, rect, circle').length })));
+  ok('Las tarjetas del Dashboard llevan los nuevos iconos sobrios de trazo',
+    kpis.length === 6 && kpis.every(k => k.trazos > 0), kpis.length + ' tarjetas');
+  ok('Y esos iconos son compactos, como los del panel de Shopify',
+    kpis.every(k => k.px === 18), [...new Set(kpis.map(k => k.px))].join('/') + 'px');
 
   // En ningún otro sitio debe colarse la versión con recuadro
   const chipSueltos = await p.evaluate(() => [...document.querySelectorAll('img.emo')]

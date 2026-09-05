@@ -4905,7 +4905,9 @@ function curvaSuave(pts) {
 /* Gráfico de área: cuánto se cobró cada mes */
 function graficoArea(datos) {
   if (!datos.length || datos.every(d => !d.valor)) return '<p class="chart-vacio">Todavía no hay cobros registrados.</p>';
-  const An = 720, Al = 240, mIzq = 52, mDer = 12, mSup = 14, mInf = 30;
+  // Menos alto que antes: a 100 % permite ver los siguientes paneles sin
+  // encoger el navegador, que es la densidad que se buscó en la referencia.
+  const An = 720, Al = 180, mIzq = 48, mDer = 12, mSup = 10, mInf = 25;
   const anchoUtil = An - mIzq - mDer, altoUtil = Al - mSup - mInf;
   const max = Math.max(...datos.map(d => d.valor)) * 1.15 || 1;
   const paso = datos.length > 1 ? anchoUtil / (datos.length - 1) : 0;
@@ -5185,6 +5187,30 @@ function datosActividad() {
 }
 
 /* ---- Dibujado del dashboard ---- */
+/* Iconos de trazo inspirados en la sobriedad de Shopify, tomados de Lucide
+   (licencia ISC). Se incrustan aquí para no añadir una librería ni depender
+   de internet; icons/lucide-LICENSE.txt conserva el aviso de la licencia. */
+const TRAZOS_ICONOS_DASHBOARD = {
+  cartera: '<path d="M3 11h3.75a2 2 0 0 1 1.6.8l.45.6a4 4 0 0 0 6.4 0l.45-.6a2 2 0 0 1 1.6-.8H21"/><path d="M3 7h18"/><rect x="3" y="3" width="18" height="18" rx="2"/>',
+  tendencia: '<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>',
+  alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  portapapeles: '<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  listo: '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+  camion: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2M15 18H9M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+  acuerdo: '<path d="m11 17 2 2a1 1 0 1 0 3-3M14 14l2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4M21 3l1 11h-2M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3M3 4h8"/>',
+  campana: '<path d="M10.268 21a2 2 0 0 0 3.464 0M22 8c0-2.3-.8-4.3-2-6M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326M4 2C2.8 3.7 2 5.7 2 8"/>',
+  billete: '<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>',
+  telefono: '<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+  banco: '<path d="M10 18v-7M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949zM14 18v-7M18 18v-7M3 22h18M6 18v-7"/>',
+  reloj: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+};
+
+function iconoDashboard(nombre) {
+  return `<svg class="dash-icono-trazo" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+    ${TRAZOS_ICONOS_DASHBOARD[nombre] || TRAZOS_ICONOS_DASHBOARD.portapapeles}</svg>`;
+}
+
 function renderDashboard() {
   if ($('#view-dashboard').hidden) return;
 
@@ -5204,12 +5230,12 @@ function renderDashboard() {
   const despHoy = despachos.filter(d => esDespachoPedido(d) && d.fecha === iso).length;
 
   const kpis = [
-    { et: 'Por cobrar', val: formatoMonto(porCobrar), pie: 'saldo pendiente', ico: '💰', color: 'var(--primary)', bg: 'var(--primary-light)' },
-    { et: 'Cobrado hoy', val: formatoMonto(cobradoHoy), pie: 'ingresos del día', ico: '📈', color: 'var(--accent)', bg: 'var(--accent-light)' },
-    { et: 'Vencidos', val: String(vencidos), pie: 'requieren atención', ico: '⚠️', color: 'var(--danger)', bg: 'var(--danger-light)' },
-    { et: 'Créditos activos', val: String(activos), pie: 'en seguimiento', ico: '📋', color: 'var(--azul)', bg: 'var(--azul-light)' },
-    { et: 'Cobrado total', val: formatoMonto(cobrado), pie: 'histórico', ico: '✅', color: 'var(--accent)', bg: 'var(--accent-light)' },
-    { et: 'Despachos hoy', val: String(despHoy), pie: 'salieron a reparto', ico: '📦', color: 'var(--amber)', bg: 'var(--amber-light)' },
+    { et: 'Por cobrar', val: formatoMonto(porCobrar), pie: 'saldo pendiente', icono: 'cartera', color: 'var(--primary)' },
+    { et: 'Cobrado hoy', val: formatoMonto(cobradoHoy), pie: 'ingresos del día', icono: 'tendencia', color: 'var(--accent)' },
+    { et: 'Vencidos', val: String(vencidos), pie: 'requieren atención', icono: 'alerta', color: 'var(--danger)' },
+    { et: 'Créditos activos', val: String(activos), pie: 'en seguimiento', icono: 'portapapeles', color: 'var(--azul)' },
+    { et: 'Cobrado total', val: formatoMonto(cobrado), pie: 'histórico', icono: 'listo', color: 'var(--accent)' },
+    { et: 'Despachos hoy', val: String(despHoy), pie: 'salieron a reparto', icono: 'camion', color: 'var(--amber)' },
   ];
   $('#dash-kpis').innerHTML = kpis.map((k, i) => `
     <article class="kpi" style="--kpi:${k.color}; --kpi-bg:${k.bg}; --i:${i}">
@@ -5218,7 +5244,7 @@ function renderDashboard() {
         <span class="kpi-val">${escapeHtml(k.val)}</span>
         <span class="kpi-pie">${k.pie}</span>
       </div>
-      <span class="kpi-ico">${k.ico}</span>
+      <span class="kpi-ico">${iconoDashboard(k.icono)}</span>
     </article>`).join('');
 
   // --- Gráficos ---
@@ -5232,27 +5258,29 @@ function renderDashboard() {
 
   $('#dash-chart-estados').innerHTML = graficoBarras(datosEstados(), n => String(n));
   $('#dash-chart-metodos').innerHTML = graficoBarras(datosMetodosPago(30));
+  $('#dash-titulo-atencion').innerHTML = `${iconoDashboard('alerta')}<span>Requieren atención</span>`;
+  $('#dash-titulo-actividad').innerHTML = `${iconoDashboard('reloj')}<span>Últimos cobros</span>`;
 
   // --- Requieren atención ---
   const atencion = datosAtencion();
   $('#dash-atencion').innerHTML = atencion.length
     ? atencion.map(a => `
       <button type="button" class="dash-fila" data-info="${escapeHtml(a.c.id)}">
-        <span class="dash-fila-ico">${a.tipo === 'compromiso' ? '🤝' : a.tipo === 'hoy' ? '🔔' : '⚠️'}</span>
+        <span class="dash-fila-ico">${iconoDashboard(a.tipo === 'compromiso' ? 'acuerdo' : a.tipo === 'hoy' ? 'campana' : 'alerta')}</span>
         <span class="dash-fila-txt">
           <span class="dash-fila-nom">${escapeHtml(a.c.cliente)}</span>
           <span class="dash-fila-meta">Nº ${escapeHtml(numeroCorto(a.c.boleta))} · ${escapeHtml(a.texto)}</span>
         </span>
         <span class="dash-fila-monto" style="color:var(--danger)">${formatoMonto(saldoDe(a.c))}</span>
       </button>`).join('')
-    : '<p class="dash-vacio">🎉 Nada pendiente de atención.</p>';
+    : `<p class="dash-vacio">${iconoDashboard('listo')}<span>Nada pendiente de atención.</span></p>`;
 
   // --- Últimos cobros ---
   const act = datosActividad();
   $('#dash-actividad').innerHTML = act.length
     ? act.map(a => `
       <button type="button" class="dash-fila" data-info="${escapeHtml(a.credito.id)}">
-        <span class="dash-fila-ico">${metodoLabel(a.metodo).slice(0, 2)}</span>
+        <span class="dash-fila-ico">${iconoDashboard(({ efectivo: 'billete', yape: 'telefono', bcp: 'banco' })[a.metodo] || 'billete')}</span>
         <span class="dash-fila-txt">
           <span class="dash-fila-nom">${escapeHtml(a.credito.cliente)}</span>
           <span class="dash-fila-meta">${a.fecha ? formatoFecha(a.fecha) : '—'}${a.quien ? ' · ' + escapeHtml(a.quien) : ''}</span>
