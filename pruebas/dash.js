@@ -46,6 +46,7 @@ const { chromium } = require('playwright-core');
     const estilo = selector => getComputedStyle(document.querySelector(selector));
     return {
       fuente: estilo('#view-dashboard').fontFamily,
+      interCargada: document.fonts.check('14px Inter'),
       titulo: estilo('.dash-titulo').fontSize,
       indicador: estilo('.kpi-et').fontSize,
       panel: estilo('.panel-titulo').fontSize,
@@ -53,7 +54,7 @@ const { chromium } = require('playwright-core');
     };
   });
   ok('La escala tipográfica del Dashboard sigue la jerarquía de Shopify',
-    tipo.titulo === '24px' && tipo.indicador === '13px' && tipo.panel === '14px' && tipo.mayusculas === 'none',
+    tipo.fuente.startsWith('Inter') && tipo.interCargada && tipo.titulo === '24px' && tipo.indicador === '13px' && tipo.panel === '14px' && tipo.mayusculas === 'none',
     JSON.stringify(tipo));
 
   const primeraKpi = await p.locator('#dash-kpis .kpi').first().boundingBox();
@@ -62,13 +63,18 @@ const { chromium } = require('playwright-core');
   await p.waitForTimeout(80);
   const durantePresion = await p.locator('#dash-kpis .kpi').first().evaluate(el => getComputedStyle(el).transform);
   await p.mouse.up();
+  const pulsoCompleto = await p.locator('#dash-kpis .kpi').first().evaluate(el => ({
+    clase: el.classList.contains('dash-pulsado'),
+    animacion: getComputedStyle(el).animationName,
+  }));
   // Se aparta del panel lateral: en el borde izquierdo se abriría encima del
   // Dashboard y la captura dejaría de mostrar lo que esta prueba documenta.
   await p.mouse.move(1498, 500);
-  await p.waitForTimeout(220);
+  await p.waitForTimeout(360);
   const despuesPresion = await p.locator('#dash-kpis .kpi').first().evaluate(el => getComputedStyle(el).transform);
-  ok('Los indicadores responden al presionarlos y vuelven a su sitio',
-    durantePresion !== 'none' && despuesPresion === 'none', JSON.stringify({ durantePresion, despuesPresion }));
+  ok('Los indicadores muestran el pulso completo y vuelven a su sitio',
+    durantePresion !== 'none' && pulsoCompleto.clase && pulsoCompleto.animacion === 'pulsarDashboard' && despuesPresion === 'none',
+    JSON.stringify({ durantePresion, pulsoCompleto, despuesPresion }));
 
   // La navegación a Créditos sigue intacta. El crédito ya no se crea suelto:
   // nace al guardar una nota de venta, por eso aquí no se busca aquel botón.

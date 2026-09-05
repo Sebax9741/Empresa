@@ -24,6 +24,17 @@
                  U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* El Dashboard usa Inter porque es la tipografía que carga actualmente el
+   administrador de Shopify. Se guarda dentro de la app para que conserve la
+   misma lectura sin conexión y no dependa de un servidor ajeno. */
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/Inter-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ====== Base ====== */
 :root {
   /* Identidad: panel lateral oscuro, acento coral/naranja, apoyo teal y ámbar */
@@ -367,10 +378,9 @@ body {
 
 /* ====== Dashboard ====== */
 #view-dashboard {
-  /* Shopify Admin usa una tipografía de interfaz sobria y compacta. Aquí se
-     replica esa lectura con la fuente nativa de cada equipo, sin descargar
-     una tipografía propietaria ni afectar el resto de la aplicación. */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Inter va primero para que el Dashboard no cambie de aspecto según el
+     sistema operativo; las demás quedan como respaldo mientras carga. */
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 14px;
   letter-spacing: 0;
 }
@@ -547,6 +557,12 @@ body {
 @keyframes crecerBarra { from { width: 0; } to { width: var(--w); } }
 @keyframes dibujarLinea { from { stroke-dashoffset: var(--largo); } to { stroke-dashoffset: 0; } }
 @keyframes brotarDona { from { opacity: 0; transform: scale(0.82) rotate(-8deg); } to { opacity: 1; transform: none; } }
+@keyframes pulsarDashboard {
+  0% { transform: scale(1); }
+  42% { transform: scale(0.965); box-shadow: 0 1px 3px rgba(20, 32, 50, 0.12); }
+  72% { transform: scale(1.008); }
+  100% { transform: scale(1); }
+}
 
 /* Entrada de cada sección */
 .entrando { animation: entrarArriba 0.34s var(--ease) both; }
@@ -580,11 +596,14 @@ body {
   .dash-fila { animation: aparecer 0.4s var(--ease) both; }
 }
 
-/* La presión se siente también con el dedo: Shopify comprime apenas la
-   superficie bajo el puntero para confirmar el toque sin distraer del dato. */
+/* La clase conserva un pulso completo después de levantar el dedo. Con solo
+   :active la compresión terminaba tan rápido que un toque normal no se veía. */
+#view-dashboard .dash-pulsado {
+  animation: pulsarDashboard 280ms var(--ease) both !important;
+}
 #view-dashboard .kpi:active,
 #view-dashboard .panel:active {
-  transform: scale(0.985);
+  transform: scale(0.965);
   box-shadow: 0 1px 3px rgba(20, 32, 50, 0.1);
 }
 #view-dashboard .dash-fila:active {

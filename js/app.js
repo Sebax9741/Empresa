@@ -10559,6 +10559,18 @@ function inicializarEventos() {
   });
   $('#view-dashboard').addEventListener('pointerleave', ocultarTooltipGrafico);
 
+  // Un toque normal dura muy poco para que :active llegue a percibirse. Este
+  // pulso termina aunque el dedo ya se haya levantado y confirma visualmente
+  // la presión sin retrasar la acción de las filas que sí abren un detalle.
+  $('#view-dashboard').addEventListener('pointerdown', ev => {
+    const superficie = ev.target.closest('.kpi, .panel, .dash-fila');
+    if (!superficie || !$('#view-dashboard').contains(superficie)) return;
+    superficie.classList.remove('dash-pulsado');
+    void superficie.offsetWidth;
+    superficie.classList.add('dash-pulsado');
+    setTimeout(() => superficie.classList.remove('dash-pulsado'), 320);
+  });
+
   // Cuando termina una animación de entrada, se libera: mientras una animación
   // CSS sigue "activa" (aunque ya haya terminado, por el fill-mode), le gana
   // en la cascada a reglas normales como :hover sobre la misma propiedad
