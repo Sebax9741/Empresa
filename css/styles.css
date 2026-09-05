@@ -1,12 +1,30 @@
-/* Tipografía propia (autoalojada, funciona sin internet): variable de peso 300-900.
-   Figtree, la sans geométrica más parecida a la Styrene que usa Claude —esa es
-   de pago y con licencia cerrada, no se puede meter en el proyecto—. Va en dos
-   archivos, como los sirve Google: el corriente y el de los acentos raros; el
-   navegador solo baja el segundo si de verdad le hace falta. */
+/* Tipografía propia (autoalojada, funciona sin internet): Inter, que da a todo
+   el sistema la lectura compacta del administrador de Shopify. Es variable, así
+   que un solo archivo trae todos los gruesos de letra, de fino a negrita.
+
+   Va **recortada**: el archivo original de Inter trae 2.926 signos —griego,
+   cirílico, vietnamita— y pesaba 345 KB. Aquí se dejaron solo los que la app
+   usa de verdad, y bajó a 42 KB. No es un detalle de programador: es el peso
+   que un cobrador tiene que bajar por el dato del celular en la calle para que
+   le llegue una actualización, y ahí la diferencia entre 42 KB y 345 KB es que
+   llegue o se quede a medias.
+
+   Va en dos archivos, como los sirve Google: el corriente y el de los acentos
+   raros. El navegador solo baja el segundo si de verdad se le pone delante uno
+   de esos signos, cosa que escribiendo en español no pasa nunca.
+
+   Si algún día hay que volver a recortarla (por cambiar de versión), se hace
+   con fonttools:
+     python3 -m fontTools.varLib.instancer Inter-Variable.woff2 opsz=14 -o /tmp/i.ttf
+     python3 -m fontTools.subset /tmp/i.ttf --unicodes="<el rango de abajo>" \
+       --layout-features=ccmp,locl,mark,mkmk,kern,liga,clig,calt,rlig,tnum \
+       --flavor=woff2 --output-file=Inter-Variable.woff2
+   El "tnum" no se puede quitar: es lo que hace que las cifras de los montos
+   ocupen todas lo mismo y las columnas de soles queden cuadradas. */
 @font-face {
-  font-family: "Figtree";
-  src: url("fonts/Figtree-Variable.woff2") format("woff2");
-  font-weight: 300 900;
+  font-family: "Inter";
+  src: url("fonts/Inter-Variable.woff2") format("woff2");
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
@@ -14,25 +32,14 @@
                  U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: "Figtree";
-  src: url("fonts/Figtree-Variable-ext.woff2") format("woff2");
-  font-weight: 300 900;
+  font-family: "Inter";
+  src: url("fonts/Inter-Variable-ext.woff2") format("woff2");
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
                  U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
                  U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-
-/* Inter da a todo el sistema la lectura compacta del administrador de Shopify.
-   Se guarda dentro de la app para conservar el aspecto sin conexión y no
-   depender de un servidor ajeno. */
-@font-face {
-  font-family: "Inter";
-  src: url("fonts/Inter-Variable.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
 }
 
 /* ====== Base ====== */
@@ -71,8 +78,17 @@
   --radius: 20px;      /* tarjetas, ventanas y paneles */
   --radius-sm: 13px;   /* campos, botones y menús */
   --radius-chip: 10px; /* chips y etiquetas: redondeados, no óvalos */
+  /* Las tarjetas apretadas del Dashboard van más cuadradas a propósito: cuando
+     hay doce recuadros pequeños juntos, las esquinas muy redondas comen espacio
+     y desordenan la cuadrícula. Es un valor distinto, pero declarado una sola
+     vez: escribirlo a mano en cada regla era lo que dejaba unas de 10, otras
+     de 12 y otras de 7 sin que nadie lo decidiera. */
+  --radius-panel: 12px;
   --shadow: 0 1px 2px rgba(20, 32, 50, 0.04), 0 6px 20px rgba(20, 32, 50, 0.06);
   --shadow-lg: 0 14px 50px rgba(20, 32, 50, 0.16);
+  /* Sombra mínima, para lo que solo necesita despegarse un milímetro del fondo */
+  --shadow-sm: 0 1px 2px rgba(20, 32, 50, 0.06);
+  --shadow-pulso: 0 1px 3px rgba(20, 32, 50, 0.12);
   --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* Ritmo de las animaciones */
@@ -133,6 +149,8 @@
   /* Las sombras claras no se ven sobre un fondo oscuro: se cierran */
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 14px 50px rgba(0, 0, 0, 0.55);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-pulso: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
 * { box-sizing: border-box; }
@@ -410,8 +428,8 @@ body {
 .kpi {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(20, 32, 50, 0.06);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-sm);
   padding: 0.38rem 0.55rem;
   min-height: 64px;
   display: flex; align-items: flex-start; justify-content: space-between; gap: 0.4rem;
@@ -467,8 +485,8 @@ body {
   transition: transform 0.16s var(--ease), box-shadow 0.16s var(--ease), background 0.16s var(--ease);
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(20, 32, 50, 0.06);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-sm);
   padding: 0.6rem 0.7rem 0.65rem;
   min-width: 0;
 }
@@ -484,7 +502,7 @@ body {
   flex-shrink: 0;
   background: var(--accent-light); color: var(--accent);
   font-size: 11px; font-weight: 600;
-  padding: 0.18rem 0.45rem; border-radius: 8px;
+  padding: 0.18rem 0.45rem; border-radius: var(--radius-chip);
 }
 .chart { width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -528,7 +546,7 @@ body {
 }
 .dash-fila:last-child { border-bottom: none; }
 .dash-fila-ico {
-  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: var(--radius-chip); flex-shrink: 0;
   display: grid; place-items: center;
   background: var(--bg-tint);
   color: var(--muted);
@@ -565,7 +583,7 @@ body {
 .barras { display: flex; flex-direction: column; gap: 0.2rem; }
 .barra-fila {
   display: grid; grid-template-columns: 7.25rem 1fr auto; align-items: center; gap: 0.5rem;
-  padding: 0.12rem 0.3rem; margin: 0 -0.3rem; border-radius: 8px;
+  padding: 0.12rem 0.3rem; margin: 0 -0.3rem; border-radius: var(--radius-chip);
   transition: background 0.15s var(--ease);
 }
 .barra-et { display: flex; align-items: center; gap: 0.25rem; font-size: 12px; color: var(--muted); font-weight: 600; overflow: hidden; white-space: nowrap; }
@@ -587,7 +605,7 @@ body {
 @keyframes brotarDona { from { opacity: 0; transform: scale(0.82) rotate(-8deg); } to { opacity: 1; transform: none; } }
 @keyframes pulsarDashboard {
   0% { transform: scale(1); }
-  42% { transform: scale(0.965); box-shadow: 0 1px 3px rgba(20, 32, 50, 0.12); }
+  42% { transform: scale(0.965); box-shadow: var(--shadow-pulso); }
   72% { transform: scale(1.008); }
   100% { transform: scale(1); }
 }
@@ -632,7 +650,7 @@ body {
 #view-dashboard .kpi:active,
 #view-dashboard .panel:active {
   transform: scale(0.965);
-  box-shadow: 0 1px 3px rgba(20, 32, 50, 0.1);
+  box-shadow: var(--shadow-pulso);
 }
 #view-dashboard .dash-fila:active {
   transform: scale(0.992);

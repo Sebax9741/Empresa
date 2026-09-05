@@ -1,13 +1,20 @@
 /* Service worker: permite instalar la app y usarla sin internet */
-const CACHE = 'creditos-v149';
+const CACHE = 'creditos-v150';
+/* Lo imprescindible. Esta lista es de todo o nada: si un solo archivo falla al
+   bajar, la instalación entera se cae. Por eso aquí va solo lo que la app
+   necesita para funcionar, y nada más.
+
+   No están, a propósito:
+   · las licencias de las tipografías y los iconos (Inter-OFL.txt,
+     lucide-LICENSE.txt) — se guardan en el repositorio porque hay que
+     conservarlas, pero un texto legal no puede tumbar una instalación;
+   · Inter-Variable-ext.woff2, el archivo de los acentos raros — escribiendo en
+     español no se pide nunca, y si alguna vez se pidiera se guarda solo. */
 const ARCHIVOS = [
   './',
   './index.html',
   './css/styles.css',
-  './css/fonts/Figtree-Variable.woff2',
-  './css/fonts/Figtree-Variable-ext.woff2',
   './css/fonts/Inter-Variable.woff2',
-  './css/fonts/Inter-OFL.txt',
   './js/app.js',
   './js/db.js',
   './js/firebase-config.js',
@@ -18,7 +25,6 @@ const ARCHIVOS = [
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/lucide-LICENSE.txt',
 ];
 
 /* Los iconos en color. Van aparte porque no son críticos: si alguno fallara

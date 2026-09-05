@@ -113,6 +113,25 @@ const { chromium } = require('playwright-core');
   });
   ok('No queda ningún recuadro blanco deslumbrando', !claros.length, claros.join(' | '));
 
+  // Una sombra azul clarita sobre un fondo oscuro no se ve: la tarjeta queda
+  // pegada al fondo. Se comprueba que las del Dashboard usan la variable de la
+  // paleta y no un color escrito a mano, que es lo que las dejaba planas.
+  const sombras = await p.evaluate(() => {
+    const de = s => { const e = document.querySelector(s); return e ? getComputedStyle(e).boxShadow : null; };
+    return { kpi: de('.kpi'), panel: de('.panel') };
+  });
+  ok('En oscuro las tarjetas del Dashboard llevan sombra oscura, no la clara',
+    /rgba?\(0, 0, 0/.test(sombras.kpi || '') && /rgba?\(0, 0, 0/.test(sombras.panel || ''),
+    JSON.stringify(sombras));
+  // Y que sus esquinas salgan de una sola decisión, no de tres números sueltos
+  const radios = await p.evaluate(() => {
+    const de = s => { const e = document.querySelector(s); return e ? getComputedStyle(e).borderRadius : null; };
+    return { kpi: de('.kpi'), panel: de('.panel'), variable:
+      getComputedStyle(document.documentElement).getPropertyValue('--radius-panel').trim() };
+  });
+  ok('Las tarjetas y los paneles comparten la misma esquina, la de la paleta',
+    radios.kpi === radios.panel && radios.kpi === radios.variable, JSON.stringify(radios));
+
   await p.screenshot({ path: 'pruebas/tema-oscuro.png', clip: { x: 0, y: 0, width: 1400, height: 700 } });
 
   // Lo que tenga puesto el equipo NO manda: quien abre la app por primera vez

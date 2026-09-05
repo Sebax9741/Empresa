@@ -10,6 +10,14 @@ const { chromium } = require('playwright-core');
   p.on('console', m => { if (m.type() === 'error') errs.push('consola: ' + m.text().slice(0, 140)); });
   const fallos = [];
   p.on('requestfailed', r => { if (/woff2/.test(r.url())) fallos.push(r.url()); });
+  // Qué archivos de letra baja de verdad, y cuánto pesan
+  const bajadas = [];
+  p.on('response', async r => {
+    if (!/woff2/.test(r.url())) return;
+    let peso = 0;
+    try { peso = (await r.body()).length; } catch (e) { /* si se cierra antes, da igual */ }
+    bajadas.push({ archivo: r.url().split('/').pop(), kb: Math.round(peso / 1024) });
+  });
   await p.route('**/firebase-config.js', r => r.fulfill({
     contentType: 'application/javascript', body: 'window.FIREBASE_CONFIG = { apiKey: "X" };' }));
   await p.goto('http://localhost:8099/index.html');
@@ -25,6 +33,17 @@ const { chromium } = require('playwright-core');
   ok('Ningún archivo de fuente falló', !fallos.length, fallos.join(' '));
   ok('El cuerpo la está usando',
     /Inter/.test(await p.evaluate(() => getComputedStyle(document.body).fontFamily)));
+
+  // Lo que pesa la letra es lo que el cobrador baja por el dato del celular
+  // para recibir una actualización. Sin recortar eran 345 KB.
+  ok('Solo se baja un archivo de letra, y es liviano',
+    bajadas.length === 1 && bajadas[0].kb < 60, JSON.stringify(bajadas));
+  ok('No se baja el archivo de los acentos raros, que en español no hace falta',
+    !bajadas.some(x => /-ext/.test(x.archivo)), JSON.stringify(bajadas.map(x => x.archivo)));
+  // Recortar una letra es quitarle signos: hay que comprobar que no se fue
+  // ninguno de los que la app sí escribe
+  ok('Al recortarla no se perdió ningún signo del español ni del negocio',
+    await p.evaluate(() => document.fonts.check('14px Inter', 'ñÑáéíóúüÁÜ¿¡°·—“”S/.0123456789')));
 
   const escala = await p.evaluate(() => ({
     raiz: getComputedStyle(document.documentElement).fontSize,
