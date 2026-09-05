@@ -145,11 +145,22 @@ teal y otra tipografía). La verdad son las variables de `:root` en
 
 ## Detalles que sorprenden si no se avisan
 
-**Los emojis se convierten en imágenes.** `vigilarIconos()` cambia cada emoji
-del texto visible por un SVG propio de `icons/emoji/`, para que se vea igual
-en Windows, Android y iPhone. Consecuencia práctica: leer `.textContent` de
-algo que tenía un emoji **ya no devuelve el emoji**. En las pruebas hay que
-tenerlo en cuenta.
+**Hay DOS juegos de iconos, y no se mezclan.**
+
+- Los **emojis en color** de `icons/emoji/`: `vigilarIconos()` cambia cada
+  emoji del texto visible por su SVG, para que se vea igual en Windows,
+  Android y iPhone. Consecuencia práctica: leer `.textContent` de algo que
+  tenía un emoji **ya no devuelve el emoji**. En las pruebas hay que tenerlo
+  en cuenta.
+- Los **de un solo trazo** (`iconoLinea()`, dibujos de Lucide incrustados en
+  `TRAZOS_ICONOS`): toman el color de donde estén y son los que dan el aire
+  sobrio del panel. Van en las cabeceras de sección (`data-icono="…"` en el
+  HTML, los pinta `ponerIconosDeSeccion()`), en los botones de fila
+  (`botonDeFila()`), en los chips y en el Dashboard.
+
+La regla para elegir: **si el botón es solo un dibujo, va de trazo**; si lleva
+texto al lado, el emoji en color se queda. Veinte pastillas de color en una
+tabla de veinte filas pesan más que los datos.
 
 **Los desplegables no son los del navegador.** `js/menus.js` sustituye la
 lista que dibuja el sistema operativo por un menú propio. El `<select>` de

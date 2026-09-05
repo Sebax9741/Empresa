@@ -626,7 +626,7 @@
   <!-- Modal: administración de usuarios (solo admin) -->
   <section id="view-usuarios" class="vista modal-usuarios" hidden>
     <div class="sec-cab">
-      <h2>👥 Usuarios y accesos</h2>
+      <h2 data-icono="clientes">Usuarios y accesos</h2>
       <div class="sec-cab-acciones">
         <button type="button" id="btn-usuarios-cerrar" class="btn btn-secondary btn-small">◀ Volver a créditos</button>
       </div>
@@ -856,15 +856,51 @@
 
   <!-- Modal: Clientes (base de datos de clientes con su zona) -->
   <section id="view-clientes" class="vista modal-clientes" hidden>
-    <h2>🧑‍🤝‍🧑 Clientes</h2>
+    <div class="sec-cab">
+      <h2 data-icono="clientes">Clientes <span id="cli-contador" class="cli-contador"></span></h2>
+      <div class="sec-cab-acciones">
+        <button type="button" id="btn-cli-registrar" class="btn btn-primary btn-small">➕ Registrar cliente</button>
+      </div>
+    </div>
 
-    <div class="cli-lista-cab">
-      <h3>Clientes registrados <span id="cli-contador" class="cli-contador"></span></h3>
-      <input type="search" id="cli-buscar" class="input cli-buscar" placeholder="🔍 Buscar cliente…">
+    <!-- Barra de búsqueda a todo lo ancho, con la lupa dentro y el filtro al
+         final: es lo primero que se hace al entrar aquí con 200 clientes, así
+         que ocupa la línea entera en vez de encogerse en una esquina. -->
+    <div class="buscador-largo">
+      <span class="buscador-lupa" data-icono="lupa" aria-hidden="true"></span>
+      <input type="search" id="cli-buscar" class="buscador-campo" placeholder="Buscar por nombre, código, zona, dirección o RUC…">
+      <button type="button" id="btn-cli-filtros" class="buscador-boton" aria-expanded="false"
+              title="Filtrar clientes" aria-label="Filtrar clientes" data-icono="columnas"></button>
     </div>
-    <div class="cli-acciones-top">
-      <button type="button" id="btn-cli-registrar" class="btn btn-primary btn-small">➕ Registrar cliente</button>
+
+    <!-- Filtros: aparecen al tocar el botón. Escondidos por defecto porque el
+         90 % de las veces basta con escribir el nombre. -->
+    <div class="cli-filtros" id="cli-filtros" hidden>
+      <label class="field">
+        <span>Zona</span>
+        <select id="cli-filtro-zona" class="input"><option value="">Todas las zonas</option></select>
+      </label>
+      <label class="field">
+        <span>Condiciones</span>
+        <select id="cli-filtro-cond" class="input">
+          <option value="">Todos</option>
+          <option value="flete">Solo los que pagan flete</option>
+          <option value="sinflete">Solo los que no pagan flete</option>
+          <option value="tope">Solo los que llegaron a su límite</option>
+          <option value="conlimite">Solo los que tienen límite puesto</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Deuda</span>
+        <select id="cli-filtro-deuda" class="input">
+          <option value="">Todos</option>
+          <option value="debe">Con créditos sin pagar</option>
+          <option value="aldia">Sin nada pendiente</option>
+        </select>
+      </label>
+      <button type="button" id="btn-cli-filtros-limpiar" class="btn btn-secondary btn-small">Quitar filtros</button>
     </div>
+
     <div id="clientes-list" class="clientes-list"></div>
 
     <div class="modal-buttons">
@@ -925,7 +961,7 @@
   <!-- Sección: Hoja de cobranza del día -->
   <section id="view-cobranza" class="vista modal-cobranza" hidden>
     <div class="cobranza-head">
-      <h2>🧾 Hoja de cobranza</h2>
+      <h2 data-icono="recibo">Hoja de cobranza</h2>
       <label class="field cob-fecha-field">
         <span>Fecha</span>
         <input type="date" id="cob-fecha" class="input">
@@ -984,7 +1020,7 @@
     <!-- Vista: lista de despachos -->
     <section id="desp-vista-lista" class="desp-vista">
       <div class="desp-cab">
-        <h2>📦 Despachos</h2>
+        <h2 data-icono="camion">Despachos</h2>
         <div class="desp-cab-botones">
           <button type="button" id="btn-desp-repartidores" class="btn btn-secondary btn-small">🧍 Repartidores</button>
         </div>
@@ -1188,7 +1224,7 @@
   <!-- ══════════ Sección: Productos ══════════ -->
   <section id="view-productos" class="vista" hidden>
     <div class="sec-cab">
-      <h2>🛒 Productos</h2>
+      <h2 data-icono="carrito">Productos</h2>
       <div class="sec-cab-acciones">
         <input type="search" id="prod-buscar" class="input sec-buscar" placeholder="🔍 Buscar por código o nombre…">
         <button type="button" id="btn-prod-nuevo" class="btn btn-primary btn-small">➕ Nuevo producto</button>
@@ -1311,7 +1347,7 @@
   <!-- ══════════ Sección: Kardex de almacén ══════════ -->
   <section id="view-kardex" class="vista" hidden>
     <div class="sec-cab">
-      <h2>📒 Kardex de almacén</h2>
+      <h2 data-icono="libro">Kardex de almacén</h2>
       <div class="sec-cab-acciones">
         <button type="button" id="btn-kardex-imprimir" class="btn btn-secondary btn-small">🖨️ Imprimir</button>
       </div>
@@ -1436,7 +1472,7 @@
   <!-- ══════════ Sección: Ingreso de productos ══════════ -->
   <section id="view-ingresos" class="vista" hidden>
     <div class="sec-cab">
-      <h2>📥 Ingreso de productos</h2>
+      <h2 data-icono="entrada">Ingreso de productos</h2>
     </div>
 
     <!-- Elegir cómo se ingresa: un camión con su factura, o un movimiento suelto -->
@@ -1611,7 +1647,7 @@
     <!-- ▸ Lista de notas emitidas -->
     <div id="nv-vista-lista" class="nv-vista">
       <div class="sec-cab">
-        <h2>🧮 Notas de venta</h2>
+        <h2 data-icono="calculadora">Notas de venta</h2>
         <div class="sec-cab-acciones">
           <input type="search" id="nv-buscar" class="input sec-buscar" placeholder="🔍 Buscar por número o cliente…">
           <button type="button" id="btn-nv-nueva" class="btn btn-primary btn-small">➕ Nueva nota de venta</button>
@@ -1807,7 +1843,7 @@
   <!-- Sección: configuración -->
   <section id="view-settings" class="vista" hidden>
     <form id="settings-form">
-      <h2>⚙️ Configuración</h2>
+      <h2 data-icono="engranaje">Configuración</h2>
 
       <!-- ▸ Mi cuenta -->
       <section class="settings-grupo" id="settings-cuenta" hidden>
@@ -1901,6 +1937,20 @@
           <input type="checkbox" id="s-avisos">
           <span>Avisarme el día que vence un crédito
             <small>Notificación en tu celular Android, aunque la app esté cerrada. (En iPhone/PC el aviso aparece al abrir la app.)</small>
+          </span>
+        </label>
+      </section>
+
+      <!-- ▸ Almacén (solo administrador) -->
+      <section class="settings-grupo" id="settings-almacen" hidden>
+        <h3 class="settings-titulo">📦 Almacén</h3>
+        <small class="settings-grupo-desc">Qué pasa al vender algo de lo que ya no queda stock.</small>
+        <label class="field-check">
+          <input type="checkbox" id="s-stock-negativo">
+          <span>Dejar vender aunque no haya stock
+            <small>Así ha funcionado siempre: la nota avisa en rojo pero deja pasar, y el almacén queda en negativo.
+              Sirve cuando la mercadería ya llegó pero todavía no se ha registrado el ingreso.
+              <strong>Al desmarcarlo</strong>, la nota no admite más de lo que hay contado.</small>
           </span>
         </label>
       </section>

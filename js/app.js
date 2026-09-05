@@ -28,6 +28,10 @@ let settings = {
   // El Dashboard lo ve siempre el administrador; a los empleados se lo
   // muestra solo si el administrador activa este ajuste.
   dashboardEmpleados: false,
+  // ¿Se puede vender lo que no hay en el almacén? Viene en SÍ, que es como se
+  // ha trabajado siempre: la app avisa pero deja pasar. Poniéndolo en NO, la
+  // nota no admite más de lo que hay contado. Se cambia en Configuración.
+  stockNegativo: true,
   // Cabecera de la nota de venta impresa. El nombre del negocio y su teléfono
   // no van: el papel ya los trae impresos de imprenta.
   empresaDireccion: 'MADRE DE DIOS - TAMBOPATA - TAMBOPATA',
@@ -1086,7 +1090,7 @@ async function sincronizarAhora() {
    que la app funcione igual sin internet.
    El aviso de vencimiento es de cada dispositivo, así que no se sube. */
 const CLAVES_NEGOCIO = ['dias', 'moneda', 'atajo1', 'atajo2', 'hojaAutoActiva', 'hojaAutoDias', 'hojaAutoHora', 'dashboardEmpleados',
-  'empresaDireccion', 'empresaRuc'];
+  'empresaDireccion', 'empresaRuc', 'stockNegativo'];
 
 function cargarSettings() {
   try {
@@ -3017,9 +3021,9 @@ function renderTabla(lista) {
       <td class="col-foto">${celdaFoto(c)}</td>
       <td>
         <div class="row-actions">
-          <button class="btn btn-secondary btn-small" data-info="${c.id}" title="Ver información">ℹ️</button>
-          ${puede('editar') ? `<button class="btn btn-secondary btn-small" data-editar="${c.id}" title="Editar">✏️</button>` : ''}
-          ${puede('borrar') ? `<button class="btn btn-danger btn-small" data-borrar="${c.id}" title="Borrar">🗑️</button>` : ''}
+          ${botonDeFila(`data-info="${c.id}"`, 'info', 'Ver información')}
+          ${puede('editar') ? botonDeFila(`data-editar="${c.id}"`, 'lapiz', 'Editar') : ''}
+          ${puede('borrar') ? botonDeFila(`data-borrar="${c.id}"`, 'papelera', 'Borrar', 'peligro') : ''}
         </div>
       </td>
     </tr>`;
@@ -3451,6 +3455,41 @@ function clientePorNombre(nombre) {
 
 function creditosDeCliente(id) { return creditos.filter(c => c.clienteId === id); }
 
+/* El valor de un desplegable de filtro, o '' si ese filtro no está en la
+   página. Los filtros son opcionales: pedirlos con `$(...)` a secas revienta
+   en las pruebas que abren la app a medias. */
+function valorDeFiltro(selector) {
+  const el = $(selector);
+  return el ? el.value : '';
+}
+
+/* Deja los filtros de clientes en "todos" y los esconde. Se llama al entrar a
+   la sección: volver a Clientes y encontrarse una lista recortada por un
+   filtro que se puso hace media hora se lee como que faltan clientes. */
+function limpiarFiltrosDeClientes() {
+  ['#cli-filtro-zona', '#cli-filtro-cond', '#cli-filtro-deuda'].forEach(s => {
+    const el = $(s);
+    if (el) el.value = '';
+  });
+  const caja = $('#cli-filtros');
+  if (caja) caja.hidden = true;
+  const boton = $('#btn-cli-filtros');
+  if (boton) { boton.setAttribute('aria-expanded', 'false'); boton.classList.remove('activo'); }
+}
+
+/* Las zonas del desplegable salen de las que de verdad tienen clientes, no de
+   la lista entera: filtrar por una zona vacía solo sirve para no encontrar
+   nada. */
+function llenarFiltroDeZonas() {
+  const sel = $('#cli-filtro-zona');
+  if (!sel) return;
+  const usadas = ZONAS.filter(z => clientes.some(c => (c.zona || '') === z));
+  const antes = sel.value;
+  sel.innerHTML = '<option value="">Todas las zonas</option>'
+    + usadas.map(z => `<option value="${escapeHtml(z)}">${escapeHtml(z)}</option>`).join('');
+  if (usadas.includes(antes)) sel.value = antes;
+}
+
 /* ====== Límite de créditos sin pagar ======
    Cada cliente puede llevar su tope: «a este no le fío más de tres a la vez».
    Al llegar a ese número no se le puede emitir otra nota A CRÉDITO. Al contado
@@ -3608,6 +3647,7 @@ function aplicarClienteSeleccionado() {
 
 function abrirClientes() {
   $('#cli-buscar').value = '';
+  limpiarFiltrosDeClientes();
   const permitido = puede('clientes');
   $('#btn-cli-registrar').hidden = !permitido;
   $('#btn-cli-importar').hidden = !permitido;
@@ -3655,15 +3695,48 @@ function renderClientes() {
   const cont = $('#clientes-list');
   if (!cont) return;
   const buscado = normalizarNombre($('#cli-buscar') ? $('#cli-buscar').value : '');
-  const lista = buscado
-    ? clientes.filter(c => normalizarNombre(c.nombre).includes(buscado)
+
+  /* Los créditos se cuentan de una sola pasada, ANTES de filtrar: los filtros
+     de deuda y de tope preguntan por ellos. Antes se recorría la lista entera
+     de créditos por CADA cliente; con 200 clientes y miles de créditos eso es
+     medio millón de comparaciones cada vez que se abre la sección, y en una
+     tablet se nota. */
+  const cuenta = new Map();
+  for (const cr of creditos) {
+    const v = cuenta.get(cr.clienteId) || { total: 0, sinPagar: 0 };
+    v.total++;
+    if (estadoEfectivo(cr) !== 'pagado') v.sinPagar++;
+    cuenta.set(cr.clienteId, v);
+  }
+  const sinPagarDe = c => (cuenta.get(c.id) || { sinPagar: 0 }).sinPagar;
+
+  const fZona = valorDeFiltro('#cli-filtro-zona');
+  const fCond = valorDeFiltro('#cli-filtro-cond');
+  const fDeuda = valorDeFiltro('#cli-filtro-deuda');
+  const lista = clientes.filter(c => {
+    if (buscado && !(normalizarNombre(c.nombre).includes(buscado)
         || normalizarNombre(c.codigo).includes(buscado)
         || normalizarNombre(c.zona).includes(buscado)
         || normalizarNombre(c.ruc).includes(buscado)
-        || normalizarNombre(c.direccion).includes(buscado))
-    : clientes;
+        || normalizarNombre(c.telefono).includes(buscado)
+        || normalizarNombre(c.direccion).includes(buscado))) return false;
+    if (fZona && (c.zona || '') !== fZona) return false;
+    if (fCond === 'flete' && !clientePagaFlete(c)) return false;
+    if (fCond === 'sinflete' && clientePagaFlete(c)) return false;
+    if (fCond === 'conlimite' && !limiteCreditosDe(c)) return false;
+    if (fCond === 'tope' && !(limiteCreditosDe(c) && sinPagarDe(c) >= limiteCreditosDe(c))) return false;
+    if (fDeuda === 'debe' && !sinPagarDe(c)) return false;
+    if (fDeuda === 'aldia' && sinPagarDe(c)) return false;
+    return true;
+  });
 
-  $('#cli-contador').textContent = clientes.length ? `(${clientes.length})` : '';
+  // Cuántos se están viendo de cuántos hay: con un filtro puesto, enseñar solo
+  // el total dice muy poco y hace dudar de si el filtro llegó a aplicarse
+  const filtrando = !!(buscado || fZona || fCond || fDeuda);
+  $('#cli-contador').textContent = !clientes.length ? ''
+    : filtrando ? `${lista.length} de ${clientes.length}` : `(${clientes.length})`;
+  const botonFiltros = $('#btn-cli-filtros');
+  if (botonFiltros) botonFiltros.classList.toggle('activo', !!(fZona || fCond || fDeuda));
 
   if (!clientes.length) {
     cont.innerHTML = `<p class="abonos-vacio">Todavía no tienes clientes registrados.
@@ -3676,26 +3749,20 @@ function renderClientes() {
   }
 
   const permitido = puede('clientes');
-  /* Los créditos se cuentan de una sola pasada. Antes se recorría la lista
-     entera de créditos por CADA cliente para saber cuántos tenía; con 200
-     clientes y miles de créditos eso es medio millón de comparaciones cada vez
-     que se abre la sección, y en una tablet se nota. */
-  const cuenta = new Map();
-  for (const cr of creditos) {
-    const v = cuenta.get(cr.clienteId) || { total: 0, sinPagar: 0 };
-    v.total++;
-    if (estadoEfectivo(cr) !== 'pagado') v.sinPagar++;
-    cuenta.set(cr.clienteId, v);
-  }
   cont.innerHTML = lista.map(c => {
     const suyos = cuenta.get(c.id) || { total: 0, sinPagar: 0 };
     const nPedidos = suyos.total;
+    // Cada dato con su icono de trazo, del mismo color que el texto. Antes iban
+    // con emojis en color, y tres dibujos de colores por tarjeta —por doscientas
+    // tarjetas— hacían más ruido que los propios datos.
+    const dato = (icono, texto) =>
+      `<span class="cliente-dato">${iconoLinea(icono)}${escapeHtml(texto)}</span>`;
     const extra = [
-      c.ruc ? `🆔 ${escapeHtml(c.ruc)}` : '',
-      c.direccion ? `🏠 ${escapeHtml(c.direccion)}` : '',
-      c.telefono ? `📞 ${escapeHtml(c.telefono)}` : '',
+      c.ruc ? dato('identidad', c.ruc) : '',
+      c.direccion ? dato('casa', c.direccion) : '',
+      c.telefono ? dato('telefono', c.telefono) : '',
       c.notas ? escapeHtml(c.notas) : '',
-    ].filter(Boolean).join(' · ');
+    ].filter(Boolean).join('');
     // Las dos condiciones de venta se enseñan en la propia lista: son las que
     // hacen que a un cliente se le cobre distinto o no se le pueda vender, y
     // preguntárselo abriendo la ficha de uno en uno no es forma.
@@ -3703,7 +3770,7 @@ function renderClientes() {
     const abiertos = suyos.sinPagar;
     const insignias = [
       clientePagaFlete(c)
-        ? '<span class="cliente-etq cliente-etq-flete" title="Se le suma el cargo de flete de cada producto">🚚 flete</span>'
+        ? `<span class="cliente-etq cliente-etq-flete" title="Se le suma el cargo de flete de cada producto">${iconoLinea('camion')}flete</span>`
         : '',
       // Al tope se dice con palabras y no con «2/2»: al lado va el total de
       // créditos del cliente, y dos cuentas distintas pegadas se leen como una
@@ -3713,7 +3780,7 @@ function renderClientes() {
         ? (abiertos >= tope
           ? `<span class="cliente-etq cliente-etq-tope"
                title="Tiene ${abiertos} sin pagar y su límite es ${tope}: no se le pueden emitir más notas a crédito"
-             >🚫 sin cupo</span>`
+             >${iconoLinea('prohibido')}sin cupo</span>`
           : `<span class="cliente-etq cliente-etq-limite" title="Créditos sin pagar sobre su límite"
              >${abiertos} de ${tope}</span>`)
         : '',
@@ -3725,12 +3792,13 @@ function renderClientes() {
           <strong>${escapeHtml(c.nombre)}</strong>
           ${insignias}
           <span class="cliente-zona">${c.zona ? escapeHtml(c.zona) : 'sin zona'}</span>
-          <span class="cliente-meta">${nPedidos} crédito${nPedidos === 1 ? '' : 's'}${extra ? ' · ' + extra : ''}</span>
+          <span class="cliente-meta"><span class="cliente-dato">${nPedidos} crédito${nPedidos === 1 ? '' : 's'}</span>${extra}</span>
         </div>
         ${permitido ? `
         <div class="cliente-acciones">
-          <button type="button" class="btn btn-secondary btn-small" data-editar-cliente="${escapeHtml(c.id)}">✏️</button>
-          ${mandaComoAdmin() || puede('clientesBorrar') ? `<button type="button" class="btn btn-danger btn-small" data-borrar-cliente="${escapeHtml(c.id)}">🗑️</button>` : ''}
+          ${botonDeFila(`data-editar-cliente="${escapeHtml(c.id)}"`, 'lapiz', 'Editar cliente')}
+          ${mandaComoAdmin() || puede('clientesBorrar')
+            ? botonDeFila(`data-borrar-cliente="${escapeHtml(c.id)}"`, 'papelera', 'Borrar cliente', 'peligro') : ''}
         </div>` : ''}
       </div>`;
   }).join('');
@@ -5167,7 +5235,7 @@ function graficoBarras(datos, formato = formatoMonto) {
     const color = d.color || COLORES_GRAFICO[i % COLORES_GRAFICO.length];
     return `
     <div class="barra-fila" data-tip-color="${color}" data-tip-label="${escapeHtml(d.etiqueta)}" data-tip-value="${escapeHtml(formato(d.valor))}">
-      <span class="barra-et">${d.icono ? iconoDashboard(d.icono) : ''}<span>${escapeHtml(d.etiqueta)}</span></span>
+      <span class="barra-et">${d.icono ? iconoLinea(d.icono) : ''}<span>${escapeHtml(d.etiqueta)}</span></span>
       <span class="barra-pista">
         <span class="barra-valor" style="--w:${(d.valor / max * 100).toFixed(1)}%; --c:${color}; --i:${i}"></span>
       </span>
@@ -5358,11 +5426,42 @@ function datosActividad() {
   return lista.sort((x, y) => (y.cuando - x.cuando) || String(y.fecha).localeCompare(String(x.fecha))).slice(0, 6);
 }
 
-/* ---- Dibujado del dashboard ---- */
-/* Iconos de trazo inspirados en la sobriedad de Shopify, tomados de Lucide
-   (licencia ISC). Se incrustan aquí para no añadir una librería ni depender
-   de internet; icons/lucide-LICENSE.txt conserva el aviso de la licencia. */
-const TRAZOS_ICONOS_DASHBOARD = {
+/* ══════════ Iconos de trazo ══════════
+   Los de toda la app: cabeceras de sección, botones de fila, chips y el
+   Dashboard. Son de Lucide (licencia ISC) y van incrustados aquí para no
+   añadir una librería ni depender de internet; icons/lucide-LICENSE.txt
+   conserva el aviso de la licencia.
+
+   No confundir con los de icons/emoji/: aquellos son emojis EN COLOR que
+   sustituyen a los del sistema operativo dentro del texto (los pone
+   vigilarIconos). Estos son de un solo trazo, toman el color de donde estén y
+   son los que dan el aire sobrio del panel. */
+const TRAZOS_ICONOS = {
+  // ── Cabeceras de sección ──
+  clientes: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  carrito: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+  caja: '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
+  entrada: '<path d="M12 3v12M8 11l4 4 4-4M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+  libro: '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/>',
+  calculadora: '<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M8 6h8M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',
+  recibo: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><path d="M8 7h8M8 11h8M8 15h5"/>',
+  engranaje: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  // ── Acciones ──
+  lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  columnas: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18M15 3v18"/>',
+  lapiz: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+  papelera: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6"/>',
+  mas: '<path d="M5 12h14M12 5v14"/>',
+  ojo: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  impresora: '<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect width="12" height="8" x="6" y="14" rx="1"/>',
+  prohibido: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  casa: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  documento: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  salida: '<path d="M12 21V9M8 13l4-4 4 4M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+  calendario: '<path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+  identidad: '<rect width="18" height="14" x="3" y="5" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16a3 3 0 0 1 6 0M15 10h3M15 14h3"/>',
+  // ── Dashboard ──
   cartera: '<path d="M3 11h3.75a2 2 0 0 1 1.6.8l.45.6a4 4 0 0 0 6.4 0l.45-.6a2 2 0 0 1 1.6-.8H21"/><path d="M3 7h18"/><rect x="3" y="3" width="18" height="18" rx="2"/>',
   tendencia: '<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>',
   alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
@@ -5377,10 +5476,30 @@ const TRAZOS_ICONOS_DASHBOARD = {
   reloj: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 };
 
-function iconoDashboard(nombre) {
-  return `<svg class="dash-icono-trazo" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+function iconoLinea(nombre) {
+  return `<svg class="ico-linea" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-    ${TRAZOS_ICONOS_DASHBOARD[nombre] || TRAZOS_ICONOS_DASHBOARD.portapapeles}</svg>`;
+    ${TRAZOS_ICONOS[nombre] || TRAZOS_ICONOS.portapapeles}</svg>`;
+}
+
+/* Botón de fila: solo el icono, sin relleno de color. En una tabla de veinte
+   filas, veinte pastillas naranjas y veinte rojas pesan más que los propios
+   datos; así el botón está apagado y se enciende al pasar por encima, que es
+   justo cuando hace falta. El nombre va en `title` y en `aria-label`, porque un
+   dibujo solo no dice nada a quien usa lector de pantalla. */
+function botonDeFila(datos, icono, titulo, tono = '') {
+  return `<button type="button" class="btn-fila${tono ? ' btn-fila-' + tono : ''}" ${datos}
+    title="${escapeHtml(titulo)}" aria-label="${escapeHtml(titulo)}">${iconoLinea(icono)}</button>`;
+}
+
+/* Pone el icono al título de cada sección. Va en el HTML como `data-icono` y se
+   dibuja aquí, de una sola vez al arrancar: así el dibujo de cada icono vive en
+   un único sitio y no hay nueve trozos de SVG repartidos por index.html. */
+function ponerIconosDeSeccion() {
+  document.querySelectorAll('[data-icono]').forEach(el => {
+    if (el.querySelector('.ico-linea')) return;   // ya lo tiene
+    el.insertAdjacentHTML('afterbegin', iconoLinea(el.dataset.icono));
+  });
 }
 
 function renderDashboard() {
@@ -5416,7 +5535,7 @@ function renderDashboard() {
         <span class="kpi-val">${escapeHtml(k.val)}</span>
         <span class="kpi-pie">${k.pie}</span>
       </div>
-      <span class="kpi-ico">${iconoDashboard(k.icono)}</span>
+      <span class="kpi-ico">${iconoLinea(k.icono)}</span>
     </article>`).join('');
 
   // --- Gráficos ---
@@ -5430,29 +5549,29 @@ function renderDashboard() {
 
   $('#dash-chart-estados').innerHTML = graficoBarras(datosEstados(), n => String(n));
   $('#dash-chart-metodos').innerHTML = graficoBarras(datosMetodosPago(30));
-  $('#dash-titulo-atencion').innerHTML = `${iconoDashboard('alerta')}<span>Requieren atención</span>`;
-  $('#dash-titulo-actividad').innerHTML = `${iconoDashboard('reloj')}<span>Últimos cobros</span>`;
+  $('#dash-titulo-atencion').innerHTML = `${iconoLinea('alerta')}<span>Requieren atención</span>`;
+  $('#dash-titulo-actividad').innerHTML = `${iconoLinea('reloj')}<span>Últimos cobros</span>`;
 
   // --- Requieren atención ---
   const atencion = datosAtencion();
   $('#dash-atencion').innerHTML = atencion.length
     ? atencion.map(a => `
       <button type="button" class="dash-fila" data-info="${escapeHtml(a.c.id)}">
-        <span class="dash-fila-ico">${iconoDashboard(a.tipo === 'compromiso' ? 'acuerdo' : a.tipo === 'hoy' ? 'campana' : 'alerta')}</span>
+        <span class="dash-fila-ico">${iconoLinea(a.tipo === 'compromiso' ? 'acuerdo' : a.tipo === 'hoy' ? 'campana' : 'alerta')}</span>
         <span class="dash-fila-txt">
           <span class="dash-fila-nom">${escapeHtml(a.c.cliente)}</span>
           <span class="dash-fila-meta">Nº ${escapeHtml(numeroCorto(a.c.boleta))} · ${escapeHtml(a.texto)}</span>
         </span>
         <span class="dash-fila-monto" style="color:var(--danger)">${formatoMonto(saldoDe(a.c))}</span>
       </button>`).join('')
-    : `<p class="dash-vacio">${iconoDashboard('listo')}<span>Nada pendiente de atención.</span></p>`;
+    : `<p class="dash-vacio">${iconoLinea('listo')}<span>Nada pendiente de atención.</span></p>`;
 
   // --- Últimos cobros ---
   const act = datosActividad();
   $('#dash-actividad').innerHTML = act.length
     ? act.map(a => `
       <button type="button" class="dash-fila" data-info="${escapeHtml(a.credito.id)}">
-        <span class="dash-fila-ico">${iconoDashboard(({ efectivo: 'billete', yape: 'telefono', bcp: 'banco' })[a.metodo] || 'billete')}</span>
+        <span class="dash-fila-ico">${iconoLinea(({ efectivo: 'billete', yape: 'telefono', bcp: 'banco' })[a.metodo] || 'billete')}</span>
         <span class="dash-fila-txt">
           <span class="dash-fila-nom">${escapeHtml(a.credito.cliente)}</span>
           <span class="dash-fila-meta">${a.fecha ? formatoFecha(a.fecha) : '—'}${a.quien ? ' · ' + escapeHtml(a.quien) : ''}</span>
@@ -7150,10 +7269,10 @@ function renderProductos() {
   // uno a uno para averiguarlo.
   const sinPasar = productos.filter(p => !usaPreciosPorCantidad(p));
   $('#prod-chips').innerHTML = [
-    `<span class="chip">🛒 ${productos.length} producto${productos.length === 1 ? '' : 's'}</span>`,
-    `<span class="chip">✅ ${productosActivos().length} activo${productosActivos().length === 1 ? '' : 's'}</span>`,
-    bajos.length ? `<span class="chip chip-alerta">⚠️ ${bajos.length} con stock bajo</span>` : '',
-    sinPasar.length ? `<span class="chip chip-aviso" title="Siguen cobrando el precio de siempre hasta que los abras y les grabes los precios nuevos">📝 ${sinPasar.length} sin pasar a precios por cantidad</span>` : '',
+    `<span class="chip">${iconoLinea('carrito')}${productos.length} producto${productos.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip">${iconoLinea('listo')}${productosActivos().length} activo${productosActivos().length === 1 ? '' : 's'}</span>`,
+    bajos.length ? `<span class="chip chip-alerta">${iconoLinea('alerta')}${bajos.length} con stock bajo</span>` : '',
+    sinPasar.length ? `<span class="chip chip-aviso" title="Siguen cobrando el precio de siempre hasta que los abras y les grabes los precios nuevos">${iconoLinea('lapiz')}${sinPasar.length} sin pasar a precios por cantidad</span>` : '',
   ].filter(Boolean).join('');
 
   $('#prod-vacio').hidden = !!lista.length;
@@ -7179,8 +7298,8 @@ function renderProductos() {
       ${celdasDePrecio(p)}
       <td class="col-num ${bajo ? 'prod-stock-bajo' : ''}" title="${bajo ? `Stock mínimo: ${min}` : ''}">${stock}${bajo ? ' ⚠️' : ''}</td>
       <td class="col-acc">${permitido ? `
-        <button type="button" class="btn btn-secondary btn-small" data-editar-producto="${escapeHtml(p.id)}" title="Editar (pide tu código)">✏️</button>
-        <button type="button" class="btn btn-danger btn-small" data-borrar-producto="${escapeHtml(p.id)}" title="Borrar (pide tu código)">🗑️</button>` : ''}</td>
+        ${botonDeFila(`data-editar-producto="${escapeHtml(p.id)}"`, 'lapiz', 'Editar (pide tu código)')}
+        ${botonDeFila(`data-borrar-producto="${escapeHtml(p.id)}"`, 'papelera', 'Borrar (pide tu código)', 'peligro')}` : ''}</td>
     </tr>`;
   }).join('');
 }
@@ -7565,11 +7684,11 @@ function renderKardex() {
   }
   const prodFiltrado = kdxFiltros.producto ? productoPorId(kdxFiltros.producto) : null;
   $('#kdx-chips').innerHTML = [
-    `<span class="chip">📄 ${lista.length} movimiento${lista.length === 1 ? '' : 's'}</span>`,
-    `<span class="chip chip-entrada">📥 Entradas: ${entradas}</span>`,
-    `<span class="chip chip-salida">📤 Salidas: ${salidas}</span>`,
+    `<span class="chip">${iconoLinea('documento')}${lista.length} movimiento${lista.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip chip-entrada">${iconoLinea('entrada')}Entradas: ${entradas}</span>`,
+    `<span class="chip chip-salida">${iconoLinea('salida')}Salidas: ${salidas}</span>`,
     prodFiltrado
-      ? `<span class="chip chip-saldo">📦 Stock actual de ${escapeHtml(prodFiltrado.nombre)}: <strong>${stockDe(prodFiltrado.id)}</strong></span>`
+      ? `<span class="chip chip-saldo">${iconoLinea('caja')}Stock actual de ${escapeHtml(prodFiltrado.nombre)}: <strong>${stockDe(prodFiltrado.id)}</strong></span>`
       : '',
   ].filter(Boolean).join('');
 
@@ -7622,7 +7741,7 @@ function renderKardex() {
       <td class="col-num kdx-saldo">${m.saldo}</td>
       <td>${escapeHtml(mostrarComo(m.usuario) || '—')}</td>
       <td class="col-acc">${mandaComoAdmin()
-        ? `<button type="button" class="btn btn-danger btn-small" data-borrar-kardex="${escapeHtml(m.id)}" title="Anular movimiento (pide tu código)">🗑️</button>` : ''}</td>
+        ? botonDeFila(`data-borrar-kardex="${escapeHtml(m.id)}"`, 'papelera', 'Anular movimiento (pide tu código)', 'peligro') : ''}</td>
     </tr>`;
   }).join('');
 }
@@ -7660,7 +7779,7 @@ function renderSaldoAFecha() {
   if (sinNadaQueElegir) { $('#kdx-saldo-chips').innerHTML = ''; return; }
 
   $('#kdx-saldo-chips').innerHTML = [
-    `<span class="chip">📦 ${filas.length} producto${filas.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip">${iconoLinea('caja')}${filas.length} producto${filas.length === 1 ? '' : 's'}</span>`,
     `<span class="chip chip-saldo">Unidades en total: <strong>${total}</strong></span>`,
   ].join('');
 
@@ -8320,8 +8439,8 @@ function renderIngresos() {
   const unidadesHoy = deHoy.reduce((s, g) =>
     s + g.movimientos.reduce((t, m) => t + Math.max(0, cantidadConSigno(m)), 0), 0);
   $('#ing-chips').innerHTML = [
-    `<span class="chip">📄 ${grupos.length} registro${grupos.length === 1 ? '' : 's'}</span>`,
-    `<span class="chip chip-entrada">📅 Hoy: ${deHoy.length} · ${unidadesHoy} unidades</span>`,
+    `<span class="chip">${iconoLinea('documento')}${grupos.length} registro${grupos.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip chip-entrada">${iconoLinea('calendario')}Hoy: ${deHoy.length} · ${unidadesHoy} unidades</span>`,
   ].join('');
 
   $('#ing-vacio').hidden = !!grupos.length;
@@ -8346,13 +8465,9 @@ function renderIngresos() {
             ${esLote ? `${g.movimientos.length} productos · ` : ''}${unidades} unidad${unidades === 1 ? '' : 'es'}
           </span>
           ${mandaComoAdmin() && g.tipo === 'entrada'
-            ? `<button type="button" class="btn btn-secondary btn-small" data-editar-lote="${escapeHtml(g.clave)}"
-                 title="Corregir este ingreso (pide tu código)">✏️</button>`
-            : ''}
+            ? botonDeFila(`data-editar-lote="${escapeHtml(g.clave)}"`, 'lapiz', 'Corregir este ingreso (pide tu código)') : ''}
           ${mandaComoAdmin()
-            ? `<button type="button" class="btn btn-danger btn-small" data-borrar-lote="${escapeHtml(g.clave)}"
-                 title="Anular este ingreso (pide tu código)">🗑️</button>`
-            : ''}
+            ? botonDeFila(`data-borrar-lote="${escapeHtml(g.clave)}"`, 'papelera', 'Anular este ingreso (pide tu código)', 'peligro') : ''}
         </div>
       </div>
       ${g.nota ? `<p class="ing-grupo-nota">📝 ${escapeHtml(g.nota)}</p>` : ''}
@@ -8817,9 +8932,9 @@ function renderVentas() {
   const deHoy = vivas.filter(n => n.fecha === hoy);
   const totalHoy = deHoy.reduce((s, n) => s + (Number(n.total) || 0), 0);
   $('#nv-chips').innerHTML = [
-    `<span class="chip">🧮 ${vivas.length} nota${vivas.length === 1 ? '' : 's'}</span>`,
-    `<span class="chip chip-entrada">📅 Hoy: ${deHoy.length} · S/ ${soles(totalHoy)}</span>`,
-    anuladasHoy ? `<span class="chip chip-salida">🚫 ${anuladasHoy} anulada${anuladasHoy === 1 ? '' : 's'} hoy</span>` : '',
+    `<span class="chip">${iconoLinea('calculadora')}${vivas.length} nota${vivas.length === 1 ? '' : 's'}</span>`,
+    `<span class="chip chip-entrada">${iconoLinea('calendario')}Hoy: ${deHoy.length} · S/ ${soles(totalHoy)}</span>`,
+    anuladasHoy ? `<span class="chip chip-salida">${iconoLinea('prohibido')}${anuladasHoy} anulada${anuladasHoy === 1 ? '' : 's'} hoy</span>` : '',
   ].filter(Boolean).join('');
 
   $('#nv-vacio').hidden = !!lista.length;
@@ -8842,19 +8957,22 @@ function renderVentas() {
       <td class="nv-num"><strong>${escapeHtml(numeroCorto(n.numero))}</strong></td>
       <td>${formatoFecha(n.fecha)}<small>${escapeHtml(n.hora || '')}</small></td>
       <td>${escapeHtml(n.clienteNombre || '—')}${motivo}</td>
-      <td class="col-um">${n.conFlete ? '<span class="cliente-etq cliente-etq-flete" title="Esta venta llevó cargo de flete">🚚</span>' : ''}</td>
+      <td class="col-um">${n.conFlete ? `<span class="cliente-etq cliente-etq-flete" title="Esta venta llevó cargo de flete">${iconoLinea('camion')}</span>` : ''}</td>
       <td>${escapeHtml(n.zona || '—')}</td>
       <td><span class="ped-chip ${est.clase}">${est.etiqueta}</span></td>
       <td class="col-num">${(n.items || []).length}</td>
       <td class="col-num"><strong>${soles(n.total)}</strong></td>
       <td>${escapeHtml(mostrarComo(anulada ? n.anulada.por : n.emitidaPor) || '—')}</td>
       <td class="col-acc">
-        ${notaSePuedeEditar(n) ? `<button type="button" class="btn btn-secondary btn-small" data-editar-nota="${escapeHtml(n.id)}" title="Modificar la nota">✏️</button>` : ''}
-        ${!anulada && estado !== 'pendiente' ? `<button type="button" class="btn btn-secondary btn-small" data-nota-info="${escapeHtml(n.id)}" title="Ver la nota completa (solo lectura)">ℹ️</button>` : ''}
-        <button type="button" class="btn btn-secondary btn-small" data-ver-nota="${escapeHtml(n.id)}" title="Verla tal como se imprimirá, sin imprimir">👁️</button>
-        <button type="button" class="btn btn-secondary btn-small" data-imprimir-nota="${escapeHtml(n.id)}" title="Imprimir">🖨️</button>
-        ${!anulada && puede('ventasAnular') ? `<button type="button" class="btn btn-danger btn-small" data-anular-nota="${escapeHtml(n.id)}" title="Anular: la nota se queda de constancia">🚫</button>` : ''}
-        ${mandaComoAdmin() ? `<button type="button" class="btn btn-danger btn-small" data-eliminar-nota="${escapeHtml(n.id)}" title="Eliminar del todo (pide tu código)">🗑️</button>` : ''}
+        ${notaSePuedeEditar(n) ? botonDeFila(`data-editar-nota="${escapeHtml(n.id)}"`, 'lapiz', 'Modificar la nota') : ''}
+        ${!anulada && estado !== 'pendiente'
+          ? botonDeFila(`data-nota-info="${escapeHtml(n.id)}"`, 'info', 'Ver la nota completa (solo lectura)') : ''}
+        ${botonDeFila(`data-ver-nota="${escapeHtml(n.id)}"`, 'ojo', 'Verla tal como se imprimirá, sin imprimir')}
+        ${botonDeFila(`data-imprimir-nota="${escapeHtml(n.id)}"`, 'impresora', 'Imprimir')}
+        ${!anulada && puede('ventasAnular')
+          ? botonDeFila(`data-anular-nota="${escapeHtml(n.id)}"`, 'prohibido', 'Anular: la nota se queda de constancia', 'peligro') : ''}
+        ${mandaComoAdmin()
+          ? botonDeFila(`data-eliminar-nota="${escapeHtml(n.id)}"`, 'papelera', 'Eliminar del todo (pide tu código)', 'peligro') : ''}
       </td>
     </tr>`;
   }).join('');
@@ -9028,7 +9146,7 @@ function nvRenderSugerencias(texto) {
     const lleno = topeDeCreditoAlcanzado(c);
     return `<button type="button" class="combo-item" data-nv-cliente="${escapeHtml(c.id)}" data-i="${i}">
       <span class="combo-nombre">${escapeHtml(c.nombre)}</span>
-      ${clientePagaFlete(c) ? '<span class="cliente-etq cliente-etq-flete">🚚</span>' : ''}
+      ${clientePagaFlete(c) ? `<span class="cliente-etq cliente-etq-flete">${iconoLinea('camion')}</span>` : ''}
       ${lleno ? '<span class="cliente-etq cliente-etq-tope">sin cupo</span>' : ''}
       <small>${escapeHtml(c.codigo || '')} ${c.zona ? '· ' + escapeHtml(c.zona) : ''}</small>
     </button>`;
@@ -9056,7 +9174,7 @@ function nvSeleccionarCliente(id, reponer = true) {
     // que cambian lo que se puede hacer en esta pantalla.
     const insignia = $('#nv-ficha-cat');
     insignia.hidden = !clientePagaFlete(cli);
-    insignia.textContent = '🚚 flete';
+    insignia.innerHTML = `${iconoLinea('camion')}flete`;
     insignia.title = 'A cada producto se le suma su cargo de flete';
     $('#nv-fc-nombre').textContent = cli.nombre;
     $('#nv-fc-codigo').textContent = cli.codigo || '—';
@@ -9108,6 +9226,54 @@ function creditoDeNotaEnEdicion() {
 
 function clienteDeLaNota() {
   return nvClienteId ? clientePorId(nvClienteId) : null;
+}
+
+/* ====== Vender lo que no hay ======
+   Con `stockNegativo` en sí (como siempre), la app avisa pero deja pasar: a
+   veces la mercadería está en el camión y todavía no se ha registrado, y
+   frenar la venta por eso sería peor. Poniéndolo en no, la nota no admite más
+   de lo que hay contado. */
+function seVendeSinStock() {
+  return settings.stockNegativo !== false;
+}
+
+/* Lo que queda disponible PARA ESTA NOTA. Al modificar una nota su salida ya
+   está descontada del almacén, así que hay que devolvérsela antes de mirar: si
+   no, cambiar 10 sacos por 11 diría que no hay ninguno. */
+function stockDisponibleParaLaNota(productoId) {
+  let hay = stockDe(productoId);
+  if (nvEditandoId) {
+    for (const m of kardex) {
+      if (m.notaId === nvEditandoId && m.motivo === 'venta' && m.productoId === productoId) {
+        hay -= cantidadConSigno(m);   // era una salida (negativa): se devuelve
+      }
+    }
+  }
+  return hay;
+}
+
+/* Cuánto se está pidiendo de un producto EN TODA la nota. Un mismo producto
+   puede estar en dos renglones —lo vendido y lo regalado—, y el almacén no
+   distingue: de los dos sale mercadería. */
+function pedidoEnLaNota(productoId, exceptoIndice = -1) {
+  return nvItems.reduce((s, it, i) =>
+    i === exceptoIndice || it.productoId !== productoId ? s : s + (Number(it.cantidad) || 0), 0);
+}
+
+/* Los productos de la nota que no alcanzan. Devuelve [] cuando todo cuadra. */
+function productosSinStockEnLaNota() {
+  const porProducto = new Map();
+  for (const it of nvItems) {
+    porProducto.set(it.productoId, (porProducto.get(it.productoId) || 0) + (Number(it.cantidad) || 0));
+  }
+  const faltan = [];
+  for (const [id, pedido] of porProducto) {
+    const p = productoPorId(id);
+    if (!p) continue;
+    const hay = stockDisponibleParaLaNota(id);
+    if (pedido > hay) faltan.push({ nombre: p.nombre, pedido, hay });
+  }
+  return faltan;
 }
 
 /* Vuelve a poner el precio de lista en las líneas que nadie tocó a mano. Ahora
@@ -9165,6 +9331,23 @@ function agregarItemNota() {
   }
   const p = productoPorId(id);
   if (!p) return;
+
+  /* Con el almacén en negativo desactivado, aquí se para: se avisa ANTES de
+     meterlo en la nota, no al guardar. Enterarse al final de que un producto
+     no cabía obliga a deshacer, y quien está de cara al cliente no tiene por
+     qué pelearse con eso. */
+  if (!seVendeSinStock()) {
+    const hay = stockDisponibleParaLaNota(p.id);
+    const yaPedido = pedidoEnLaNota(p.id);
+    if (yaPedido + cantidad > hay) {
+      const queda = Math.max(0, hay - yaPedido);
+      toast(queda > 0
+        ? `📦 Solo quedan ${queda} de ${p.nombre}`
+        : `📦 No queda stock de ${p.nombre}`);
+      $('#nv-cantidad').focus();
+      return;
+    }
+  }
 
   // Si el producto ya está en la nota, se suma a la línea que ya existe. Con
   // una excepción: una línea que ya está de BONIFICACIÓN no se toca. Si se
@@ -9233,8 +9416,12 @@ function renderNotaItems() {
   cuerpo.innerHTML = nvItems.map((it, i) => {
     const { importe, dsctoBonif, neto } = cuentaDeLinea(it);
     const p = productoPorId(it.productoId);
-    const stock = p ? stockDe(p.id) : 0;
-    const falta = p && (Number(it.cantidad) || 0) > stock;
+    /* Lo disponible para ESTA nota, y contra lo pedido en TODA ella: un mismo
+       producto puede ir en dos renglones —lo vendido y lo regalado— y del
+       almacén sale la suma de los dos. Mirando renglón a renglón, dos líneas de
+       6 sobre un stock de 10 parecerían caber. */
+    const stock = p ? stockDisponibleParaLaNota(p.id) : 0;
+    const falta = p && pedidoEnLaNota(p.id) > stock;
     // Solo lectura: la cantidad y el precio son texto, no cuadros para
     // escribir — es la misma información, pero nada en esta fila se toca.
     const celdaCant = nvSoloLectura
@@ -9292,6 +9479,21 @@ function armarNota() {
   const cli = nvClienteId ? clientePorId(nvClienteId) : null;
   if (!cli) { toast('⚠️ Elige el cliente de la nota'); $('#nv-cliente-buscar').focus(); return null; }
   if (!nvItems.length) { toast('⚠️ Agrega al menos un producto'); return null; }
+
+  /* La segunda comprobación del almacén, y la que de verdad cierra la puerta:
+     la cantidad se puede escribir a mano en la tabla, sin pasar por el botón de
+     agregar. Se mira aquí, por donde pasa toda nota antes de grabarse. */
+  if (!seVendeSinStock()) {
+    const faltan = productosSinStockEnLaNota();
+    if (faltan.length) {
+      alert('No hay stock suficiente para esta nota:\n\n'
+        + faltan.map(f => `· ${f.nombre}: se piden ${f.pedido} y hay ${f.hay}`).join('\n')
+        + '\n\nRegistra el ingreso de la mercadería en 📥 Ingreso de productos, '
+        + 'o baja la cantidad.\n\nSi vendes mercadería que todavía no has registrado, '
+        + 'el administrador puede permitirlo en Configuración → Almacén.');
+      return null;
+    }
+  }
 
   /* El tope de créditos del cliente. Se comprueba aquí, en el sitio por el que
      pasa toda nota antes de grabarse, y no solo al elegir el cliente: entre una
@@ -10086,6 +10288,18 @@ function inicializarEventos() {
   $('#cli-form').addEventListener('submit', guardarClienteForm);
   $('#btn-cli-cancelar').addEventListener('click', () => $('#modal-cliente-form').close());
   $('#cli-buscar').addEventListener('input', renderClientes);
+  $('#btn-cli-filtros').addEventListener('click', () => {
+    const caja = $('#cli-filtros');
+    caja.hidden = !caja.hidden;
+    $('#btn-cli-filtros').setAttribute('aria-expanded', caja.hidden ? 'false' : 'true');
+    if (!caja.hidden) llenarFiltroDeZonas();
+  });
+  ['#cli-filtro-zona', '#cli-filtro-cond', '#cli-filtro-deuda']
+    .forEach(s => $(s).addEventListener('change', renderClientes));
+  $('#btn-cli-filtros-limpiar').addEventListener('click', () => {
+    ['#cli-filtro-zona', '#cli-filtro-cond', '#cli-filtro-deuda'].forEach(s => { $(s).value = ''; });
+    renderClientes();
+  });
   $('#btn-cli-importar').addEventListener('click', importarClientesDesdeCreditos);
   $('#clientes-list').addEventListener('click', ev => {
     const editar = ev.target.closest('[data-editar-cliente]');
@@ -10786,6 +11000,7 @@ function inicializarEventos() {
   $('#nav-settings').addEventListener('click', () => $('#btn-settings').click());
 
   arrancarReloj();
+  ponerIconosDeSeccion();
   vigilarIconos();   // los emojis pasan a ser iconos en color, iguales en todo equipo
 
   // Contraer / desplegar el panel lateral
@@ -10851,6 +11066,13 @@ function inicializarEventos() {
     renderConfigHojaAuto();
     $('#settings-dashboard').hidden = !esAdmin();
     $('#s-dashboard-empleados').checked = !!settings.dashboardEmpleados;
+    /* Dejar vender sin stock cambia lo que puede hacer todo el equipo: lo pone
+       el dueño, no el vendedor al que le acaba de saltar el aviso.
+       Con `mandaComoAdmin()` y no con `esAdmin()`: sin cuenta en la nube no hay
+       "administrador" que valga, y usando el otro el dueño que trabaja en local
+       no habría podido ni ver el ajuste. */
+    $('#settings-almacen').hidden = !mandaComoAdmin();
+    $('#s-stock-negativo').checked = seVendeSinStock();
     // Los ajustes del negocio los define el administrador para todos
     $('#s-emp-direccion').value = settings.empresaDireccion || '';
     $('#s-emp-ruc').value = settings.empresaRuc || '';
@@ -10888,6 +11110,9 @@ function inicializarEventos() {
       settings.hojaAutoHora = $('#s-hoja-hora').value || '08:00';
       settings.dashboardEmpleados = $('#s-dashboard-empleados').checked;
     }
+    // Aparte del bloque de arriba, por lo mismo: en modo local no hay
+    // "administrador" y el dueño tiene que poder guardarlo igual.
+    if (mandaComoAdmin()) settings.stockNegativo = $('#s-stock-negativo').checked;
     actualizarAtajosVenc();
     mostrarSeccion('creditos');
     render();

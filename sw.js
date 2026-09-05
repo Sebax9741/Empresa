@@ -1,5 +1,5 @@
 /* Service worker: permite instalar la app y usarla sin internet */
-const CACHE = 'creditos-v151';
+const CACHE = 'creditos-v152';
 /* Lo imprescindible. Esta lista es de todo o nada: si un solo archivo falla al
    bajar, la instalación entera se cae. Por eso aquí va solo lo que la app
    necesita para funcionar, y nada más.

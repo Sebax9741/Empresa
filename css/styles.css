@@ -453,7 +453,7 @@ body {
   display: grid; place-items: center;
   color: var(--muted);
 }
-.dash-icono-trazo { width: 18px; height: 18px; display: block; }
+.ico-linea { width: 18px; height: 18px; display: block; }
 
 /* Rejillas de paneles con gráficos: por pares, como en el sistema de referencia */
 .dash-grid {
@@ -496,7 +496,7 @@ body {
 }
 .panel-titulo { font-size: 13px; font-weight: 650; margin: 0; letter-spacing: 0; }
 .panel-titulo-icono { display: inline-flex; align-items: center; gap: 0.3rem; }
-.panel-titulo-icono .dash-icono-trazo { width: 14px; height: 14px; }
+.panel-titulo-icono .ico-linea { width: 14px; height: 14px; }
 .panel-sub { font-size: 11px; font-weight: 400; color: var(--muted); margin: 0.05rem 0 0; }
 .panel-chip {
   flex-shrink: 0;
@@ -551,7 +551,7 @@ body {
   background: var(--bg-tint);
   color: var(--muted);
 }
-.dash-fila-ico .dash-icono-trazo { width: 15px; height: 15px; }
+.dash-fila-ico .ico-linea { width: 15px; height: 15px; }
 .dash-fila-txt { flex: 1; min-width: 0; }
 .dash-fila-nom { font-weight: 600; font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-fila-meta { font-size: 11px; font-weight: 400; color: var(--muted); }
@@ -588,7 +588,7 @@ body {
 }
 .barra-et { display: flex; align-items: center; gap: 0.25rem; font-size: 12px; color: var(--muted); font-weight: 600; overflow: hidden; white-space: nowrap; }
 .barra-et > span { overflow: hidden; text-overflow: ellipsis; }
-.barra-et .dash-icono-trazo { width: 13px; height: 13px; flex-shrink: 0; }
+.barra-et .ico-linea { width: 13px; height: 13px; flex-shrink: 0; }
 .barra-pista { background: var(--bg-tint); border-radius: 999px; height: 8px; overflow: hidden; }
 .barra-valor { display: block; height: 100%; border-radius: 999px; background: var(--c); width: var(--w); }
 .barra-num { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 3.25rem; text-align: right; }
@@ -742,38 +742,39 @@ body {
 .hoja-auto-hora { max-width: 240px; }
 
 /* ====== Resumen ====== */
+/* Las cuatro cifras de arriba de Créditos, con la misma forma que las del
+   Dashboard: compactas, sin la franja de color a la izquierda y sin levantarse
+   al pasar por encima. Son un dato que se lee, no un botón que se pulsa. */
 .summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.7rem;
-  margin-bottom: 1rem;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
 }
 
 .summary-card {
   position: relative;
   background: var(--card);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--primary);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 0.9rem 1rem;
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-sm);
+  padding: 0.45rem 0.7rem;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.1rem;
   overflow: hidden;
-  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
 }
-.summary-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
 .summary-label {
-  font-size: 0.68rem; color: var(--muted); text-transform: uppercase;
-  letter-spacing: 0.08em; font-weight: 700;
+  font-size: 12px; color: var(--muted); font-weight: 600;
 }
-.summary-value { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; color: var(--primary); }
-.summary-card.summary-danger { border-left-color: var(--danger); }
+.summary-value {
+  font-size: 20px; font-weight: 650; letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums; line-height: 1.15;
+  color: var(--primary);
+}
 .summary-card.summary-danger .summary-value { color: var(--danger); }
-.summary-card.summary-ok { border-left-color: var(--ok); }
 .summary-card.summary-ok .summary-value { color: var(--ok); }
-.summary-card:last-child { border-left-color: var(--azul); }
+.summary-card:last-child .summary-value { color: var(--azul); }
 .summary-card:last-child .summary-value { color: var(--azul); }
 
 /* ====== Resumen de lo filtrado ====== */
@@ -993,27 +994,32 @@ select.input { cursor: pointer; }
   font-size: 0.92rem;
 }
 
+/* Los títulos de las tablas iban sobre una franja azul oscura, y era lo que más
+   se salía del tono del resto: una barra de ese peso pide la atención que
+   tienen que llevarse los datos. Ahora es un fondo apagado con la letra en
+   gris, como el panel de Shopify o el de Claude: se lee igual de bien y deja de
+   competir con las filas. */
 .credit-table th {
   text-align: left;
-  padding: 0.75rem 0.9rem;
+  padding: 0.6rem 0.9rem;
   /* Fila de títulos pegada al borde de arriba de la pantalla, justo debajo de
      la cabecera de la app (su alto lo mide el guion). */
   position: sticky;
   top: var(--alto-cabecera, 0px);
   z-index: 2;
-  background: var(--side);
+  background: var(--bg-tint);
   /* Con border-collapse el borde se pierde al quedar fija: se dibuja dentro */
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 -1px 0 var(--border);
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #c3cede;
-  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
 }
-.credit-table th:hover { color: #fff; }
+.credit-table th:hover { color: var(--text); }
 /* El recuadro ya no recorta (no tiene overflow), así que las esquinas de
    arriba las redondea el propio encabezado */
 .credit-table thead th:first-child { border-top-left-radius: var(--radius); }
@@ -1384,15 +1390,24 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 .cliente-datos { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; }
 .cliente-datos strong { font-size: 0.94rem; }
+/* La zona en gris, no en naranja. Con diez tarjetas en pantalla, diez pastillas
+   del color de acento se comen la atención que tiene que llevarse el nombre del
+   cliente; el acento se reserva para lo que hay que mirar (el flete, el tope). */
 .cliente-zona {
-  background: var(--primary-light);
-  color: var(--primary-dark);
+  background: var(--bg-tint);
+  color: var(--muted);
   padding: 0.08rem 0.5rem;
   border-radius: var(--radius-chip);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
 }
-.cliente-meta { flex-basis: 100%; color: var(--muted); font-size: 0.78rem; }
+.cliente-meta {
+  flex-basis: 100%; color: var(--muted); font-size: 0.78rem;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.15rem 0.7rem;
+}
+.cliente-dato { display: inline-flex; align-items: center; gap: 0.25rem; min-width: 0; }
+.cliente-dato .ico-linea { width: 13px; height: 13px; flex: none; color: var(--gray); }
 .cliente-acciones { display: flex; gap: 0.3rem; flex-shrink: 0; }
 
 @media (max-width: 520px) {
@@ -1881,8 +1896,8 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .cob-usuarios th,
 .cob-usuarios td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .cob-usuarios thead th {
-  background: var(--side); text-align: left; font-size: 0.78rem; color: #c3cede; font-weight: 700;
-  border-bottom-color: transparent;
+  background: var(--bg-tint); text-align: left; font-size: 0.75rem; color: var(--muted); font-weight: 600;
+  border-bottom-color: var(--border);
 }
 .cob-usuarios .col-num { text-align: right; }
 .cob-usuario-nom { font-weight: 700; }
@@ -1921,12 +1936,12 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   position: sticky;
   top: var(--alto-cabecera, 0px);
   z-index: 2;
-  background: var(--side);
-  color: #c3cede;
-  font-weight: 700;
+  background: var(--bg-tint);
+  color: var(--muted);
+  font-weight: 600;
   /* Con border-collapse el borde se pierde al quedar fija: se dibuja dentro */
   border-bottom-color: transparent;
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 -1px 0 var(--border);
 }
 /* El recuadro ya no recorta (no tiene overflow), así que las esquinas de
    arriba las redondea el propio encabezado */
@@ -2453,13 +2468,14 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 }
 
 /* Código del cliente */
+/* El código, como un dato de referencia y no como un titular: en monoespaciada
+   y apagado, igual que en la tabla de productos. Relleno de naranja competía
+   con el nombre del cliente, que es lo que de verdad se busca. */
 .cliente-codigo {
-  font-weight: 700;
-  font-size: 0.74rem;
-  color: #fff;
-  background: var(--primary);
-  border-radius: 6px;
-  padding: 0.1rem 0.42rem;
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-weight: 600;
+  font-size: 0.72rem;
+  color: var(--gray);
   flex-shrink: 0;
 }
 .combo-codigo { color: var(--primary-dark); font-size: 0.76rem; }
@@ -3079,18 +3095,139 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 .sec-cab-acciones { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .sec-buscar { width: 16rem; max-width: 100%; margin: 0; }
 
+/* ---- Cabecera de sección con icono de trazo ----
+   El mismo lenguaje que el Dashboard: un icono de un solo trazo del color del
+   texto y el título en un tamaño de interfaz, no de portada. Un emoji en color
+   a 1.5rem pesa más que el propio nombre de la sección. */
+.vista > h2,
+.vista > form > h2,
+.sec-cab h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+.vista > h2 .ico-linea,
+.sec-cab h2 .ico-linea {
+  width: 20px; height: 20px; flex: none;
+  color: var(--muted);
+}
+
+/* ---- Buscador a todo lo ancho ----
+   Con 200 clientes lo primero que se hace al entrar es buscar, así que la
+   barra ocupa la línea entera en vez de encogerse en una esquina. La lupa va
+   DENTRO, y el filtro al final: son parte del mismo gesto. */
+.buscador-largo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 0.5rem 0 0.75rem;
+  margin-bottom: 0.7rem;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.buscador-largo:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.buscador-lupa { display: flex; color: var(--muted); flex: none; }
+.buscador-lupa .ico-linea { width: 17px; height: 17px; }
+/* El campo va desnudo: el recuadro lo pone la barra. Dos bordes, uno dentro
+   del otro, es lo que hace que un buscador parezca un formulario. */
+.buscador-campo {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0.6rem 0;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.buscador-campo:focus { outline: none; }
+.buscador-campo::placeholder { color: var(--gray); }
+/* Quitar la X propia de Chrome en los campos de búsqueda: se sale del alto y
+   pinta un icono que no es de esta app */
+.buscador-campo::-webkit-search-cancel-button { display: none; }
+.buscador-boton {
+  display: grid; place-items: center;
+  width: 32px; height: 32px; flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.buscador-boton:hover { background: var(--bg-tint); color: var(--text); }
+/* Con filtros puestos se queda encendido: si no, una lista recortada no tiene
+   forma de explicar por qué le faltan clientes */
+.buscador-boton.activo { background: var(--primary-light); color: var(--primary-dark); border-color: var(--primary); }
+.buscador-boton .ico-linea { width: 17px; height: 17px; }
+
+.cli-filtros {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  background: var(--bg-tint);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.8rem;
+}
+.cli-filtros .field { margin: 0; min-width: 11rem; flex: 1; }
+.cli-filtros .input { margin: 0; }
+
+/* ---- Botón de fila ----
+   Solo el icono, apagado, y se enciende al pasar por encima. Antes cada fila
+   llevaba dos pastillas de color —naranja y roja— y en una tabla de veinte
+   filas eran cuarenta manchas compitiendo con los datos, que es lo que se ha
+   venido a leer. */
+.btn-fila {
+  display: inline-grid; place-items: center;
+  width: 30px; height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.14s var(--ease), color 0.14s var(--ease), border-color 0.14s var(--ease);
+}
+.btn-fila .ico-linea { width: 16px; height: 16px; }
+.btn-fila:hover { background: var(--bg-tint); color: var(--text); border-color: var(--border); }
+/* Lo que borra se avisa en rojo, pero solo cuando el dedo ya está encima: en
+   reposo es un icono más, para no tener veinte avisos de peligro en pantalla */
+.btn-fila-peligro:hover { background: var(--danger-light); color: var(--danger); border-color: var(--danger); }
+.btn-fila:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+/* En pantalla táctil no hay "pasar por encima": ahí se dibuja siempre el
+   contorno, o el botón parece que no se puede tocar */
+@media (hover: none) {
+  .btn-fila { border-color: var(--border); }
+}
+
 /* Fichas de resumen de cada sección (cuántos, cuánto, avisos) */
 .sec-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.9rem; }
 .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-chip);
-  padding: 0.32rem 0.85rem;
-  font-size: 0.82rem;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--muted);
-  box-shadow: var(--shadow);
+  /* Sin sombra: son etiquetas de dato, no botones. Una sombra por chip, con
+     cuatro o cinco en fila, levantaba una hilera de tarjetitas flotando. */
+  box-shadow: none;
 }
+.chip .ico-linea { width: 14px; height: 14px; flex: none; }
 .chip strong { color: var(--text); }
 .chip-entrada { color: var(--ok); border-color: var(--ok-light); background: var(--ok-light); }
 .chip-salida { color: var(--primary-dark); border-color: var(--primary-light); background: var(--primary-light); }
@@ -3112,20 +3249,22 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
   border-collapse: collapse;
   font-size: 0.9rem;
 }
+/* Mismo tono apagado que en la tabla de créditos: los títulos acompañan, no
+   compiten con los datos */
 .prod-tabla th, .kdx-tabla th, .nv-tabla th, .nv-items th {
   text-align: left;
-  padding: 0.6rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   position: sticky;
   top: var(--alto-cabecera, 0px);
   z-index: 2;
-  background: var(--side);
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.09);
+  background: var(--bg-tint);
+  box-shadow: inset 0 -1px 0 var(--border);
   white-space: nowrap;
   font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #c3cede;
-  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
 }
 /* Con el corrimiento lateral el recuadro pasa a ser su propia zona de
    desplazamiento: ahí los títulos van pegados a su borde, no al de la pantalla */
@@ -3299,8 +3438,10 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
    Dos marcas en la propia lista: si paga camión y cuánto fiado le queda. Son
    las dos cosas de una ficha que cambian lo que se le puede vender, y mirarlas
    abriendo cliente por cliente no es forma. */
+.cliente-etq .ico-linea { width: 12px; height: 12px; flex: none; }
+.nv-cat-flete .ico-linea { width: 14px; height: 14px; flex: none; }
 .cliente-etq {
-  display: inline-flex; align-items: center; gap: 0.2rem;
+  display: inline-flex; align-items: center; gap: 0.25rem;
   padding: 0.1rem 0.42rem;
   border-radius: var(--radius-chip);
   font-size: 0.7rem; font-weight: 700;
@@ -3712,6 +3853,7 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
 /* La marca de flete lleva texto, no una letra suelta: tiene que ensancharse */
 .nv-cat-flete {
   width: auto; height: auto; flex: none;
+  display: inline-flex; align-items: center; gap: 0.3rem;
   padding: 0.25rem 0.55rem;
   font-size: 0.75rem; font-weight: 700;
   background: var(--azul-light); color: var(--azul);

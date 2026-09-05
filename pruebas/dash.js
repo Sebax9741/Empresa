@@ -64,7 +64,7 @@ const { chromium } = require('playwright-core');
       anchoVista: Math.round(vista.width),
       anchoDisponible: window.innerWidth - Math.round(vista.left),
       altoIndicador: Math.round(indicador.height),
-      iconosTrazo: document.querySelectorAll('#view-dashboard .dash-icono-trazo').length,
+      iconosTrazo: document.querySelectorAll('#view-dashboard .ico-linea').length,
       emojisDashboard: /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/u.test(document.getElementById('view-dashboard').textContent),
     };
   });

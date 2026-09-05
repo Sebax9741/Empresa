@@ -137,24 +137,39 @@ const { chromium } = require('playwright-core');
   await p.evaluate(() => document.getElementById('nav-inicio').click());
   await p.waitForTimeout(700);
 
+  /* Los botones de fila (información, editar, borrar) ya no llevan el emoji en
+     color: llevan un icono de UN SOLO TRAZO, del color del texto. Es el mismo
+     lenguaje del Dashboard. Un emoji en color por botón, con veinte filas en
+     pantalla, hacía cuarenta manchas compitiendo con los datos. */
   const acciones = await p.evaluate(() => {
     const fila = document.querySelector('.row-actions');
     const de = sel => {
       const b = fila.querySelector(sel);
-      if (!b) return null;
-      const img = b.querySelector('img.emo');
-      return img ? { src: img.getAttribute('src'), ancho: Math.round(img.getBoundingClientRect().width) } : 'sin icono';
+      if (!b) return 'no está el botón';
+      const svg = b.querySelector('svg.ico-linea');
+      if (!svg) return 'sin icono de trazo';
+      return {
+        trazos: svg.querySelectorAll('path, circle, rect').length,
+        color: getComputedStyle(svg).stroke,
+        emojiDentro: !!b.querySelector('img.emo'),
+        ancho: Math.round(svg.getBoundingClientRect().width),
+        nombre: b.getAttribute('aria-label') || '',
+      };
     };
     return { info: de('[data-info]'), editar: de('[data-editar]'), borrar: de('[data-borrar]') };
   });
-  ok('El botón de información lleva su icono en color',
-    acciones.info && acciones.info.src && /2139/.test(acciones.info.src), JSON.stringify(acciones.info));
-  ok('El de editar también', acciones.editar && /270f/.test(acciones.editar.src || ''), JSON.stringify(acciones.editar));
-  ok('Y el de quitar', acciones.borrar && /1f5d1/.test(acciones.borrar.src || ''), JSON.stringify(acciones.borrar));
-  // Con la escala compacta mide 16 px: sigue siendo mayor que los iconos de
-  // texto (14 px), pero ya no infla la fila de acciones a zoom 100 %.
-  ok('En esos botones el icono va más grande',
-    acciones.info.ancho >= 16, acciones.info.ancho + 'px');
+  const deTrazo = a => a && a.trazos > 0 && !a.emojiDentro;
+  ok('El botón de información lleva icono de trazo, no emoji en color',
+    deTrazo(acciones.info), JSON.stringify(acciones.info));
+  ok('El de editar también', deTrazo(acciones.editar), JSON.stringify(acciones.editar));
+  ok('Y el de borrar', deTrazo(acciones.borrar), JSON.stringify(acciones.borrar));
+  ok('Se ven, y a tamaño de icono de fila',
+    acciones.info.ancho >= 12 && acciones.info.ancho <= 22, acciones.info.ancho + 'px');
+  // Un dibujo solo no le dice nada a quien usa lector de pantalla
+  ok('Y cada uno dice qué hace, aunque solo se vea el dibujo',
+    /informaci/i.test(acciones.info.nombre) && /editar/i.test(acciones.editar.nombre)
+      && /borrar/i.test(acciones.borrar.nombre),
+    [acciones.info.nombre, acciones.editar.nombre, acciones.borrar.nombre].join(' · '));
 
   // ── 4) Lo que se dibuja después también se cambia ──
   await p.evaluate(() => document.querySelector('[data-info]').click());
@@ -205,13 +220,13 @@ const { chromium } = require('playwright-core');
 
   await p.evaluate(() => document.getElementById('nav-dashboard').click());
   await p.waitForTimeout(700);
-  const kpis = await p.$$eval('.kpi-ico .dash-icono-trazo', is => is.map(i => ({
+  const kpis = await p.$$eval('.kpi-ico .ico-linea', is => is.map(i => ({
     px: Math.round(i.getBoundingClientRect().width), trazos: i.querySelectorAll('path, rect, circle').length })));
   ok('Las tarjetas del Dashboard llevan los nuevos iconos sobrios de trazo',
     kpis.length === 6 && kpis.every(k => k.trazos > 0), kpis.length + ' tarjetas');
   ok('Y esos iconos son compactos, como los del panel de Shopify',
     kpis.every(k => k.px === 18), [...new Set(kpis.map(k => k.px))].join('/') + 'px');
-  const iconosBarras = await p.$$eval('.barra-et .dash-icono-trazo', is => is.map(i =>
+  const iconosBarras = await p.$$eval('.barra-et .ico-linea', is => is.map(i =>
     Math.round(i.getBoundingClientRect().width)));
   ok('Los gráficos del Dashboard tampoco vuelven a usar emojis',
     iconosBarras.length > 0 && iconosBarras.every(px => px === 13), iconosBarras.length + ' iconos de trazo');
