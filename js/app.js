@@ -4995,7 +4995,7 @@ function graficoBarras(datos, formato = formatoMonto) {
     const color = d.color || COLORES_GRAFICO[i % COLORES_GRAFICO.length];
     return `
     <div class="barra-fila" data-tip-color="${color}" data-tip-label="${escapeHtml(d.etiqueta)}" data-tip-value="${escapeHtml(formato(d.valor))}">
-      <span class="barra-et">${escapeHtml(d.etiqueta)}</span>
+      <span class="barra-et">${d.icono ? iconoDashboard(d.icono) : ''}<span>${escapeHtml(d.etiqueta)}</span></span>
       <span class="barra-pista">
         <span class="barra-valor" style="--w:${(d.valor / max * 100).toFixed(1)}%; --c:${color}; --i:${i}"></span>
       </span>
@@ -5128,10 +5128,10 @@ function datosEstados() {
   const cuenta = { pendiente: 0, parcial: 0, vencido: 0, pagado: 0 };
   for (const c of creditos) cuenta[estadoEfectivo(c)] = (cuenta[estadoEfectivo(c)] || 0) + 1;
   return [
-    { etiqueta: '🕐 Pendientes', valor: cuenta.pendiente, color: '#3b7dd8' },
-    { etiqueta: '🪙 Pago parcial', valor: cuenta.parcial, color: '#e9b949' },
-    { etiqueta: '⚠️ Vencidos', valor: cuenta.vencido, color: '#d1483a' },
-    { etiqueta: '✅ Pagados', valor: cuenta.pagado, color: '#2a9d8f' },
+    { etiqueta: 'Pendientes', icono: 'reloj', valor: cuenta.pendiente, color: '#3b7dd8' },
+    { etiqueta: 'Pago parcial', icono: 'cartera', valor: cuenta.parcial, color: '#e9b949' },
+    { etiqueta: 'Vencidos', icono: 'alerta', valor: cuenta.vencido, color: '#d1483a' },
+    { etiqueta: 'Pagados', icono: 'listo', valor: cuenta.pagado, color: '#2a9d8f' },
   ];
 }
 
@@ -5147,9 +5147,9 @@ function datosMetodosPago(dias = 30) {
     }
   }
   return [
-    { etiqueta: '💵 Efectivo', valor: tot.efectivo, color: '#2a9d8f' },
-    { etiqueta: '📱 Yape', valor: tot.yape, color: '#8b6fc4' },
-    { etiqueta: '🏦 BCP', valor: tot.bcp, color: '#3b7dd8' },
+    { etiqueta: 'Efectivo', icono: 'billete', valor: tot.efectivo, color: '#2a9d8f' },
+    { etiqueta: 'Yape', icono: 'telefono', valor: tot.yape, color: '#8b6fc4' },
+    { etiqueta: 'BCP', icono: 'banco', valor: tot.bcp, color: '#3b7dd8' },
   ];
 }
 

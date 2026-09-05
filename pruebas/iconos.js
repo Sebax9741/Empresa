@@ -181,6 +181,10 @@ const { chromium } = require('playwright-core');
     kpis.length === 6 && kpis.every(k => k.trazos > 0), kpis.length + ' tarjetas');
   ok('Y esos iconos son compactos, como los del panel de Shopify',
     kpis.every(k => k.px === 18), [...new Set(kpis.map(k => k.px))].join('/') + 'px');
+  const iconosBarras = await p.$$eval('.barra-et .dash-icono-trazo', is => is.map(i =>
+    Math.round(i.getBoundingClientRect().width)));
+  ok('Los gráficos del Dashboard tampoco vuelven a usar emojis',
+    iconosBarras.length > 0 && iconosBarras.every(px => px === 13), iconosBarras.length + ' iconos de trazo');
 
   // En ningún otro sitio debe colarse la versión con recuadro
   const chipSueltos = await p.evaluate(() => [...document.querySelectorAll('img.emo')]

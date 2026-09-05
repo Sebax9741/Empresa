@@ -65,12 +65,14 @@ const { chromium } = require('playwright-core');
       anchoDisponible: window.innerWidth - Math.round(vista.left),
       altoIndicador: Math.round(indicador.height),
       iconosTrazo: document.querySelectorAll('#view-dashboard .dash-icono-trazo').length,
-      emojisIndicadores: /[💰📈⚠️📋✅📦]/u.test(document.getElementById('dash-kpis').textContent),
+      emojisDashboard: /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/u.test(document.getElementById('view-dashboard').textContent),
     };
   });
   ok('A 100 % el Dashboard aprovecha el ancho y muestra indicadores compactos con iconos de trazo',
     densidad.anchoVista >= densidad.anchoDisponible - 2 && densidad.altoIndicador <= 72
-      && densidad.iconosTrazo >= 8 && !densidad.emojisIndicadores,
+      // Esta prueba abre sin datos: están los 6 indicadores, 2 títulos y el
+      // estado vacío. Las barras con datos se comprueban en iconos.js.
+      && densidad.iconosTrazo >= 9 && !densidad.emojisDashboard,
     JSON.stringify(densidad));
 
   const primeraKpi = await p.locator('#dash-kpis .kpi').first().boundingBox();

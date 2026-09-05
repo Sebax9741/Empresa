@@ -447,6 +447,17 @@ body {
 @media (min-width: 860px) {
   .dash-grid-split { grid-template-columns: 1.8fr 1fr; }
   .dash-grid-2 { grid-template-columns: 1fr 1fr; }
+  /* Dona y leyenda se colocan lado a lado: antes las seis zonas apiladas
+     hacían crecer toda la fila y escondían los paneles siguientes al 100 %. */
+  .dash-grid-split .chart-dona {
+    max-width: none;
+    display: grid;
+    grid-template-columns: 130px minmax(0, 1fr);
+    align-items: center;
+    gap: 0.55rem;
+  }
+  .dash-grid-split .chart-dona > svg { width: 130px; }
+  .dash-grid-split .chart-dona .leyenda { margin-top: 0; align-content: center; }
 }
 .panel {
   transition: transform 0.16s var(--ease), box-shadow 0.16s var(--ease), background 0.16s var(--ease);
@@ -552,7 +563,9 @@ body {
   padding: 0.12rem 0.3rem; margin: 0 -0.3rem; border-radius: 8px;
   transition: background 0.15s var(--ease);
 }
-.barra-et { font-size: 0.75rem; color: var(--muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-et { display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: var(--muted); font-weight: 600; overflow: hidden; white-space: nowrap; }
+.barra-et > span { overflow: hidden; text-overflow: ellipsis; }
+.barra-et .dash-icono-trazo { width: 13px; height: 13px; flex-shrink: 0; }
 .barra-pista { background: var(--bg-tint); border-radius: 999px; height: 8px; overflow: hidden; }
 .barra-valor { display: block; height: 100%; border-radius: 999px; background: var(--c); width: var(--w); }
 .barra-num { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 3.25rem; text-align: right; }
