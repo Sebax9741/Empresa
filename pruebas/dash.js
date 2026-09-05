@@ -42,15 +42,44 @@ const { chromium } = require('playwright-core');
   ok('Los indicadores y los paneles del Dashboard siguen ahí',
     cuerpo.kpis >= 6 && cuerpo.paneles >= 2, JSON.stringify(cuerpo));
 
-  // Se sigue pudiendo crear un crédito desde Créditos
+  const tipo = await p.evaluate(() => {
+    const estilo = selector => getComputedStyle(document.querySelector(selector));
+    return {
+      fuente: estilo('#view-dashboard').fontFamily,
+      titulo: estilo('.dash-titulo').fontSize,
+      indicador: estilo('.kpi-et').fontSize,
+      panel: estilo('.panel-titulo').fontSize,
+      mayusculas: estilo('.kpi-et').textTransform,
+    };
+  });
+  ok('La escala tipográfica del Dashboard sigue la jerarquía de Shopify',
+    tipo.titulo === '24px' && tipo.indicador === '13px' && tipo.panel === '14px' && tipo.mayusculas === 'none',
+    JSON.stringify(tipo));
+
+  const primeraKpi = await p.locator('#dash-kpis .kpi').first().boundingBox();
+  await p.mouse.move(primeraKpi.x + primeraKpi.width / 2, primeraKpi.y + primeraKpi.height / 2);
+  await p.mouse.down();
+  await p.waitForTimeout(80);
+  const durantePresion = await p.locator('#dash-kpis .kpi').first().evaluate(el => getComputedStyle(el).transform);
+  await p.mouse.up();
+  // Se aparta del panel lateral: en el borde izquierdo se abriría encima del
+  // Dashboard y la captura dejaría de mostrar lo que esta prueba documenta.
+  await p.mouse.move(1498, 500);
+  await p.waitForTimeout(220);
+  const despuesPresion = await p.locator('#dash-kpis .kpi').first().evaluate(el => getComputedStyle(el).transform);
+  ok('Los indicadores responden al presionarlos y vuelven a su sitio',
+    durantePresion !== 'none' && despuesPresion === 'none', JSON.stringify({ durantePresion, despuesPresion }));
+
+  // La navegación a Créditos sigue intacta. El crédito ya no se crea suelto:
+  // nace al guardar una nota de venta, por eso aquí no se busca aquel botón.
   await p.evaluate(() => document.getElementById('nav-inicio').click());
   await p.waitForTimeout(450);
   const enCreditos = await p.evaluate(() => {
-    const b = document.getElementById('btn-new');
-    return { visible: !b.hidden, ancho: Math.round(b.getBoundingClientRect().width) };
+    const vista = document.getElementById('view-creditos');
+    return { visible: !!vista && !vista.hidden };
   });
-  ok('En Créditos el botón "＋ Nuevo crédito" sigue disponible',
-    enCreditos.visible && enCreditos.ancho > 50, JSON.stringify(enCreditos));
+  ok('El apartado "Créditos y Pagados" sigue abriendo',
+    enCreditos.visible, JSON.stringify(enCreditos));
 
   // Y la hoja de cobranza desde su apartado
   await p.evaluate(() => document.getElementById('nav-cobranza').click());
