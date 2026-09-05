@@ -1,7 +1,7 @@
 const { chromium } = require('playwright-core');
 /* En el teléfono el panel es un cajón: arriba solo lo esencial. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block',
     deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const p = await ctx.newPage();

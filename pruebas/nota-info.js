@@ -3,7 +3,7 @@ const { chromium } = require('playwright-core');
 /* El botón ℹ️ (antes 🔗) de Notas de venta: enseña la misma pantalla que
    "Modificando nota", pero congelada — nada que tocar, nada que guardar. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const p = await (await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' })).newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));

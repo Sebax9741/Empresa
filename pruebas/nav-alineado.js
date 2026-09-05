@@ -4,7 +4,7 @@ const { chromium } = require('playwright-core');
    nota o se esté viendo en solo lectura (donde además sale el atajo al
    crédito o al despacho, ahora debajo de "Volver a la lista"). */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const p = await (await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' })).newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));

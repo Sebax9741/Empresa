@@ -13,7 +13,7 @@ const CORREO = 'astropapa@ejemplo.com', CLAVE = 'clave-larga-123';
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: CORREO, password: CLAVE, returnSecureToken: true }) });
 
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const p = await (await b.newContext({ viewport: { width: 1600, height: 1000 }, serviceWorkers: 'block' })).newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));

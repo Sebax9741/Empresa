@@ -13,7 +13,7 @@ const { chromium } = require('playwright-core');
       seguía desplegado con el cursor ya en medio de la pantalla, hasta que se
       hacía clic en otro sitio. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const errs = [];

@@ -3,7 +3,7 @@ const { chromium } = require('playwright-core');
 /* El recorrido completo: nota de venta → despacho → crédito, con el número
    siguiendo al talonario de papel. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const errs = [];

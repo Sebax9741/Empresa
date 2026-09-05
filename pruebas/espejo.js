@@ -8,7 +8,7 @@ const { chromium } = require('playwright-core');
    De paso: una línea ya puesta como bonificación no se traga lo que se agrega
    después cobrando, y la foto de la boleta se puede poner desde la ficha. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1500, height: 1000 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const errs = [];

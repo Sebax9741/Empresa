@@ -10,7 +10,7 @@ const ALTO_UTIL = 198 * MM;             // 210 − 6 − 6
 (async () => {
   const html = fs.readFileSync('pruebas/nota-impresa.html', 'utf8').replace(/<script>[\s\S]*?<\/script>/, '');
   const ok = (t, c, x = '') => console.log(`${c ? '✅' : '❌'} ${t}${x ? ' — ' + x : ''}`);
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: Math.round(ANCHO_UTIL), height: Math.round(ALTO_UTIL) } });
   const p = await ctx.newPage();
 

@@ -4,7 +4,7 @@ const { chromium } = require('playwright-core');
    que importa es que por debajo sigan siendo el mismo <select> de siempre —
    mismo valor, mismo "change"— para que nada del resto se entere. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const p = await (await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' })).newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));

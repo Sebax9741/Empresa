@@ -3,7 +3,7 @@ const { chromium } = require('playwright-core');
 /* Lo que pide el código de seguridad y lo que no, el kardex con sus filtros y
    su stock por día, y la hoja de cobranza cerrada, que no deja entrar nada. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const errs = [];

@@ -2,7 +2,7 @@ const { chromium } = require('playwright-core');
 
 /* Exportar "Saldo a una fecha" a PDF (impresión) y a Excel. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const p = await (await b.newContext({ viewport: { width: 1500, height: 950 },
     serviceWorkers: 'block', acceptDownloads: true })).newPage();
   const errs = [];

@@ -3,7 +3,7 @@ const { chromium } = require('playwright-core');
 /* Las dos ventanas grandes en PC: la ficha del crédito se adapta a lo que hay
    (sin foto, ya pagado) sin dejar huecos, y editar un crédito cabe entero. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1600, height: 1000 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const errs = [];

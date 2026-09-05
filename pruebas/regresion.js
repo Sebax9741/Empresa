@@ -3,7 +3,7 @@ const { chromium } = require('playwright-core');
 /* Regresión: que lo de antes siga funcionando tras rehacer Ingreso de productos
    y cambiar el formato de la hora. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const errs = [];

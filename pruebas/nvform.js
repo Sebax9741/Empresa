@@ -1,7 +1,7 @@
 const { chromium } = require('playwright-core');
 /* El formulario de nota de venta: apretado, con serie por zona y bonificaciones. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1366, height: 768 }, serviceWorkers: 'block', deviceScaleFactor: 2 });
   const p = await ctx.newPage();
   const errs = [];

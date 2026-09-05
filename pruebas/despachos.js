@@ -4,7 +4,7 @@ const { chromium } = require('playwright-core');
    emitidas se ven ahí mismo, se mandan a reparto de un toque, y al volver se
    dice si fue crédito, contado o devuelta. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const errs = [];

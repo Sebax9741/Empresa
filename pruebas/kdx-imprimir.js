@@ -4,7 +4,7 @@ const { chromium } = require('playwright-core');
    Stock por día; en "Saldo a una fecha" se esconde (esa vista ya trae su
    propio Imprimir/PDF y Excel). */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const p = await (await b.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block' })).newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));

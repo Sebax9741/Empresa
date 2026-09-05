@@ -150,12 +150,22 @@ no se envía. Por eso se esconde con `opacity: 0`.
 Están en `pruebas/`. Son **Playwright contra la app de verdad**: abren un
 navegador, hacen clic, miden y comprueban. No hay pruebas unitarias.
 
-Para correrlas hace falta la app servida en el puerto 8099:
+Para correrlas hace falta el navegador y la app servida en el puerto 8099:
 
 ```bash
+npm install --no-save playwright-core     # una vez
+npx playwright-core install chromium      # una vez, se baja ~200 MB
+
 python3 -m http.server 8099 --directory .    # dejarlo corriendo aparte
 node pruebas/menus.js
 ```
+
+En Windows, si `python3` no existe, suele ser `py -m http.server 8099`.
+
+Qué navegador se usa lo decide `pruebas/navegador.js`: la variable `CHROMIUM`
+si está puesta, si no la ruta de siempre en Linux, y si tampoco, el que se
+bajó Playwright. **No volver a escribir una ruta a fuego en las pruebas**: se
+escribieron en Linux y así no arrancaban en ninguna otra máquina.
 
 Cada prueba imprime ✅ o ❌ por línea y al final si hubo errores de
 JavaScript. Se pueden correr varias a la vez: cada una abre su propio

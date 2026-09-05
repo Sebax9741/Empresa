@@ -3,7 +3,7 @@ const { chromium } = require('playwright-core');
 /* El reloj va en la cabecera, junto a la cuenta, y no se mueve al cambiar
    de sección. La cabecera ya no lleva título ni emoji. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const ctx = await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const errs = [];

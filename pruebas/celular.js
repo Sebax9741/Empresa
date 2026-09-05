@@ -6,7 +6,7 @@ const { chromium } = require('playwright-core');
    celular no se ve nada de eso. Aquí se comprueba que se ven y que se pueden
    leer desplazándolas de lado. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   // Un teléfono de verdad: 390x844, como el de la mano
   const ctx = await b.newContext({
     viewport: { width: 390, height: 844 },

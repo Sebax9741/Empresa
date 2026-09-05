@@ -5,7 +5,7 @@ const { chromium } = require('playwright-core');
    · Al editar un crédito ya existente, boleta / cliente / fecha de emisión /
      fecha de despacho quedan bloqueados; el resto sigue editable. */
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: require('./navegador') });
   const p = await (await b.newContext({ viewport: { width: 1500, height: 950 }, serviceWorkers: 'block' })).newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
