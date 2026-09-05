@@ -3,6 +3,9 @@ import { vigilarIconos } from './iconos.js';
 
 /* ====== Estado global ====== */
 let creditos = [];
+/* Verdadero hasta que llega la primera tanda de datos. Mientras tanto la
+   lista enseña filas de mentira en vez de afirmar que no hay nada. */
+let cargandoDatos = true;
 let clientes = [];        // base de datos de clientes: { id, nombre, zona, direccion, telefono, notas, creado }
 let hojas = [];           // hojas de cobranza creadas: { fecha, creada, creadaPor, creadaEn, cerrada, cerradaPor, cerradaEn }
 let despachos = [];       // despachos (viajes de reparto): { id, fecha, repartidor, carguero, notas, cerrado, creado, creadoPor, pedidos: [...] }
@@ -1459,6 +1462,7 @@ async function pintarCopiaLocal() {
     const guardados = await DB.getAllEspejo();
     if (guardados.length && !creditos.length) {
       creditos = guardados;
+      cargandoDatos = false;
       render();
     }
   } catch (e) { /* no había copia */ }
@@ -1667,6 +1671,7 @@ function suscribirNube() {
   // recuperó la conexión (el aviso de "subiendo…" se quedaría pegado).
   unsubSnapshot = fb.onSnapshot(coleccion, { includeMetadataChanges: true }, snap => {
     creditos = snap.docs.map(d => d.data());
+    cargandoDatos = false;          // ya llegaron: fuera las filas de mentira
     guardarCopiaLocal(creditos);
     // hasPendingWrites: hay cambios guardados aquí que aún no llegaron al servidor
     cambiosPendientes = snap.metadata.hasPendingWrites;
@@ -2626,7 +2631,7 @@ function render() {
   // Si un crédito enlazado se pagó, el estado del despacho pasa a "pagado":
   // mantén la vista de despachos al día si está abierta.
   if (!$('#view-despachos').hidden) renderDespachos();
-  $('#empty-state').hidden = creditos.length > 0;
+  $('#empty-state').hidden = cargandoDatos || creditos.length > 0;
   ajustarTablasFijas();
   sincronizarAvisos();
 }
@@ -2818,7 +2823,35 @@ let ultimaLista = [];
 const esVistaTarjetas = window.matchMedia('(max-width: 760px)');
 
 let hayListaDibujada = false;
+/* Mientras los datos vienen en camino se pintan filas de mentira, con la
+   forma de las de verdad. No es adorno: antes, en ese rato, la pantalla decía
+   "Aún no hay créditos registrados", que es una respuesta —y falsa— a una
+   pregunta que todavía no se podía contestar. Alguien con mala señal llegaba
+   a creer que había perdido su trabajo. */
+function renderEsqueleto() {
+  const anchos = [70, 130, 80, 75, 75, 90, 70, 90, 70, 85, 60];
+  const celda = a => `<td><span class="esqueleto" style="width:${a}%"></span></td>`;
+  const filas = n => Array.from({ length: n }, () => `<tr class="esqueleto-fila">${
+    anchos.map(a => celda(a)).join('')}</tr>`).join('');
+  if (esVistaTarjetas.matches) {
+    $('#cards').innerHTML = Array.from({ length: 4 }, () => `
+      <article class="card esqueleto-tarjeta">
+        <span class="esqueleto" style="width:45%; height:1.1rem"></span>
+        <span class="esqueleto" style="width:70%"></span>
+        <span class="esqueleto" style="width:55%"></span>
+      </article>`).join('');
+    $('#table-body').innerHTML = '';
+  } else {
+    $('#table-body').innerHTML = filas(8);
+    $('#cards').innerHTML = '';
+  }
+  $('#empty-state').hidden = true;
+  const aviso = $('#mas-filas');
+  if (aviso) aviso.hidden = true;
+}
+
 function renderListaCreditos(lista) {
+  if (cargandoDatos) { renderEsqueleto(); return; }
   if (lista) { ultimaLista = lista; hayListaDibujada = true; }
   else if (!hayListaDibujada) return;   // todavía no hubo un render() completo
   const trozo = ultimaLista.slice(0, filasVisibles);
@@ -4983,6 +5016,47 @@ function cerrarMenuUsuario() {
   $('#btn-cuenta').setAttribute('aria-expanded', 'false');
 }
 
+/* ====== Modo claro / oscuro ======
+   Tres opciones: automático (lo que diga el teléfono o la computadora),
+   siempre claro y siempre oscuro. Lo elegido se guarda en el propio equipo,
+   no en la cuenta: la misma persona puede querer oscuro en su tablet de la
+   calle y claro en la computadora de la oficina.
+
+   El "automático" se resuelve AQUÍ, no en el CSS: la página siempre acaba con
+   data-tema="claro" o "oscuro" escrito. Así la paleta oscura se define una
+   sola vez en la hoja de estilos. La misma cuenta la echa el guion de arranque
+   que hay en el <head>, para que no haya fogonazo blanco al abrir. */
+const TEMAS = {
+  auto:   { icono: '🌗', texto: 'Apariencia: automática' },
+  claro:  { icono: '☀️', texto: 'Apariencia: clara' },
+  oscuro: { icono: '🌙', texto: 'Apariencia: oscura' },
+};
+
+function temaElegido() {
+  try { return TEMAS[localStorage.getItem('tema')] ? localStorage.getItem('tema') : 'auto'; }
+  catch (e) { return 'auto'; }
+}
+
+function aplicarTema(quiere) {
+  if (!TEMAS[quiere]) quiere = 'auto';
+  try { localStorage.setItem('tema', quiere); } catch (e) { /* ventana privada */ }
+  const oscuro = quiere === 'oscuro' || (quiere === 'auto'
+    && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.tema = oscuro ? 'oscuro' : 'claro';
+  // La barra del navegador en el teléfono también se tiñe, o queda una franja
+  // blanca encima de una app oscura
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', oscuro ? '#121821' : '#f4f6f9');
+  pintarBotonTema();
+}
+
+function pintarBotonTema() {
+  const t = TEMAS[temaElegido()];
+  const icono = $('#tema-icono'), texto = $('#tema-texto');
+  if (icono) icono.textContent = t.icono;
+  if (texto) texto.textContent = t.texto;
+}
+
 /* ---- Tooltip de los gráficos del Dashboard (dona, barras, línea) ----
    Un solo cuadro flotante que sigue al cursor. Los elementos que lo activan
    llevan data-tip-color/label/value; se delega desde #view-dashboard porque
@@ -5131,7 +5205,7 @@ function renderDashboard() {
     { et: 'Por cobrar', val: formatoMonto(porCobrar), pie: 'saldo pendiente', ico: '💰', color: 'var(--primary)', bg: 'var(--primary-light)' },
     { et: 'Cobrado hoy', val: formatoMonto(cobradoHoy), pie: 'ingresos del día', ico: '📈', color: 'var(--accent)', bg: 'var(--accent-light)' },
     { et: 'Vencidos', val: String(vencidos), pie: 'requieren atención', ico: '⚠️', color: 'var(--danger)', bg: 'var(--danger-light)' },
-    { et: 'Créditos activos', val: String(activos), pie: 'en seguimiento', ico: '📋', color: 'var(--azul)', bg: '#e6efFB' },
+    { et: 'Créditos activos', val: String(activos), pie: 'en seguimiento', ico: '📋', color: 'var(--azul)', bg: 'var(--azul-light)' },
     { et: 'Cobrado total', val: formatoMonto(cobrado), pie: 'histórico', ico: '✅', color: 'var(--accent)', bg: 'var(--accent-light)' },
     { et: 'Despachos hoy', val: String(despHoy), pie: 'salieron a reparto', ico: '📦', color: 'var(--amber)', bg: 'var(--amber-light)' },
   ];
@@ -10458,6 +10532,14 @@ function inicializarEventos() {
     cerrarMenuUsuario();
     mostrarSeccion('settings');
   });
+  $('#btn-tema').addEventListener('click', () => {
+    const orden = ['auto', 'claro', 'oscuro'];
+    aplicarTema(orden[(orden.indexOf(temaElegido()) + 1) % orden.length]);
+  });
+  // Si está en automático y el sistema cambia de día a noche, la app le sigue
+  window.matchMedia('(prefers-color-scheme: dark)')
+    .addEventListener('change', () => { if (temaElegido() === 'auto') aplicarTema('auto'); });
+  pintarBotonTema();
   // Cerrar el menú al tocar fuera o con Escape
   document.addEventListener('click', ev => {
     if (!$('#usuario-menu').hidden && !ev.target.closest('.usuario-menu-wrap')) cerrarMenuUsuario();
@@ -10534,6 +10616,9 @@ async function iniciarLocal() {
     kardex = [];
     notas = [];
   }
+  // Haya salido bien o mal, ya no se está cargando: si falló, lo correcto es
+  // enseñar el aviso de vacío, no dejar las filas de mentira girando para siempre
+  cargandoDatos = false;
   cargarSeguridad();
   llenarSelectClientes();
   renderClientes();

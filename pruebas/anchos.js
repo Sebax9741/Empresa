@@ -1,5 +1,37 @@
 const { chromium } = require('playwright-core');
 
+/* Un PNG diminuto de verdad (1×1, gris), armado a mano: cabecera, la tira de
+   píxeles y el cierre, cada trozo con su comprobación. Sirve para que la app
+   tenga algo que cargar sin arrastrar un archivo por el repositorio. */
+function pngDePrueba() {
+  const zlib = require('zlib');
+  const crc = require('crypto');
+  const trozo = (tipo, datos) => {
+    const cuerpo = Buffer.concat([Buffer.from(tipo, 'ascii'), datos]);
+    const largo = Buffer.alloc(4); largo.writeUInt32BE(datos.length);
+    const suma = Buffer.alloc(4); suma.writeUInt32BE(crcDe(cuerpo));
+    return Buffer.concat([largo, cuerpo, suma]);
+  };
+  const crcDe = buf => {
+    let c = ~0;
+    for (const b of buf) {
+      c ^= b;
+      for (let i = 0; i < 8; i++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1));
+    }
+    return (~c) >>> 0;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1, 0); ihdr.writeUInt32BE(1, 4);
+  ihdr[8] = 8; ihdr[9] = 2;   // 8 bits por canal, color RGB
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+    trozo('IHDR', ihdr),
+    trozo('IDAT', zlib.deflateSync(Buffer.from([0, 0x88, 0x88, 0x88]))),
+    trozo('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+
 /* Las dos ventanas grandes tienen que caber enteras en la pantalla del PC,
    también cuando el crédito trae foto y pagos a cuenta. */
 const PANTALLAS = [
@@ -82,7 +114,12 @@ const PANTALLAS = [
     // ── Editar para ponerle la foto ──
     await p.evaluate(() => document.querySelector('[data-editar]').click());
     await p.waitForTimeout(900);
-    await p.setInputFiles('#f-foto-archivo', 'pruebas/boleta.png');
+    // La foto de la boleta se fabrica aquí mismo. Antes era un archivo suelto
+    // en el borrador, que no viaja con el repositorio: quien clonara el
+    // proyecto se encontraba esta prueba rota sin saber por qué.
+    await p.setInputFiles('#f-foto-archivo', {
+      name: 'boleta.png', mimeType: 'image/png', buffer: pngDePrueba(),
+    });
     await p.waitForTimeout(1600);
     const ed = await p.evaluate(() => {
       const d = document.getElementById('modal-form');

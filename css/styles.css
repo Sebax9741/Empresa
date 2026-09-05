@@ -35,6 +35,7 @@
   --amber: #e9b949;          /* ámbar: tercera serie / avisos suaves */
   --amber-light: #fdf3dd;
   --azul: #3b7dd8;           /* azul: cuarta serie */
+  --azul-light: #e6effb;
   --ink: #e0714a;            /* botón principal = coral */
   --danger: #d1483a;
   --danger-light: #fbe9e6;
@@ -65,6 +66,62 @@
 
   /* Ritmo de las animaciones */
   --ease: cubic-bezier(0.22, 0.75, 0.3, 1);
+}
+
+/* ══════════ Modo oscuro ══════════
+   Para los cobradores, que trabajan de noche en la calle con la tablet en la
+   mano: una pantalla blanca a las nueve deslumbra y no deja ver ni la libreta.
+
+   Se pinta cambiando SOLO las variables de arriba, así que vale para toda la
+   aplicación sin repetir una regla por pantalla.
+
+   Aquí abajo hay UNA sola definición, no dos. El "automático" no se resuelve
+   en CSS sino en el guion (aplicarTema, en js/app.js), que mira qué tiene
+   puesto el sistema y escribe data-tema="claro" u "oscuro" en la página. Si
+   se hiciera con @media además de con el atributo habría que escribir la
+   paleta dos veces, y a la tercera vez que alguien tocara un color las dos
+   copias ya no diría lo mismo.
+
+   El texto no es blanco puro sobre negro puro: eso vibra y cansa la vista.
+   Es un gris claro azulado sobre un azul casi negro. */
+:root[data-tema="oscuro"] {
+  color-scheme: dark;
+
+  /* El coral se aclara un punto: el mismo de siempre, sobre fondo oscuro,
+     queda apagado y pierde el contraste que necesita un botón principal */
+  --primary: #f08055;
+  --primary-dark: #d2643c;
+  --primary-light: #3b2419;   /* fondo tenue de insignia, no un pastel */
+  --accent: #3fbcaa;
+  --accent-light: #16302d;
+  --amber: #e9b949;
+  --amber-light: #3a2f14;
+  --azul: #6098e8;
+  --azul-light: #17293f;
+  --ink: #f08055;
+  --danger: #f07a68;
+  --danger-light: #3d1f1c;
+  --warning: #dda63b;
+  --warning-light: #3a2f14;
+  --ok: #3fbcaa;
+  --ok-light: #16302d;
+  --gray: #7d8b9e;
+  --muted: #9aa8bb;
+  --bg: #121821;              /* el fondo de la página */
+  --bg-tint: #222c3a;         /* lo que antes era gris clarito */
+  --card: #1a2330;            /* las tarjetas: más claras que el fondo */
+  --text: #e5ebf3;
+  --border: #2c3849;
+
+  /* El panel lateral sigue siendo el sitio más oscuro de la pantalla, para
+     que se distinga de las tarjetas en vez de fundirse con ellas */
+  --side: #0d131b;
+  --side-alt: #090e14;
+  --side-text: #9dabbd;
+
+  /* Las sombras claras no se ven sobre un fondo oscuro: se cierran */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 14px 50px rgba(0, 0, 0, 0.55);
 }
 
 * { box-sizing: border-box; }
@@ -3925,3 +3982,75 @@ td.saldo-ok { color: var(--ok); font-weight: 700; text-align: right; }
    a la altura de la letra se quedaba nadando en su propia caja. */
 .kpi-ico .emo { width: 22px; height: 22px; vertical-align: 0; }
 /* Dentro del panel lateral no hay emojis: sus iconos son de trazo */
+
+/* ══════════ Los pocos colores que el modo oscuro no arregla solo ══════════
+   Casi todo cambia con las variables. Estos no, porque llevan el color
+   escrito a mano: son pasteles claros pensados para fondo blanco y sobre
+   fondo oscuro deslumbran o se vuelven ilegibles. Aquí se les da su versión
+   apagada, con el mismo significado de color (ámbar = ojo, verde = bien,
+   rojo = cerrado).
+
+   No se tocan los blancos que van sobre algo ya oscuro —la cabecera de las
+   tablas, el panel lateral, el texto de los botones de color—: ahí el blanco
+   es correcto en los dos modos. */
+:root[data-tema="oscuro"] .banner,
+:root[data-tema="oscuro"] .faltantes-aviso,
+:root[data-tema="oscuro"] .offline-lista .offline-falta,
+:root[data-tema="oscuro"] .desp-devolver,
+:root[data-tema="oscuro"] .ing-editando { color: var(--warning); }
+
+:root[data-tema="oscuro"] .banner-sin-internet { background: var(--bg-tint); color: var(--muted); }
+:root[data-tema="oscuro"] .banner-subiendo { background: #17293f; color: #8fbdf0; }
+
+:root[data-tema="oscuro"] .pago-yape { background: #2a2140; color: #b9a3f0; }
+:root[data-tema="oscuro"] .pago-bcp { background: #17293f; color: #8fbdf0; }
+
+:root[data-tema="oscuro"] .cob-estado-sin-crear { background: var(--warning-light); color: var(--warning); }
+:root[data-tema="oscuro"] .cob-estado-abierta { background: var(--ok-light); color: var(--ok); }
+:root[data-tema="oscuro"] .cob-estado-cerrada { background: var(--danger-light); color: var(--danger); }
+
+:root[data-tema="oscuro"] .info-cobro-bloqueo { background: var(--warning-light); color: var(--warning); }
+:root[data-tema="oscuro"] .nv-fila-bonif td { background: var(--ok-light); }
+:root[data-tema="oscuro"] .firma-linea { border-bottom-color: var(--border); }
+
+/* La firma del cliente se dibuja sobre papel blanco: es un documento, y en
+   oscuro seguiría siendo tinta negra sobre blanco. Se deja como está. */
+
+/* ══════════ Esqueletos de carga ══════════
+   Bloques grises con la forma de lo que va a llegar, con un brillo que los
+   recorre. Sirven para dos cosas: la pantalla no salta cuando aparecen los
+   datos de verdad —el hueco ya estaba hecho—, y sobre todo no se afirma que
+   no hay nada mientras todavía se está buscando.
+
+   El brillo se hace con background-position, que el navegador pinta sin
+   rehacer la página. Con width o margin daría tirones en una tablet vieja. */
+.esqueleto {
+  display: block;
+  height: 0.85rem;
+  border-radius: 6px;
+  background: linear-gradient(90deg,
+    var(--bg-tint) 25%,
+    color-mix(in srgb, var(--bg-tint) 55%, var(--card)) 37%,
+    var(--bg-tint) 63%);
+  background-size: 400% 100%;
+  animation: esqueletoBrilla 1.4s ease-in-out infinite;
+}
+@keyframes esqueletoBrilla {
+  from { background-position: 100% 0; }
+  to   { background-position: 0 0; }
+}
+.esqueleto-fila td { padding: 0.85rem 0.7rem; border-bottom: 1px solid var(--border); }
+.esqueleto-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+}
+/* Cada fila entra un pelín después que la anterior: da sensación de que algo
+   está pasando, en vez de un bloque muerto */
+.esqueleto-fila:nth-child(2n) .esqueleto { animation-delay: 0.12s; }
+.esqueleto-fila:nth-child(3n) .esqueleto { animation-delay: 0.24s; }
+/* A quien le molesten las animaciones, el gris quieto y ya */
+@media (prefers-reduced-motion: reduce) {
+  .esqueleto { animation: none; }
+}

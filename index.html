@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0f766e">
+  <meta name="theme-color" content="#f4f6f9">
   <meta name="description" content="Control de créditos a clientes: boletas, montos, vencimientos y estados.">
   <title>Control de Créditos</title>
   <link rel="manifest" href="manifest.webmanifest">
@@ -13,6 +13,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Créditos">
   <link rel="stylesheet" href="css/styles.css">
+  <!-- El tema se decide aquí arriba, antes de que se pinte nada. Si esperara
+       a que cargue js/app.js, quien lo tenga en oscuro vería un fogonazo
+       blanco de página entera en cada arranque. -->
+  <script>
+    (function () {
+      try {
+        var quiere = localStorage.getItem('tema') || 'auto';
+        var oscuro = quiere === 'oscuro' || (quiere === 'auto'
+          && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.tema = oscuro ? 'oscuro' : 'claro';
+      } catch (e) { /* sin localStorage (ventana privada): se queda en claro */ }
+    })();
+  </script>
 </head>
 <body>
   <!-- Panel lateral de navegación. En PC vive fijo a la izquierda; en el
@@ -188,6 +201,12 @@
               </button>
               <button type="button" class="menu-item" id="btn-mi-config">
                 <span>⚙️</span> Configuración
+              </button>
+              <div class="menu-sep"></div>
+              <!-- Va y viene entre automático, claro y oscuro. El texto dice
+                   en cuál está, para no tener que abrir nada a ver qué pasó. -->
+              <button type="button" class="menu-item" id="btn-tema">
+                <span id="tema-icono">🌗</span> <span id="tema-texto">Apariencia</span>
               </button>
             </div>
           </div>
@@ -419,7 +438,7 @@
 
     <div class="empty-state" id="empty-state" hidden>
       <p>📋 Aún no hay créditos registrados.</p>
-      <p>Toca <strong>“＋ Nuevo crédito”</strong> para agregar el primero.</p>
+      <p>Los créditos nacen solos al guardar una <strong>nota de venta</strong>.</p>
     </div>
   </main>
 
