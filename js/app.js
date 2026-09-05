@@ -2476,13 +2476,34 @@ function inyectarFaltantes(lista, dir) {
    esté ordenando como se esté ordenando: no son un hueco de la numeración
    —el documento existió y se anuló— y si dependieran del orden por boleta,
    anular una nota la haría desaparecer de Créditos sin dejar rastro. */
-function inyectarNotasAnuladas(lista) {
+function inyectarNotasAnuladas(lista, comparar) {
   const yaEstan = new Set(lista.map(c => boletaEntera(c)).filter(n => n != null));
   const filas = anulados
     .filter(a => a.notaId && numeroDeComprobante(a.boleta) && !yaEstan.has(numeroDeComprobante(a.boleta)))
-    .sort((a, b) => numeroDeComprobante(b.boleta) - numeroDeComprobante(a.boleta))
-    .map(a => ({ __faltante: true, boleta: String(numeroDeComprobante(a.boleta)) }));
-  return filas.length ? [...filas, ...lista] : lista;
+    .map(a => {
+      // La fila anulada se ordena como cualquier otra, y para eso necesita los
+      // datos de la nota de la que salió: su número, de qué día es y cuándo se
+      // creó. Antes iba sin nada de eso y se amontonaban todas arriba del
+      // todo, fuera de su sitio, dijera lo que dijera el orden elegido.
+      const n = notas.find(x => x.id === a.notaId);
+      return {
+        __faltante: true,
+        boleta: String(numeroDeComprobante(a.boleta)),
+        cliente: n ? (n.clienteNombre || '') : '',
+        zona: n ? (n.zona || '') : '',
+        fecha: n ? (n.fecha || '') : '',
+        monto: n ? (Number(n.total) || 0) : 0,
+        creado: (n && n.creado) || a.anuladoEn || 0,
+      };
+    });
+  if (!filas.length) return lista;
+  // Cada una se mete en su sitio, no todas al principio
+  const salida = lista.slice();
+  filas.forEach(fila => {
+    const i = salida.findIndex(c => comparar(fila, c) < 0);
+    salida.splice(i < 0 ? salida.length : i, 0, fila);
+  });
+  return salida;
 }
 
 /* Aviso siempre visible: cuántas notas de venta faltan crear (en cualquier
@@ -2535,8 +2556,25 @@ function creditosVisibles() {
     return true;
   });
 
+  const comparar = comparadorDeCreditos(campo, dir);
+  lista.sort(comparar);
+
+  // Filas "hueco": cuando se ordena por N° de boleta y no hay filtros ni
+  // búsqueda, se muestran las notas de venta que faltan crear (los números
+  // salteados) como filas vacías, para no perder la correlatividad.
+  const sinFiltros = !busqueda && !estados.length && !zonas.length && !meses.length && !desde && !hasta;
+  if (campo === 'boleta' && sinFiltros) lista = inyectarFaltantes(lista, dir);
+  if (sinFiltros) lista = inyectarNotasAnuladas(lista, comparar);
+
+  return lista;
+}
+
+/* Cómo se comparan dos créditos según el orden elegido. Está aparte porque lo
+   usan dos sitios: la lista misma y las filas de notas anuladas, que tienen
+   que colarse en su sitio con exactamente el mismo criterio. */
+function comparadorDeCreditos(campo, dir) {
   const mult = dir === 'desc' ? -1 : 1;
-  lista.sort((a, b) => {
+  return (a, b) => {
     let va, vb;
     switch (campo) {
       case 'boleta':
@@ -2544,32 +2582,25 @@ function creditosVisibles() {
         va = a.boleta; vb = b.boleta;
         if (!isNaN(va) && !isNaN(vb)) { va = Number(va); vb = Number(vb); }
         break;
-      case 'cliente': va = a.cliente.toLowerCase(); vb = b.cliente.toLowerCase(); break;
+      case 'cliente': va = (a.cliente || '').toLowerCase(); vb = (b.cliente || '').toLowerCase(); break;
       case 'zona': va = (a.zona || '').toLowerCase(); vb = (b.zona || '').toLowerCase(); break;
-      case 'monto': va = Number(a.monto); vb = Number(b.monto); break;
+      case 'monto': va = Number(a.monto) || 0; vb = Number(b.monto) || 0; break;
       case 'saldo': va = saldoDe(a); vb = saldoDe(b); break;
-      case 'fecha': va = a.fecha; vb = b.fecha; break;
+      case 'fecha': va = a.fecha || ''; vb = b.fecha || ''; break;
       case 'despacho': va = a.fechaDespacho || ''; vb = b.fechaDespacho || ''; break;
       // Sin compromiso anotado va al final, no al principio
       case 'compromiso': va = a.compromiso || '9999-12-31'; vb = b.compromiso || '9999-12-31'; break;
       // "creado": orden por el momento real en que se registró el crédito
       case 'creado': va = a.creado || 0; vb = b.creado || 0; break;
-      case 'vencimiento': default: va = a.vencimiento; vb = b.vencimiento; break;
+      // Una nota anulada no tiene vencimiento: se ordena por el día que se
+      // emitió, que es lo más cerca que hay de dónde le tocaría estar
+      case 'vencimiento': default: va = a.vencimiento || a.fecha || ''; vb = b.vencimiento || b.fecha || ''; break;
     }
     if (va < vb) return -1 * mult;
     if (va > vb) return 1 * mult;
     // Desempate estable: a igualdad, el creado más reciente primero
     return (b.creado || 0) - (a.creado || 0);
-  });
-
-  // Filas "hueco": cuando se ordena por N° de boleta y no hay filtros ni
-  // búsqueda, se muestran las notas de venta que faltan crear (los números
-  // salteados) como filas vacías, para no perder la correlatividad.
-  const sinFiltros = !busqueda && !estados.length && !zonas.length && !meses.length && !desde && !hasta;
-  if (campo === 'boleta' && sinFiltros) lista = inyectarFaltantes(lista, dir);
-  if (sinFiltros) lista = inyectarNotasAnuladas(lista);
-
-  return lista;
+  };
 }
 
 /* Cuenta cuántos filtros hay activos y lo muestra en la burbuja del botón "Filtrar". */
